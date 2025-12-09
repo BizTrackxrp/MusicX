@@ -11,10 +11,12 @@ import Messenger from '@/components/modals/Messenger';
 import StreamPage from '@/components/pages/StreamPage';
 import MarketplacePage from '@/components/pages/MarketplacePage';
 import ProfilePage from '@/components/pages/ProfilePage';
+import { useTheme } from '@/lib/theme-context';
 import { Track, Album } from '@/types';
 import { getAllTracks } from '@/lib/mock-data';
 
 export default function Home() {
+  const { theme } = useTheme();
   const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
   const [user, setUser] = useState<{ email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,9 +34,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="fixed inset-0 bg-gradient-to-br from-emerald-950/20 via-black to-zinc-950 pointer-events-none" />
-      <div className="fixed top-0 left-0 w-[800px] h-[800px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none" />
+    <div className={`min-h-screen transition-colors ${theme === 'dark' ? 'bg-black text-white' : 'bg-slate-50 text-black'}`}>
+      <div className={`fixed inset-0 pointer-events-none transition-colors ${
+        theme === 'dark' 
+          ? 'bg-gradient-to-br from-blue-950/20 via-black to-zinc-950' 
+          : 'bg-gradient-to-br from-blue-50 via-slate-50 to-white'
+      }`} />
+      <div className={`fixed top-0 left-0 w-[800px] h-[800px] rounded-full blur-[150px] pointer-events-none ${
+        theme === 'dark' ? 'bg-blue-500/5' : 'bg-blue-500/10'
+      }`} />
 
       <Sidebar
         currentPage={currentPage}
