@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Mail, Lock, Eye, EyeOff, Music, Smartphone } from 'lucide-react';
+import { X, Mail, Lock, Eye, EyeOff, Music } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 
@@ -80,9 +80,11 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                     : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
                 }`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-                  <Smartphone size={24} className="text-white" />
-                </div>
+                <img 
+                  src="/Xaman-logo.png" 
+                  alt="Xaman" 
+                  className="w-12 h-12 rounded-xl"
+                />
                 <div className="text-left flex-1">
                   <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Xaman Wallet</p>
                   <p className="text-zinc-500 text-sm">Scan QR or open on mobile</p>
@@ -176,7 +178,7 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                     : 'bg-zinc-100 hover:bg-zinc-200 text-black'
                 }`}
               >
-                <Smartphone size={18} />
+                <img src="/Xaman-logo.png" alt="Xaman" className="w-5 h-5 rounded" />
                 Connect with Xaman
               </button>
 
