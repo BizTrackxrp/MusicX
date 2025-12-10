@@ -6,6 +6,10 @@ import { XamanProvider } from "@/lib/xaman-context";
 export const metadata: Metadata = {
   title: "XRP Music | Decentralized Music on XRPL",
   description: "Stream, collect, and trade music NFTs on the XRP Ledger.",
+  icons: {
+    icon: "/xrpmusic-logo.png",
+    apple: "/xrpmusic-logo.png",
+  },
 };
 
 export default function RootLayout({
