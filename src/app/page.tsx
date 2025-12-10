@@ -17,7 +17,7 @@ import { Album, Track } from '@/types';
 export default function Home() {
   const { theme } = useTheme();
   const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
-  const [user, setUser] = useState<{ email?: string; wallet?: { address: string } } | null>(null);
+  const [user, setUser] = useState<{ email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } } | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showMessenger, setShowMessenger] = useState(false);
@@ -27,13 +27,8 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const handleLogin = (email: string) => {
-    setUser({ email });
-    setShowAuth(false);
-  };
-
-  const handleWalletConnect = (address: string) => {
-    setUser({ wallet: { address } });
+  const handleLogin = (loggedInUser: { email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } }) => {
+    setUser(loggedInUser);
     setShowAuth(false);
   };
 
@@ -95,7 +90,6 @@ export default function Home() {
         isOpen={showAuth}
         onClose={() => setShowAuth(false)}
         onLogin={handleLogin}
-        onWalletConnect={handleWalletConnect}
       />
 
       <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
