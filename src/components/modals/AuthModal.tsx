@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Wallet, Mail, Lock, Eye, EyeOff, Music, Smartphone } from 'lucide-react';
+import { X, Mail, Lock, Eye, EyeOff, Music, Smartphone } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 
@@ -23,8 +23,6 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
 
   const handleXamanConnect = async () => {
     await connect();
-    // The xaman-context will handle the success event
-    // We check for user after connection
   };
 
   // If user just connected, trigger onLogin and close
@@ -38,11 +36,6 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
     onClose();
     return null;
   }
-
-  const handleBifrostConnect = () => {
-    // For now, show a message that Bifrost uses WalletConnect
-    alert('Bifrost support coming soon! For now, please use Xaman wallet.');
-  };
 
   const handleEmailLogin = () => {
     onLogin({ email });
@@ -87,34 +80,16 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                     : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
                 }`}
               >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
                   <Smartphone size={24} className="text-white" />
                 </div>
                 <div className="text-left flex-1">
-                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Xaman (XUMM)</p>
+                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Xaman Wallet</p>
                   <p className="text-zinc-500 text-sm">Scan QR or open on mobile</p>
                 </div>
                 {isConnecting && (
                   <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                 )}
-              </button>
-
-              <button
-                onClick={handleBifrostConnect}
-                disabled={isConnecting}
-                className={`w-full p-4 border rounded-xl flex items-center gap-4 transition-all disabled:opacity-50 ${
-                  theme === 'dark'
-                    ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700'
-                    : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
-                }`}
-              >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
-                  <Wallet size={24} className="text-white" />
-                </div>
-                <div className="text-left">
-                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Bifrost Wallet</p>
-                  <p className="text-zinc-500 text-sm">Coming soon</p>
-                </div>
               </button>
 
               <div className="flex items-center gap-4 my-6">
@@ -193,12 +168,6 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                 {mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
               </button>
 
-              <div className="flex items-center gap-4 my-4">
-                <div className={`flex-1 h-px ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
-                <span className="text-zinc-500 text-sm">or</span>
-                <div className={`flex-1 h-px ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
-              </div>
-
               <button
                 onClick={() => setMode('wallet')}
                 className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
@@ -207,8 +176,8 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                     : 'bg-zinc-100 hover:bg-zinc-200 text-black'
                 }`}
               >
-                <Wallet size={18} />
-                Connect Wallet
+                <Smartphone size={18} />
+                Connect with Xaman
               </button>
 
               <p className="text-center text-zinc-500 text-sm mt-6">
