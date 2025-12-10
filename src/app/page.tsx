@@ -1,32 +1,41 @@
 'use client';
 
 import { useState } from 'react';
+import { useTheme } from '@/lib/theme-context';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import Player from '@/components/layout/Player';
+import StreamPage from '@/components/pages/StreamPage';
+import MarketplacePage from '@/components/pages/MarketplacePage';
+import ProfilePage from '@/components/pages/ProfilePage';
 import AuthModal from '@/components/modals/AuthModal';
 import CreateModal from '@/components/modals/CreateModal';
 import AlbumModal from '@/components/modals/AlbumModal';
 import Messenger from '@/components/modals/Messenger';
-import StreamPage from '@/components/pages/StreamPage';
-import MarketplacePage from '@/components/pages/MarketplacePage';
-import ProfilePage from '@/components/pages/ProfilePage';
-import { useTheme } from '@/lib/theme-context';
-import { Track, Album } from '@/types';
-import { getAllTracks } from '@/lib/mock-data';
+import { Album, Track } from '@/types';
 
 export default function Home() {
   const { theme } = useTheme();
   const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
-  const [user, setUser] = useState<{ email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(getAllTracks()[0]);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [user, setUser] = useState<{ email?: string; wallet?: { address: string } } | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showMessenger, setShowMessenger] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleLogin = (email: string) => {
+    setUser({ email });
+    setShowAuth(false);
+  };
+
+  const handleWalletConnect = (address: string) => {
+    setUser({ wallet: { address } });
+    setShowAuth(false);
+  };
 
   const handlePlayTrack = (track: Track & { artist?: string; cover?: string }) => {
     setCurrentTrack(track);
@@ -34,16 +43,11 @@ export default function Home() {
   };
 
   return (
-    <div className={`min-h-screen transition-colors ${theme === 'dark' ? 'bg-black text-white' : 'bg-slate-50 text-black'}`}>
-      <div className={`fixed inset-0 pointer-events-none transition-colors ${
-        theme === 'dark' 
-          ? 'bg-gradient-to-br from-blue-950/20 via-black to-zinc-950' 
-          : 'bg-gradient-to-br from-blue-50 via-slate-50 to-white'
-      }`} />
-      <div className={`fixed top-0 left-0 w-[800px] h-[800px] rounded-full blur-[150px] pointer-events-none ${
-        theme === 'dark' ? 'bg-blue-500/5' : 'bg-blue-500/10'
-      }`} />
-
+    <div className={`min-h-screen transition-colors ${
+      theme === 'dark' 
+        ? 'bg-black text-white' 
+        : 'bg-slate-50 text-black'
+    }`}>
       <Sidebar
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
@@ -51,25 +55,60 @@ export default function Home() {
         onAuthClick={() => setShowAuth(true)}
         onCreateClick={() => setShowCreate(true)}
         onLogout={() => setUser(null)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="ml-64 min-h-screen pb-32">
-        <Header
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          onMessengerClick={() => setShowMessenger(true)}
+      <div className="lg:pl-64">
+        <Header 
+          onMessagesClick={() => setShowMessenger(true)} 
+          onMenuClick={() => setSidebarOpen(true)}
         />
-        <div className="p-8">
-          {currentPage === 'stream' && <StreamPage onPlayTrack={handlePlayTrack} onSelectAlbum={setSelectedAlbum} />}
-          {currentPage === 'marketplace' && <MarketplacePage viewMode={viewMode} setViewMode={setViewMode} onSelectAlbum={setSelectedAlbum} onPlayTrack={handlePlayTrack} />}
-          {currentPage === 'profile' && <ProfilePage user={user} />}
-        </div>
-      </main>
 
-      <Player currentTrack={currentTrack} isPlaying={isPlaying} setIsPlaying={setIsPlaying} />
-      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} onLogin={setUser} />
+        <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 pb-32 transition-colors ${
+          theme === 'dark'
+            ? 'bg-gradient-to-b from-zinc-900/50 to-black'
+            : 'bg-gradient-to-b from-white to-slate-50'
+        }`}>
+          {currentPage === 'stream' && (
+            <StreamPage onPlayTrack={handlePlayTrack} onSelectAlbum={setSelectedAlbum} />
+          )}
+          {currentPage === 'marketplace' && (
+            <MarketplacePage
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              onSelectAlbum={setSelectedAlbum}
+              onPlayTrack={handlePlayTrack}
+            />
+          )}
+          {currentPage === 'profile' && <ProfilePage user={user} />}
+        </main>
+      </div>
+
+      <Player
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        onPlayPause={() => setIsPlaying(!isPlaying)}
+        onNext={() => {}}
+        onPrevious={() => {}}
+      />
+
+      <AuthModal
+        isOpen={showAuth}
+        onClose={() => setShowAuth(false)}
+        onLogin={handleLogin}
+        onWalletConnect={handleWalletConnect}
+      />
+
       <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
-      <AlbumModal album={selectedAlbum} isOpen={!!selectedAlbum} onClose={() => setSelectedAlbum(null)} onPlay={(t) => { setCurrentTrack(t); setIsPlaying(true); }} />
+
+      <AlbumModal
+        album={selectedAlbum}
+        isOpen={!!selectedAlbum}
+        onClose={() => setSelectedAlbum(null)}
+        onPlay={handlePlayTrack}
+      />
+
       <Messenger isOpen={showMessenger} onClose={() => setShowMessenger(false)} />
     </div>
   );
