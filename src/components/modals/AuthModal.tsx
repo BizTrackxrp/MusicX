@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Wallet, Mail, Lock, Eye, EyeOff, Music } from 'lucide-react';
+import { X, Wallet, Mail, Lock, Eye, EyeOff, Music, Smartphone } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
+import { useXaman } from '@/lib/xaman-context';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -12,26 +13,35 @@ interface AuthModalProps {
 
 export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   const { theme } = useTheme();
+  const { connect, isConnecting, user } = useXaman();
   const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'wallet'>('wallet');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [connecting, setConnecting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleWalletConnect = (walletType: 'xumm' | 'bifrost') => {
-    setConnecting(true);
-    setTimeout(() => {
-      setConnecting(false);
-      onLogin({
-        wallet: {
-          type: walletType,
-          address: 'r' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-        }
-      });
-      onClose();
-    }, 1500);
+  const handleXamanConnect = async () => {
+    await connect();
+    // The xaman-context will handle the success event
+    // We check for user after connection
+  };
+
+  // If user just connected, trigger onLogin and close
+  if (user && isOpen) {
+    onLogin({
+      wallet: {
+        type: 'xumm',
+        address: user.address
+      }
+    });
+    onClose();
+    return null;
+  }
+
+  const handleBifrostConnect = () => {
+    // For now, show a message that Bifrost uses WalletConnect
+    alert('Bifrost support coming soon! For now, please use Xaman wallet.');
   };
 
   const handleEmailLogin = () => {
@@ -61,7 +71,7 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
               <Music size={20} className="text-white" />
             </div>
-            <span className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Music X</span>
+            <span className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>XRP Music</span>
           </div>
 
           {mode === 'wallet' ? (
@@ -69,8 +79,8 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
               <h2 className={`text-xl font-semibold mb-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Connect Wallet</h2>
 
               <button
-                onClick={() => handleWalletConnect('xumm')}
-                disabled={connecting}
+                onClick={handleXamanConnect}
+                disabled={isConnecting}
                 className={`w-full p-4 border rounded-xl flex items-center gap-4 transition-all disabled:opacity-50 ${
                   theme === 'dark'
                     ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700'
@@ -78,20 +88,20 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                 }`}
               >
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                  <Wallet size={24} className="text-white" />
+                  <Smartphone size={24} className="text-white" />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Xaman (XUMM)</p>
-                  <p className="text-zinc-500 text-sm">Recommended for XRPL</p>
+                  <p className="text-zinc-500 text-sm">Scan QR or open on mobile</p>
                 </div>
-                {connecting && (
-                  <div className="ml-auto w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                {isConnecting && (
+                  <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                 )}
               </button>
 
               <button
-                onClick={() => handleWalletConnect('bifrost')}
-                disabled={connecting}
+                onClick={handleBifrostConnect}
+                disabled={isConnecting}
                 className={`w-full p-4 border rounded-xl flex items-center gap-4 transition-all disabled:opacity-50 ${
                   theme === 'dark'
                     ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700'
@@ -103,7 +113,7 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
                 </div>
                 <div className="text-left">
                   <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Bifrost Wallet</p>
-                  <p className="text-zinc-500 text-sm">Multi-chain support</p>
+                  <p className="text-zinc-500 text-sm">Coming soon</p>
                 </div>
               </button>
 
