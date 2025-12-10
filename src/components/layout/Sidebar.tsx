@@ -1,115 +1,169 @@
 'use client';
 
-import { useState } from 'react';
+import { Home, ShoppingBag, User, Plus, LogOut, Wallet, Music, Moon, Sun, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
-import Sidebar from '@/components/layout/Sidebar';
-import Header from '@/components/layout/Header';
-import Player from '@/components/layout/Player';
-import StreamPage from '@/components/pages/StreamPage';
-import MarketplacePage from '@/components/pages/MarketplacePage';
-import ProfilePage from '@/components/pages/ProfilePage';
-import AuthModal from '@/components/modals/AuthModal';
-import CreateModal from '@/components/modals/CreateModal';
-import AlbumModal from '@/components/modals/AlbumModal';
-import Messenger from '@/components/modals/Messenger';
-import { Album, Track } from '@/types';
 
-export default function Home() {
-  const { theme } = useTheme();
-  const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
-  const [user, setUser] = useState<{ email?: string; wallet?: { address: string } } | null>(null);
-  const [showAuth, setShowAuth] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [showMessenger, setShowMessenger] = useState(false);
-  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
-  const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+interface SidebarProps {
+  currentPage: 'stream' | 'marketplace' | 'profile';
+  setCurrentPage: (page: 'stream' | 'marketplace' | 'profile') => void;
+  user: { email?: string; wallet?: { address: string } } | null;
+  onAuthClick: () => void;
+  onCreateClick: () => void;
+  onLogout: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+}
 
-  const handleLogin = (email: string) => {
-    setUser({ email });
-    setShowAuth(false);
-  };
+export default function Sidebar({
+  currentPage,
+  setCurrentPage,
+  user,
+  onAuthClick,
+  onCreateClick,
+  onLogout,
+  isOpen,
+  onClose
+}: SidebarProps) {
+  const { theme, toggleTheme } = useTheme();
+  
+  const navItems = [
+    { id: 'stream' as const, label: 'Stream', icon: Home },
+    { id: 'marketplace' as const, label: 'Marketplace', icon: ShoppingBag },
+    { id: 'profile' as const, label: 'Profile', icon: User },
+  ];
 
-  const handleWalletConnect = (address: string) => {
-    setUser({ wallet: { address } });
-    setShowAuth(false);
-  };
-
-  const handlePlayTrack = (track: Track & { artist?: string; cover?: string }) => {
-    setCurrentTrack(track);
-    setIsPlaying(true);
+  const handleNavClick = (page: 'stream' | 'marketplace' | 'profile') => {
+    setCurrentPage(page);
+    onClose();
   };
 
   return (
-    <div className={`min-h-screen transition-colors ${
-      theme === 'dark' 
-        ? 'bg-black text-white' 
-        : 'bg-slate-50 text-black'
-    }`}>
-      <Sidebar
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        user={user}
-        onAuthClick={() => setShowAuth(true)}
-        onCreateClick={() => setShowCreate(true)}
-        onLogout={() => setUser(null)}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-
-      <div className="lg:pl-64">
-        <Header 
-          onMessagesClick={() => setShowMessenger(true)} 
-          onMenuClick={() => setSidebarOpen(true)}
+    <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          onClick={onClose}
         />
+      )}
+      
+      <aside className={`fixed left-0 top-0 h-full w-64 backdrop-blur-xl border-r z-50 flex flex-col transition-all duration-300 ${
+        theme === 'dark' 
+          ? 'bg-zinc-950/95 border-zinc-800' 
+          : 'bg-white/95 border-zinc-200'
+      } ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        
+        {/* Mobile close button */}
+        <button 
+          onClick={onClose}
+          className={`absolute top-4 right-4 p-2 rounded-lg lg:hidden ${
+            theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'
+          }`}
+        >
+          <X size={20} />
+        </button>
 
-        <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 pb-32 transition-colors ${
-          theme === 'dark'
-            ? 'bg-gradient-to-b from-zinc-900/50 to-black'
-            : 'bg-gradient-to-b from-white to-slate-50'
-        }`}>
-          {currentPage === 'stream' && (
-            <StreamPage onPlayTrack={handlePlayTrack} onSelectAlbum={setSelectedAlbum} />
+        <div className="p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+              <Music size={20} className="text-white" />
+            </div>
+            <span className={`text-xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+              XRP Music
+            </span>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4">
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  currentPage === item.id
+                    ? 'bg-blue-500/10 text-blue-500'
+                    : theme === 'dark'
+                      ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                      : 'text-zinc-600 hover:text-black hover:bg-zinc-100'
+                }`}
+              >
+                <item.icon size={20} />
+                <span className="font-medium">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {user && (
+            <div className="mt-8">
+              <button
+                onClick={() => { onCreateClick(); onClose(); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02]"
+              >
+                <Plus size={20} />
+                Create & Mint
+              </button>
+            </div>
           )}
-          {currentPage === 'marketplace' && (
-            <MarketplacePage
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              onSelectAlbum={setSelectedAlbum}
-              onPlayTrack={handlePlayTrack}
-            />
+        </nav>
+
+        <div className={`p-4 border-t ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
+          <button
+            onClick={toggleTheme}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl mb-3 transition-colors ${
+              theme === 'dark'
+                ? 'bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300'
+                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
+              <span className="font-medium">Dark Mode</span>
+            </div>
+            <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
+              theme === 'dark' ? 'bg-blue-500' : 'bg-zinc-300'
+            }`}>
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                theme === 'dark' ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </div>
+          </button>
+
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white">
+                {user.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                  {user.email || 'Connected'}
+                </p>
+                <p className="text-zinc-500 text-sm truncate">
+                  {user.wallet ? user.wallet.address.slice(0, 8) + '...' : 'Email login'}
+                </p>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-2 text-zinc-500 hover:text-red-500 transition-colors"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { onAuthClick(); onClose(); }}
+              className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
+                theme === 'dark'
+                  ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  : 'bg-zinc-200 hover:bg-zinc-300 text-black'
+              }`}
+            >
+              <Wallet size={18} />
+              Connect / Sign In
+            </button>
           )}
-          {currentPage === 'profile' && <ProfilePage user={user} />}
-        </main>
-      </div>
-
-      <Player
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrevious={() => {}}
-      />
-
-      <AuthModal
-        isOpen={showAuth}
-        onClose={() => setShowAuth(false)}
-        onLogin={handleLogin}
-        onWalletConnect={handleWalletConnect}
-      />
-
-      <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
-
-      <AlbumModal
-        album={selectedAlbum}
-        isOpen={!!selectedAlbum}
-        onClose={() => setSelectedAlbum(null)}
-        onPlay={handlePlayTrack}
-      />
-
-      <Messenger isOpen={showMessenger} onClose={() => setShowMessenger(false)} />
-    </div>
+        </div>
+      </aside>
+    </>
   );
 }
