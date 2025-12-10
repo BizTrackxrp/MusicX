@@ -88,9 +88,7 @@ export default function Home() {
       <Player
         currentTrack={currentTrack}
         isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        setIsPlaying={setIsPlaying}
       />
 
       <AuthModal
