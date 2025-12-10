@@ -1,93 +1,113 @@
 'use client';
 
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Repeat, Clock } from 'lucide-react';
+import { useState } from 'react';
 import { useTheme } from '@/lib/theme-context';
-import { Track } from '@/types';
+import Sidebar from '@/components/layout/Sidebar';
+import Header from '@/components/layout/Header';
+import Player from '@/components/layout/Player';
+import StreamPage from '@/components/pages/StreamPage';
+import MarketplacePage from '@/components/pages/MarketplacePage';
+import ProfilePage from '@/components/pages/ProfilePage';
+import AuthModal from '@/components/modals/AuthModal';
+import CreateModal from '@/components/modals/CreateModal';
+import AlbumModal from '@/components/modals/AlbumModal';
+import Messenger from '@/components/modals/Messenger';
+import { Album, Track } from '@/types';
 
-interface PlayerProps {
-  currentTrack: (Track & { artist?: string; cover?: string }) | null;
-  isPlaying: boolean;
-  setIsPlaying: (playing: boolean) => void;
-}
-
-export default function Player({ currentTrack, isPlaying, setIsPlaying }: PlayerProps) {
+export default function Home() {
   const { theme } = useTheme();
-  
-  if (!currentTrack) {
-    return (
-      <div className={`fixed bottom-0 left-64 right-0 h-24 backdrop-blur-xl border-t z-30 transition-colors ${
-        theme === 'dark' ? 'bg-zinc-950/95 border-zinc-800' : 'bg-white/95 border-zinc-200'
-      }`}>
-        <div className="h-full flex items-center justify-center text-zinc-500">
-          Select a track to play
-        </div>
-      </div>
-    );
-  }
+  const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
+  const [user, setUser] = useState<{ email?: string; wallet?: { address: string } } | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showMessenger, setShowMessenger] = useState(false);
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleLogin = (email: string) => {
+    setUser({ email });
+    setShowAuth(false);
+  };
+
+  const handleWalletConnect = (address: string) => {
+    setUser({ wallet: { address } });
+    setShowAuth(false);
+  };
+
+  const handlePlayTrack = (track: Track & { artist?: string; cover?: string }) => {
+    setCurrentTrack(track);
+    setIsPlaying(true);
+  };
 
   return (
-    <div className={`fixed bottom-0 left-64 right-0 h-24 backdrop-blur-xl border-t z-30 transition-colors ${
-      theme === 'dark' ? 'bg-zinc-950/95 border-zinc-800' : 'bg-white/95 border-zinc-200'
+    <div className={`min-h-screen transition-colors ${
+      theme === 'dark' 
+        ? 'bg-black text-white' 
+        : 'bg-slate-50 text-black'
     }`}>
-      <div className="h-full flex items-center justify-between px-6">
-        <div className="flex items-center gap-4 w-1/4">
-          <img
-            src={currentTrack.cover || 'https://picsum.photos/seed/default/300/300'}
-            alt=""
-            className="w-16 h-16 rounded-lg object-cover"
-          />
-          <div className="min-w-0">
-            <h4 className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-              {currentTrack.title}
-            </h4>
-            <p className="text-zinc-500 text-sm truncate">{currentTrack.artist}</p>
-          </div>
-          <button className="p-2 text-zinc-500 hover:text-blue-500 transition-colors">
-            <Heart size={18} />
-          </button>
-        </div>
+      <Sidebar
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        user={user}
+        onAuthClick={() => setShowAuth(true)}
+        onCreateClick={() => setShowCreate(true)}
+        onLogout={() => setUser(null)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
-        <div className="flex flex-col items-center gap-2 w-1/2">
-          <div className="flex items-center gap-4">
-            <button className={`p-2 transition-colors ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
-              <Repeat size={18} />
-            </button>
-            <button className={`p-2 transition-colors ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
-              <SkipBack size={20} />
-            </button>
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="w-12 h-12 bg-blue-500 hover:bg-blue-400 rounded-full flex items-center justify-center hover:scale-105 transition-transform"
-            >
-              {isPlaying ? (
-                <Pause size={24} className="text-white" />
-              ) : (
-                <Play size={24} className="text-white ml-1" fill="white" />
-              )}
-            </button>
-            <button className={`p-2 transition-colors ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
-              <SkipForward size={20} />
-            </button>
-            <button className={`p-2 transition-colors ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
-              <Clock size={18} />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 w-full max-w-md">
-            <span className="text-zinc-500 text-xs">1:24</span>
-            <div className={`flex-1 h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-              <div className="w-1/3 h-full bg-blue-500 rounded-full" />
-            </div>
-            <span className="text-zinc-500 text-xs">{currentTrack.duration}</span>
-          </div>
-        </div>
+      <div className="lg:pl-64">
+        <Header 
+          onMessagesClick={() => setShowMessenger(true)} 
+          onMenuClick={() => setSidebarOpen(true)}
+        />
 
-        <div className="flex items-center gap-3 w-1/4 justify-end">
-          <Volume2 size={18} className="text-zinc-400" />
-          <div className={`w-24 h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
-            <div className={`w-2/3 h-full rounded-full ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
-          </div>
-        </div>
+        <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 pb-32 transition-colors ${
+          theme === 'dark'
+            ? 'bg-gradient-to-b from-zinc-900/50 to-black'
+            : 'bg-gradient-to-b from-white to-slate-50'
+        }`}>
+          {currentPage === 'stream' && (
+            <StreamPage onPlayTrack={handlePlayTrack} onSelectAlbum={setSelectedAlbum} />
+          )}
+          {currentPage === 'marketplace' && (
+            <MarketplacePage
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              onSelectAlbum={setSelectedAlbum}
+              onPlayTrack={handlePlayTrack}
+            />
+          )}
+          {currentPage === 'profile' && <ProfilePage user={user} />}
+        </main>
       </div>
+
+      <Player
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+      />
+
+      <AuthModal
+        isOpen={showAuth}
+        onClose={() => setShowAuth(false)}
+        onLogin={handleLogin}
+        onWalletConnect={handleWalletConnect}
+      />
+
+      <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
+
+      <AlbumModal
+        album={selectedAlbum}
+        isOpen={!!selectedAlbum}
+        onClose={() => setSelectedAlbum(null)}
+        onPlay={handlePlayTrack}
+      />
+
+      <Messenger isOpen={showMessenger} onClose={() => setShowMessenger(false)} />
     </div>
   );
 }
