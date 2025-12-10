@@ -1,7 +1,8 @@
 'use client';
 
-import { Home, ShoppingBag, User, Plus, LogOut, Wallet, Music, Moon, Sun, X } from 'lucide-react';
+import { Home, ShoppingBag, User, Plus, Wallet, Music, Moon, Sun, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
+import { useXaman } from '@/lib/xaman-context';
 
 interface SidebarProps {
   currentPage: 'stream' | 'marketplace' | 'profile';
@@ -25,6 +26,7 @@ export default function Sidebar({
   onClose
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
+  const { disconnect } = useXaman();
   
   const navItems = [
     { id: 'stream' as const, label: 'Stream', icon: Home },
@@ -35,6 +37,11 @@ export default function Sidebar({
   const handleNavClick = (page: 'stream' | 'marketplace' | 'profile') => {
     setCurrentPage(page);
     onClose();
+  };
+
+  const handleLogout = () => {
+    disconnect();
+    onLogout();
   };
 
   return (
@@ -130,23 +137,25 @@ export default function Sidebar({
           </button>
 
           {user ? (
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white">
-                {user.email?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                  {user.email || 'Connected'}
-                </p>
-                <p className="text-zinc-500 text-sm truncate">
-                  {user.wallet ? user.wallet.address.slice(0, 8) + '...' : 'Email login'}
-                </p>
+            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100'}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white">
+                  {user.wallet ? 'X' : user.email?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                    {user.wallet ? 'Xaman Wallet' : user.email || 'Connected'}
+                  </p>
+                  <p className="text-zinc-500 text-sm truncate">
+                    {user.wallet ? user.wallet.address.slice(0, 8) + '...' + user.wallet.address.slice(-4) : 'Email login'}
+                  </p>
+                </div>
               </div>
               <button
-                onClick={onLogout}
-                className="p-2 text-zinc-500 hover:text-red-500 transition-colors"
+                onClick={handleLogout}
+                className="w-full py-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors font-medium text-sm"
               >
-                <LogOut size={18} />
+                Sign Out
               </button>
             </div>
           ) : (
