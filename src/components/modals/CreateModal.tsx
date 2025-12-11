@@ -191,10 +191,10 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   <div className="flex items-start gap-3">
                     <TrendingUp size={20} className="text-amber-500 mt-0.5" />
                     <div>
-                      <h4 className="text-amber-500 font-semibold text-sm">Shared Inventory Pool</h4>
+                      <h4 className="text-amber-500 font-semibold text-sm">How Album Editions Work</h4>
                       <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                        If you mint 100 editions: selling 1 album OR 1 individual track both reduce from the same pool. 
-                        Fans can buy the full album or pick individual songs.
+                        Example: Mint 10 editions → each track gets 10 copies. Fans can buy the full album OR individual songs. 
+                        Buying 1 album reduces all tracks by 1. Buying 1 single reduces that track by 1 (and 1 fewer complete album remains).
                       </p>
                     </div>
                   </div>
