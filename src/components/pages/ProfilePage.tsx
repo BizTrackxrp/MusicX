@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Wallet, Upload, DollarSign, Check, X, Camera } from 'lucide-react';
+import { Settings, Wallet, Upload, DollarSign, Music } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
-import { mockAlbums } from '@/lib/mock-data';
+import { getReleasesByArtist, Release } from '@/lib/releases-store';
 
 interface ProfilePageProps {
   user: { email?: string; wallet?: { address: string } } | null;
@@ -13,6 +13,7 @@ export default function ProfilePage({ user }: ProfilePageProps) {
   const { theme } = useTheme();
   const [profileTab, setProfileTab] = useState<'posted' | 'owned' | 'sold'>('posted');
   const [isEditing, setIsEditing] = useState(false);
+  const [releases, setReleases] = useState<Release[]>([]);
   
   // Profile data with localStorage persistence
   const [displayName, setDisplayName] = useState('');
@@ -20,15 +21,19 @@ export default function ProfilePage({ user }: ProfilePageProps) {
   const [tempName, setTempName] = useState('');
   const [tempBio, setTempBio] = useState('');
 
-  // Load profile from localStorage on mount
+  // Load profile and releases on mount
   useEffect(() => {
     if (user?.wallet?.address) {
+      // Load profile
       const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
       if (savedProfile) {
         const { name, bio } = JSON.parse(savedProfile);
         setDisplayName(name || '');
         setBio(bio || '');
       }
+      
+      // Load user's releases
+      setReleases(getReleasesByArtist(user.wallet.address));
     }
   }, [user?.wallet?.address]);
 
@@ -42,7 +47,6 @@ export default function ProfilePage({ user }: ProfilePageProps) {
     setDisplayName(tempName);
     setBio(tempBio);
     
-    // Save to localStorage
     if (user?.wallet?.address) {
       localStorage.setItem(`profile_${user.wallet.address}`, JSON.stringify({
         name: tempName,
@@ -57,24 +61,31 @@ export default function ProfilePage({ user }: ProfilePageProps) {
     setIsEditing(false);
   };
 
-  const postedTracks = mockAlbums.slice(0, 2).flatMap(a => a.tracks.slice(0, 2).map(t => ({ ...t, cover: a.cover, artist: a.artist })));
-  const ownedTracks = mockAlbums.slice(1, 3).flatMap(a => a.tracks.slice(0, 2).map(t => ({ ...t, cover: a.cover, artist: a.artist })));
-  const soldTracks = mockAlbums.slice(0, 1).flatMap(a => a.tracks.slice(0, 2).map(t => ({ ...t, cover: a.cover, artist: a.artist })));
-
   const tabs = [
-    { id: 'posted' as const, label: 'Posted by You', icon: Upload, data: postedTracks },
-    { id: 'owned' as const, label: 'Owned NFTs', icon: Wallet, data: ownedTracks },
-    { id: 'sold' as const, label: 'Sold', icon: DollarSign, data: soldTracks },
+    { id: 'posted' as const, label: 'Your Releases', icon: Upload },
+    { id: 'owned' as const, label: 'Owned NFTs', icon: Wallet },
+    { id: 'sold' as const, label: 'Sold', icon: DollarSign },
   ];
 
-  const currentData = tabs.find(t => t.id === profileTab)?.data || [];
-
-  // Get display name or fallback
   const getDisplayName = () => {
     if (displayName) return displayName;
     if (user?.wallet?.address) return `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`;
     return 'Anonymous';
   };
+
+  if (!user?.wallet?.address) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Wallet size={64} className="text-zinc-500 mb-4" />
+        <h2 className={`text-2xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+          Connect Your Wallet
+        </h2>
+        <p className="text-zinc-500 text-center max-w-md">
+          Connect your Xaman wallet to view your profile, releases, and owned NFTs.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,12 +160,10 @@ export default function ProfilePage({ user }: ProfilePageProps) {
                 <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
                   {getDisplayName()}
                 </h2>
-                {user?.wallet && (
-                  <p className="text-zinc-500 mt-1 flex items-center gap-2">
-                    <Wallet size={14} />
-                    {user.wallet.address.slice(0, 12)}...{user.wallet.address.slice(-8)}
-                  </p>
-                )}
+                <p className="text-zinc-500 mt-1 flex items-center gap-2">
+                  <Wallet size={14} />
+                  {user.wallet.address.slice(0, 12)}...{user.wallet.address.slice(-8)}
+                </p>
                 {bio && (
                   <p className={`mt-3 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-600'}`}>
                     {bio}
@@ -162,11 +171,13 @@ export default function ProfilePage({ user }: ProfilePageProps) {
                 )}
                 <div className="flex gap-6 mt-4">
                   <div>
-                    <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{postedTracks.length}</p>
-                    <p className="text-zinc-500 text-sm">Posted</p>
+                    <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                      {releases.length}
+                    </p>
+                    <p className="text-zinc-500 text-sm">Releases</p>
                   </div>
                   <div>
-                    <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{ownedTracks.length}</p>
+                    <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>0</p>
                     <p className="text-zinc-500 text-sm">Owned</p>
                   </div>
                   <div>
@@ -211,64 +222,86 @@ export default function ProfilePage({ user }: ProfilePageProps) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {currentData.map((track) => (
-          <div key={track.id} className={`rounded-2xl overflow-hidden border group ${
-            theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200'
-          }`}>
-            <div className="relative">
-              <img src={track.cover} alt={track.title} className="w-full aspect-square object-cover" />
-              {profileTab === 'posted' && (
-                <div className="absolute top-3 right-3 px-2 py-1 bg-blue-500/20 border border-blue-500/50 rounded-full text-blue-400 text-xs font-medium">
-                  {track.available} listed
-                </div>
-              )}
-              {profileTab === 'sold' && (
-                <div className="absolute top-3 right-3 px-2 py-1 bg-zinc-800/80 backdrop-blur rounded-full text-white text-xs font-medium flex items-center gap-1">
-                  <Check size={12} />
-                  Sold
-                </div>
-              )}
+      {profileTab === 'posted' && (
+        <>
+          {releases.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Music size={48} className="text-zinc-500 mb-4" />
+              <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                No Releases Yet
+              </h3>
+              <p className="text-zinc-500 text-center">
+                Mint your first music NFT to see it here!
+              </p>
             </div>
-            <div className="p-4">
-              <h3 className={`font-semibold truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{track.title}</h3>
-              <p className="text-zinc-500 text-sm mb-3">{track.artist}</p>
-              
-              {profileTab === 'posted' && (
-                <div className="flex gap-2">
-                  <button className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    theme === 'dark'
-                      ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-black'
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {releases.map((release) => {
+                const available = release.totalEditions - release.soldEditions;
+                return (
+                  <div key={release.id} className={`rounded-2xl overflow-hidden border group ${
+                    theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200'
                   }`}>
-                    Edit
-                  </button>
-                  <button className="flex-1 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/50 rounded-lg text-blue-400 text-sm font-medium transition-colors">
-                    View Sales
-                  </button>
-                </div>
-              )}
-              
-              {profileTab === 'owned' && (
-                <button className="w-full py-2 bg-blue-500 hover:bg-blue-400 rounded-lg text-white text-sm font-semibold transition-colors">
-                  List for Sale
-                </button>
-              )}
-              
-              {profileTab === 'sold' && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-500">Sold for</span>
-                  <span className="text-blue-500 font-bold">{track.price} XRP</span>
-                </div>
-              )}
+                    <div className="relative">
+                      <img src={release.coverUrl} alt={release.title} className="w-full aspect-square object-cover" />
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-blue-500/90 text-white text-xs font-bold rounded-full uppercase">
+                        {release.type}
+                      </div>
+                      <div className="absolute top-3 right-3 px-2 py-1 bg-blue-500/20 border border-blue-500/50 rounded-full text-blue-400 text-xs font-medium">
+                        {available} available
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className={`font-semibold truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                        {release.title}
+                      </h3>
+                      <p className="text-zinc-500 text-sm mb-3">{release.tracks.length} tracks</p>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-blue-500 font-bold">{release.albumPrice || release.songPrice} XRP</span>
+                        <span className="text-zinc-500 text-sm">{release.soldEditions} sold</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          theme === 'dark'
+                            ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                            : 'bg-zinc-100 hover:bg-zinc-200 text-black'
+                        }`}>
+                          Edit
+                        </button>
+                        <button className="flex-1 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/50 rounded-lg text-blue-400 text-sm font-medium transition-colors">
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </>
+      )}
 
-      {currentData.length === 0 && (
-        <div className="text-center py-12 text-zinc-500">
-          No items to display
+      {profileTab === 'owned' && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Wallet size={48} className="text-zinc-500 mb-4" />
+          <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            No Owned NFTs
+          </h3>
+          <p className="text-zinc-500 text-center">
+            Purchase music NFTs from the marketplace to see them here!
+          </p>
+        </div>
+      )}
+
+      {profileTab === 'sold' && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <DollarSign size={48} className="text-zinc-500 mb-4" />
+          <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            No Sales Yet
+          </h3>
+          <p className="text-zinc-500 text-center">
+            When someone buys your music NFTs, they'll appear here!
+          </p>
         </div>
       )}
     </div>
