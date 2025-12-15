@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video, User } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/lib/ipfs';
@@ -44,10 +44,75 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   const [mintingMessage, setMintingMessage] = useState('');
   const [mintingError, setMintingError] = useState('');
   
+  // Profile check
+  const [artistName, setArtistName] = useState<string | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
+  // Check for profile on mount and when user changes
+  useEffect(() => {
+    if (user?.address) {
+      const savedProfile = localStorage.getItem(`profile_${user.address}`);
+      if (savedProfile) {
+        const { name } = JSON.parse(savedProfile);
+        setArtistName(name || null);
+      } else {
+        setArtistName(null);
+      }
+      setProfileChecked(true);
+    }
+  }, [user?.address, isOpen]);
+
   if (!isOpen) return null;
+
+  // Show profile setup prompt if no artist name
+  if (profileChecked && user?.address && !artistName) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+        <div className={`relative w-full max-w-md rounded-2xl border shadow-2xl p-8 text-center ${
+          theme === 'dark'
+            ? 'bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800'
+            : 'bg-white border-zinc-200'
+        }`}>
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <User size={40} className="text-blue-500" />
+          </div>
+          <h2 className={`text-2xl font-bold mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            Set Up Your Artist Profile
+          </h2>
+          <p className={`mb-6 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+            Before you can mint and sell music, you need to create your artist profile. 
+            This is how fans will discover and recognize your work.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                onClose();
+                // Navigate to profile page - we'll emit an event or use a callback
+                window.dispatchEvent(new CustomEvent('navigate', { detail: 'profile' }));
+              }}
+              className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold rounded-xl transition-all"
+            >
+              Set Up Profile
+            </button>
+            <button
+              onClick={onClose}
+              className={`w-full py-3 rounded-xl font-medium transition-colors ${
+                theme === 'dark'
+                  ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  : 'bg-zinc-100 hover:bg-zinc-200 text-black'
+              }`}
+            >
+              Maybe Later
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,6 +166,12 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       return;
     }
 
+    if (!artistName) {
+      setMintingError('Please set up your artist profile first');
+      setMintingStatus('error');
+      return;
+    }
+
     if (!coverArt || tracks.length === 0) {
       setMintingError('Please upload cover art and at least one track');
       setMintingStatus('error');
@@ -109,7 +180,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
 
     try {
       setMintingStatus('uploading-cover');
-      setMintingMessage('Uploading cover art to IPFS...');
+      setMintingMessage('Uploading to IPFS...');
       
       const coverResult = await uploadFileToIPFS(coverArt);
       if (!coverResult.success || !coverResult.cid) {
@@ -120,7 +191,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       const uploadedTracks: Track[] = [];
       
       for (let i = 0; i < tracks.length; i++) {
-        setMintingMessage(`Uploading track ${i + 1} of ${tracks.length}...`);
+        setMintingMessage(`Uploading track ${i + 1} of ${tracks.length} to IPFS...`);
         const track = tracks[i];
         const audioResult = await uploadFileToIPFS(track.file);
         
@@ -147,7 +218,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         attributes: [
           { trait_type: 'Type', value: releaseType },
           { trait_type: 'Media', value: mediaType },
-          { trait_type: 'Artist', value: user.address },
+          { trait_type: 'Artist', value: artistName },
           { trait_type: 'Tracks', value: tracks.length },
           { trait_type: 'Edition Size', value: quantity },
         ],
@@ -170,7 +241,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       }
 
       setMintingStatus('minting');
-      setMintingMessage('Please approve the transaction in Xaman...');
+      setMintingMessage('Sign the transaction in Xaman to mint your NFT...');
       
       const mintResult = await mintNFT({
         metadataUri: metadataResult.url!,
@@ -188,6 +259,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         title: title,
         description: description,
         artistAddress: user.address,
+        artistName: artistName,
         coverUrl: coverResult.url!,
         coverCid: coverResult.cid,
         tracks: uploadedTracks,
@@ -245,9 +317,14 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
 
         <div className={`relative p-6 border-b ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
           <div className="flex items-center justify-between">
-            <h2 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-              Create & Mint to XRPL
-            </h2>
+            <div>
+              <h2 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                Create & Mint to XRPL
+              </h2>
+              <p className="text-sm text-zinc-500 mt-1">
+                Releasing as <span className="text-blue-500 font-medium">{artistName}</span>
+              </p>
+            </div>
             <button 
               onClick={!isMinting ? onClose : undefined} 
               className={`p-2 text-zinc-500 hover:text-white transition-colors ${isMinting ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -626,6 +703,10 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
               <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100'}`}>
                 <h4 className={`font-semibold mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Summary</h4>
                 <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Artist</span>
+                    <span className="text-blue-500 font-medium">{artistName}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Release</span>
                     <span className={theme === 'dark' ? 'text-white' : 'text-black'}>{title || 'Untitled'}</span>
