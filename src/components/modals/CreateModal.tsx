@@ -1,8 +1,12 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
+import { useXaman } from '@/lib/xaman-context';
+import { uploadFileToIPFS, uploadJSONToIPFS } from '@/lib/ipfs';
+import { mintNFT } from '@/lib/xrpl-mint';
+import { saveRelease, Release, Track } from '@/lib/releases-store';
 
 interface CreateModalProps {
   isOpen: boolean;
@@ -15,26 +19,30 @@ interface TrackFile {
   title: string;
 }
 
+type MintingStatus = 'idle' | 'uploading-cover' | 'uploading-audio' | 'uploading-metadata' | 'minting' | 'complete' | 'error';
+type MediaType = 'audio' | 'video';
+
 export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   const { theme } = useTheme();
+  const { user } = useXaman();
   const [step, setStep] = useState(1);
   const [releaseType, setReleaseType] = useState<'single' | 'album'>('single');
+  const [mediaType, setMediaType] = useState<MediaType>('audio');
   
-  // Album/Release info
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverArt, setCoverArt] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   
-  // Tracks
   const [tracks, setTracks] = useState<TrackFile[]>([]);
   
-  // Pricing - ONE price for all
   const [quantity, setQuantity] = useState(100);
   const [songPrice, setSongPrice] = useState(5);
   const [albumPrice, setAlbumPrice] = useState(25);
   
-  const [minting, setMinting] = useState(false);
+  const [mintingStatus, setMintingStatus] = useState<MintingStatus>('idle');
+  const [mintingMessage, setMintingMessage] = useState('');
+  const [mintingError, setMintingError] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -56,7 +64,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
     const newTracks = files.map((file) => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
-      title: file.name.replace(/\.[^/.]+$/, ''), // Remove extension for title
+      title: file.name.replace(/\.[^/.]+$/, ''),
     }));
     setTracks([...tracks, ...newTracks]);
   };
@@ -69,23 +77,144 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
     setTracks(tracks.filter(t => t.id !== id));
   };
 
-  const handleMint = () => {
-    setMinting(true);
-    // TODO: Actually mint to XRPL
-    setTimeout(() => {
-      setMinting(false);
-      onClose();
-      // Reset form
-      setStep(1);
-      setTitle('');
-      setDescription('');
-      setCoverArt(null);
-      setCoverPreview(null);
-      setTracks([]);
-      setQuantity(100);
-      setSongPrice(5);
-      setAlbumPrice(25);
-    }, 3000);
+  const resetForm = () => {
+    setStep(1);
+    setReleaseType('single');
+    setMediaType('audio');
+    setTitle('');
+    setDescription('');
+    setCoverArt(null);
+    setCoverPreview(null);
+    setTracks([]);
+    setQuantity(100);
+    setSongPrice(5);
+    setAlbumPrice(25);
+    setMintingStatus('idle');
+    setMintingMessage('');
+    setMintingError('');
+  };
+
+  const handleMint = async () => {
+    if (!user?.account) {
+      setMintingError('Please connect your wallet first');
+      setMintingStatus('error');
+      return;
+    }
+
+    if (!coverArt || tracks.length === 0) {
+      setMintingError('Please upload cover art and at least one track');
+      setMintingStatus('error');
+      return;
+    }
+
+    try {
+      setMintingStatus('uploading-cover');
+      setMintingMessage('Uploading cover art to IPFS...');
+      
+      const coverResult = await uploadFileToIPFS(coverArt);
+      if (!coverResult.success || !coverResult.cid) {
+        throw new Error(coverResult.error || 'Failed to upload cover art');
+      }
+
+      setMintingStatus('uploading-audio');
+      const uploadedTracks: Track[] = [];
+      
+      for (let i = 0; i < tracks.length; i++) {
+        setMintingMessage(`Uploading track ${i + 1} of ${tracks.length}...`);
+        const track = tracks[i];
+        const audioResult = await uploadFileToIPFS(track.file);
+        
+        if (!audioResult.success || !audioResult.cid) {
+          throw new Error(audioResult.error || `Failed to upload track: ${track.title}`);
+        }
+
+        uploadedTracks.push({
+          id: track.id,
+          title: track.title,
+          audioUrl: audioResult.url!,
+          audioCid: audioResult.cid,
+        });
+      }
+
+      setMintingStatus('uploading-metadata');
+      setMintingMessage('Creating NFT metadata...');
+      
+      const metadata = {
+        name: title,
+        description: description,
+        image: coverResult.url,
+        external_url: 'https://xrpmusic.io',
+        attributes: [
+          { trait_type: 'Type', value: releaseType },
+          { trait_type: 'Media', value: mediaType },
+          { trait_type: 'Artist', value: user.account },
+          { trait_type: 'Tracks', value: tracks.length },
+          { trait_type: 'Edition Size', value: quantity },
+        ],
+        properties: {
+          tracks: uploadedTracks.map(t => ({
+            title: t.title,
+            audio: t.audioUrl,
+          })),
+          pricing: {
+            songPrice: songPrice,
+            albumPrice: releaseType === 'album' ? albumPrice : songPrice,
+            currency: 'XRP',
+          },
+        },
+      };
+
+      const metadataResult = await uploadJSONToIPFS(metadata, `${title}-metadata.json`);
+      if (!metadataResult.success || !metadataResult.cid) {
+        throw new Error(metadataResult.error || 'Failed to upload metadata');
+      }
+
+      setMintingStatus('minting');
+      setMintingMessage('Please approve the transaction in Xaman...');
+      
+      const mintResult = await mintNFT({
+        metadataUri: metadataResult.url!,
+        transferFee: 200,
+        taxon: releaseType === 'album' ? 1 : 0,
+      });
+
+      if (!mintResult.success) {
+        throw new Error(mintResult.error || 'Minting failed');
+      }
+
+      const release: Release = {
+        id: Math.random().toString(36).substr(2, 9),
+        type: releaseType,
+        title: title,
+        description: description,
+        artistAddress: user.account,
+        coverUrl: coverResult.url!,
+        coverCid: coverResult.cid,
+        tracks: uploadedTracks,
+        songPrice: songPrice,
+        albumPrice: releaseType === 'album' ? albumPrice : undefined,
+        totalEditions: quantity,
+        soldEditions: 0,
+        createdAt: new Date().toISOString(),
+        metadataCid: metadataResult.cid,
+        txHash: mintResult.txHash,
+      };
+
+      saveRelease(release);
+
+      setMintingStatus('complete');
+      setMintingMessage('Your music has been minted successfully! 🎉');
+      
+      setTimeout(() => {
+        resetForm();
+        onClose();
+      }, 3000);
+
+    } catch (error) {
+      console.error('Minting error:', error);
+      setMintingStatus('error');
+      setMintingError(error instanceof Error ? error.message : 'Minting failed');
+    }
   };
 
   const totalSteps = 3;
@@ -102,9 +231,11 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
     return true;
   };
 
+  const isMinting = mintingStatus !== 'idle' && mintingStatus !== 'error';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={!isMinting ? onClose : undefined} />
       <div className={`relative w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden my-8 animate-slide-up ${
         theme === 'dark'
           ? 'bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800'
@@ -112,17 +243,19 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       }`}>
         <div className={`absolute inset-0 pointer-events-none ${theme === 'dark' ? 'bg-gradient-to-br from-blue-500/5 to-transparent' : ''}`} />
 
-        {/* Header */}
         <div className={`relative p-6 border-b ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
           <div className="flex items-center justify-between">
             <h2 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
               Create & Mint to XRPL
             </h2>
-            <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white transition-colors">
+            <button 
+              onClick={!isMinting ? onClose : undefined} 
+              className={`p-2 text-zinc-500 hover:text-white transition-colors ${isMinting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={isMinting}
+            >
               <X size={20} />
             </button>
           </div>
-          {/* Progress */}
           <div className="flex gap-2 mt-4">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div key={i} className={`flex-1 h-1 rounded-full transition-colors ${
@@ -137,14 +270,50 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
           </div>
         </div>
 
-        {/* Content */}
         <div className="relative p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           
-          {/* Step 1: Release Type */}
+          {isMinting && (
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-10 flex items-center justify-center">
+              <div className={`p-6 rounded-2xl text-center max-w-sm ${theme === 'dark' ? 'bg-zinc-900' : 'bg-white'}`}>
+                {mintingStatus === 'complete' ? (
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check size={32} className="text-green-500" />
+                  </div>
+                ) : (
+                  <Loader2 size={48} className="mx-auto mb-4 text-blue-500 animate-spin" />
+                )}
+                <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                  {mintingMessage}
+                </p>
+                {mintingStatus === 'minting' && (
+                  <p className="text-sm text-zinc-500 mt-2">
+                    A new tab will open for Xaman
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {mintingStatus === 'error' && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
+              <AlertCircle size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-red-500 font-semibold text-sm">Minting Failed</h4>
+                <p className="text-xs text-red-400 mt-1">{mintingError}</p>
+                <button 
+                  onClick={() => setMintingStatus('idle')}
+                  className="text-xs text-blue-500 mt-2 hover:underline"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          )}
+          
           {step === 1 && (
             <>
               <div>
-                <label className="block text-sm text-zinc-500 mb-3">What are you releasing?</label>
+                <label className="block text-sm text-zinc-500 mb-3">Release Type</label>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setReleaseType('single')}
@@ -186,6 +355,39 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm text-zinc-500 mb-3">Media Type</label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setMediaType('audio')}
+                    className={`flex-1 p-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${
+                      mediaType === 'audio'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-500'
+                        : theme === 'dark'
+                          ? 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                    }`}
+                  >
+                    <Music size={20} />
+                    <span className="font-medium">Audio (MP3)</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setMediaType('video')}
+                    className={`flex-1 p-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${
+                      mediaType === 'video'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-500'
+                        : theme === 'dark'
+                          ? 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                    }`}
+                  >
+                    <Video size={20} />
+                    <span className="font-medium">Video (MP4)</span>
+                  </button>
+                </div>
+              </div>
+
               {releaseType === 'album' && (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                   <div className="flex items-start gap-3">
@@ -203,11 +405,9 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
             </>
           )}
 
-          {/* Step 2: Upload Files */}
           {step === 2 && (
             <>
               <div className="grid grid-cols-3 gap-4">
-                {/* Cover Art */}
                 <div>
                   <label className="block text-sm text-zinc-500 mb-2">Cover Art</label>
                   <input
@@ -236,7 +436,6 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   </div>
                 </div>
 
-                {/* Title & Description */}
                 <div className="col-span-2 space-y-3">
                   <div>
                     <label className="block text-sm text-zinc-500 mb-1">
@@ -263,11 +462,10 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                 </div>
               </div>
 
-              {/* Track Upload */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-sm text-zinc-500">
-                    {releaseType === 'album' ? 'Album Tracks' : 'Audio File'}
+                    {releaseType === 'album' ? 'Album Tracks' : `${mediaType === 'audio' ? 'Audio' : 'Video'} File`}
                   </label>
                   {tracks.length > 0 && (
                     <span className="text-xs text-blue-500">{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
@@ -277,7 +475,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="audio/*"
+                  accept={mediaType === 'audio' ? 'audio/*' : 'video/*'}
                   multiple={releaseType === 'album'}
                   onChange={handleTracksUpload}
                   className="hidden"
@@ -296,7 +494,9 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                     <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
                       Drop your {releaseType === 'album' ? 'tracks' : 'track'} here
                     </p>
-                    <p className="text-zinc-500 text-sm">MP3, WAV, or FLAC</p>
+                    <p className="text-zinc-500 text-sm">
+                      {mediaType === 'audio' ? 'MP3, WAV, or FLAC' : 'MP4, MOV, or WebM'}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -312,7 +512,11 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                         }`}>
                           {index + 1}
                         </span>
-                        <Music size={16} className="text-blue-500" />
+                        {mediaType === 'audio' ? (
+                          <Music size={16} className="text-blue-500" />
+                        ) : (
+                          <Video size={16} className="text-blue-500" />
+                        )}
                         <input
                           type="text"
                           value={track.title}
@@ -352,7 +556,6 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
             </>
           )}
 
-          {/* Step 3: Pricing */}
           {step === 3 && (
             <>
               <div>
@@ -381,9 +584,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
               </div>
 
               <div>
-                <label className="block text-sm text-zinc-500 mb-2">
-                  Price per Song (XRP)
-                </label>
+                <label className="block text-sm text-zinc-500 mb-2">Price per Song (XRP)</label>
                 <p className={`text-xs mb-3 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
                   {releaseType === 'album' 
                     ? 'This price applies to ALL tracks in the album when bought individually.'
@@ -417,17 +618,13 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500">XRP</span>
                   </div>
                   <p className="text-xs text-blue-500 mt-2">
-                    💡 Individual tracks: {tracks.length} × {songPrice} XRP = {tracks.length * songPrice} XRP | 
-                    Album bundle saves {tracks.length * songPrice - albumPrice} XRP
+                    💡 Individual: {tracks.length} × {songPrice} = {tracks.length * songPrice} XRP | Bundle saves {tracks.length * songPrice - albumPrice} XRP
                   </p>
                 </div>
               )}
 
-              {/* Summary */}
               <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100'}`}>
-                <h4 className={`font-semibold mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                  Summary
-                </h4>
+                <h4 className={`font-semibold mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Summary</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Release</span>
@@ -439,7 +636,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Editions</span>
-                    <span className={theme === 'dark' ? 'text-white' : 'text-black'}>{quantity} copies each</span>
+                    <span className={theme === 'dark' ? 'text-white' : 'text-black'}>{quantity} copies</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Song Price</span>
@@ -459,7 +656,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-500">You Receive</span>
-                    <span className="text-green-500 font-medium">98% of each sale</span>
+                    <span className="text-green-500 font-medium">98%</span>
                   </div>
                 </div>
               </div>
@@ -467,9 +664,8 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
           )}
         </div>
 
-        {/* Footer */}
         <div className={`relative p-6 border-t flex gap-3 ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
-          {step > 1 && (
+          {step > 1 && !isMinting && (
             <button 
               onClick={() => setStep(step - 1)} 
               className={`px-6 py-3 rounded-xl font-medium transition-colors ${
@@ -493,13 +689,13 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
           ) : (
             <button
               onClick={handleMint}
-              disabled={minting}
+              disabled={isMinting}
               className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {minting ? (
+              {isMinting ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Minting to XRPL...
+                  <Loader2 size={18} className="animate-spin" />
+                  Processing...
                 </>
               ) : (
                 <>
