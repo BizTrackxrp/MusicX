@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '@/lib/theme-context';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -26,6 +26,15 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Listen for navigation events from CreateModal
+  useEffect(() => {
+    const handleNavigate = (e: CustomEvent) => {
+      setCurrentPage(e.detail);
+    };
+    window.addEventListener('navigate', handleNavigate as EventListener);
+    return () => window.removeEventListener('navigate', handleNavigate as EventListener);
+  }, []);
 
   const handleLogin = (loggedInUser: { email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } }) => {
     setUser(loggedInUser);
@@ -53,13 +62,11 @@ export default function Home() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
-
       <div className="lg:pl-64">
         <Header 
           onMessagesClick={() => setShowMessenger(true)} 
           onMenuClick={() => setSidebarOpen(true)}
         />
-
         <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 pb-32 transition-colors ${
           theme === 'dark'
             ? 'bg-gradient-to-b from-zinc-900/50 to-black'
@@ -79,28 +86,23 @@ export default function Home() {
           {currentPage === 'profile' && <ProfilePage user={user} />}
         </main>
       </div>
-
       <Player
         currentTrack={currentTrack}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
       />
-
       <AuthModal
         isOpen={showAuth}
         onClose={() => setShowAuth(false)}
         onLogin={handleLogin}
       />
-
       <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
-
       <AlbumModal
         album={selectedAlbum}
         isOpen={!!selectedAlbum}
         onClose={() => setSelectedAlbum(null)}
         onPlay={handlePlayTrack}
       />
-
       <Messenger isOpen={showMessenger} onClose={() => setShowMessenger(false)} />
     </div>
   );
