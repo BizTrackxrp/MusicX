@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Calling Lighthouse API...');
     
-    const response = await fetch('https://node.lighthouse.storage/api/v0/add', {
+    const response = await fetch('https://upload.lighthouse.storage/api/v0/add', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LIGHTHOUSE_API_KEY}`,
