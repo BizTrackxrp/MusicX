@@ -44,13 +44,12 @@ export async function mintNFT(request: MintRequest): Promise<MintResult> {
     console.log('Metadata URI:', request.metadataUri);
     console.log('URI as hex:', stringToHex(request.metadataUri));
 
-    // Create payload with txjson wrapper as required by Xumm SDK
     const payload = await sdk.payload?.create({
       txjson: {
         TransactionType: 'NFTokenMint',
         NFTokenTaxon: request.taxon || 0,
-        Flags: request.flags || 8, // tfTransferable
-        TransferFee: request.transferFee || 200, // 0.2% royalty
+        Flags: request.flags || 8,
+        TransferFee: request.transferFee || 200,
         URI: stringToHex(request.metadataUri),
       },
       custom_meta: {
@@ -64,7 +63,6 @@ export async function mintNFT(request: MintRequest): Promise<MintResult> {
       throw new Error('Failed to create mint payload');
     }
 
-    // Open Xaman to sign - this should open a new tab/window
     if (payload.next?.always) {
       console.log('Opening Xaman:', payload.next.always);
       window.open(payload.next.always, '_blank');
@@ -72,10 +70,9 @@ export async function mintNFT(request: MintRequest): Promise<MintResult> {
       throw new Error('No sign URL returned from Xaman');
     }
 
-    // Wait for signature by polling
     const result = await new Promise<MintResult>((resolve) => {
       let attempts = 0;
-      const maxAttempts = 120; // 4 minutes timeout (2 sec intervals)
+      const maxAttempts = 120;
 
       const checkStatus = async () => {
         attempts++;
@@ -90,8 +87,8 @@ export async function mintNFT(request: MintRequest): Promise<MintResult> {
               console.log('Transaction signed!', status.response);
               resolve({
                 success: true,
-                txHash: status.response?.txid,
-                nftTokenId: status.response?.txid,
+                txHash: status.response?.txid ?? undefined,
+                nftTokenId: status.response?.txid ?? undefined,
               });
             } else {
               console.log('Transaction rejected by user');
@@ -146,7 +143,7 @@ export async function createSellOffer(
         TransactionType: 'NFTokenCreateOffer',
         NFTokenID: nftTokenId,
         Amount: priceInDrops,
-        Flags: 1, // tfSellNFToken
+        Flags: 1,
       },
       custom_meta: {
         instruction: 'Sign to list your NFT for sale',
@@ -174,7 +171,7 @@ export async function createSellOffer(
             if (status.meta.signed) {
               resolve({
                 success: true,
-                txHash: status.response?.txid,
+                txHash: status.response?.txid ?? undefined,
               });
             } else {
               resolve({
