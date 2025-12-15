@@ -40,44 +40,87 @@ export async function mintNFT(request: MintRequest): Promise<MintResult> {
   try {
     const sdk = getXumm();
 
+    console.log('Creating NFT mint payload...');
+    console.log('Metadata URI:', request.metadataUri);
+    console.log('URI as hex:', stringToHex(request.metadataUri));
+
+    // Create payload with txjson wrapper as required by Xumm SDK
     const payload = await sdk.payload?.create({
-      TransactionType: 'NFTokenMint',
-      NFTokenTaxon: request.taxon || 0,
-      Flags: request.flags || 8,
-      TransferFee: request.transferFee || 200,
-      URI: stringToHex(request.metadataUri),
+      txjson: {
+        TransactionType: 'NFTokenMint',
+        NFTokenTaxon: request.taxon || 0,
+        Flags: request.flags || 8, // tfTransferable
+        TransferFee: request.transferFee || 200, // 0.2% royalty
+        URI: stringToHex(request.metadataUri),
+      },
+      custom_meta: {
+        instruction: 'Sign to mint your music NFT on the XRP Ledger',
+      },
     });
+
+    console.log('Payload created:', payload);
 
     if (!payload) {
       throw new Error('Failed to create mint payload');
     }
 
+    // Open Xaman to sign - this should open a new tab/window
     if (payload.next?.always) {
+      console.log('Opening Xaman:', payload.next.always);
       window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
     }
 
+    // Wait for signature by polling
     const result = await new Promise<MintResult>((resolve) => {
-      const checkStatus = async () => {
-        const status = await sdk.payload?.get(payload.uuid);
+      let attempts = 0;
+      const maxAttempts = 120; // 4 minutes timeout (2 sec intervals)
 
-        if (status?.meta?.resolved) {
-          if (status.meta.signed) {
-            const txHash = status.response?.txid;
-            resolve({
-              success: true,
-              txHash: txHash,
-              nftTokenId: txHash,
-            });
-          } else {
+      const checkStatus = async () => {
+        attempts++;
+        console.log(`Checking payload status (attempt ${attempts})...`);
+
+        try {
+          const status = await sdk.payload?.get(payload.uuid);
+          console.log('Payload status:', status?.meta);
+
+          if (status?.meta?.resolved) {
+            if (status.meta.signed) {
+              console.log('Transaction signed!', status.response);
+              resolve({
+                success: true,
+                txHash: status.response?.txid,
+                nftTokenId: status.response?.txid,
+              });
+            } else {
+              console.log('Transaction rejected by user');
+              resolve({
+                success: false,
+                error: 'Transaction rejected by user',
+              });
+            }
+          } else if (attempts >= maxAttempts) {
             resolve({
               success: false,
-              error: 'Transaction rejected by user',
+              error: 'Transaction timed out - please try again',
             });
+          } else {
+            setTimeout(checkStatus, 2000);
           }
-        } else {
-          setTimeout(checkStatus, 2000);
+        } catch (err) {
+          console.error('Error checking status:', err);
+          if (attempts >= maxAttempts) {
+            resolve({
+              success: false,
+              error: 'Failed to check transaction status',
+            });
+          } else {
+            setTimeout(checkStatus, 2000);
+          }
         }
       };
+
       checkStatus();
     });
 
@@ -99,10 +142,15 @@ export async function createSellOffer(
     const sdk = getXumm();
 
     const payload = await sdk.payload?.create({
-      TransactionType: 'NFTokenCreateOffer',
-      NFTokenID: nftTokenId,
-      Amount: priceInDrops,
-      Flags: 1,
+      txjson: {
+        TransactionType: 'NFTokenCreateOffer',
+        NFTokenID: nftTokenId,
+        Amount: priceInDrops,
+        Flags: 1, // tfSellNFToken
+      },
+      custom_meta: {
+        instruction: 'Sign to list your NFT for sale',
+      },
     });
 
     if (!payload) {
@@ -114,25 +162,46 @@ export async function createSellOffer(
     }
 
     const result = await new Promise<MintResult>((resolve) => {
-      const checkStatus = async () => {
-        const status = await sdk.payload?.get(payload.uuid);
+      let attempts = 0;
+      const maxAttempts = 120;
 
-        if (status?.meta?.resolved) {
-          if (status.meta.signed) {
-            resolve({
-              success: true,
-              txHash: status.response?.txid,
-            });
-          } else {
+      const checkStatus = async () => {
+        attempts++;
+        try {
+          const status = await sdk.payload?.get(payload.uuid);
+
+          if (status?.meta?.resolved) {
+            if (status.meta.signed) {
+              resolve({
+                success: true,
+                txHash: status.response?.txid,
+              });
+            } else {
+              resolve({
+                success: false,
+                error: 'Sell offer rejected by user',
+              });
+            }
+          } else if (attempts >= maxAttempts) {
             resolve({
               success: false,
-              error: 'Sell offer rejected by user',
+              error: 'Transaction timed out',
             });
+          } else {
+            setTimeout(checkStatus, 2000);
           }
-        } else {
-          setTimeout(checkStatus, 2000);
+        } catch {
+          if (attempts >= maxAttempts) {
+            resolve({
+              success: false,
+              error: 'Failed to check transaction status',
+            });
+          } else {
+            setTimeout(checkStatus, 2000);
+          }
         }
       };
+
       checkStatus();
     });
 
