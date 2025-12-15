@@ -49,13 +49,10 @@ export default function ArtistPage() {
 
   useEffect(() => {
     if (address) {
-      // Load profile from localStorage
       const savedProfile = localStorage.getItem(`profile_${address}`);
       if (savedProfile) {
         setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(savedProfile) });
       }
-      
-      // Load releases
       setReleases(getReleasesByArtist(address));
       setLoading(false);
     }
@@ -204,7 +201,7 @@ export default function ArtistPage() {
                   <span className="text-zinc-500 text-sm font-mono">
                     {address.slice(0, 12)}...{address.slice(-8)}
                   </span>
-                  <a
+                  
                     href={`https://livenet.xrpl.org/accounts/${address}`}
                     target="_blank"
                     rel="noopener noreferrer"
