@@ -6,12 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     console.log('=== Upload API Called ===');
     console.log('API Key exists:', !!LIGHTHOUSE_API_KEY);
-    console.log('API Key length:', LIGHTHOUSE_API_KEY?.length);
 
     if (!LIGHTHOUSE_API_KEY) {
-      console.error('LIGHTHOUSE_API_KEY not found in environment');
       return NextResponse.json(
-        { error: 'Lighthouse API key not configured. Check your environment variables.' },
+        { error: 'Lighthouse API key not configured' },
         { status: 500 }
       );
     }
@@ -20,58 +18,45 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     
     if (!file) {
-      console.error('No file in request');
       return NextResponse.json(
         { error: 'No file provided' },
         { status: 400 }
       );
     }
 
-    console.log('File received:', file.name, 'Size:', file.size, 'Type:', file.type);
+    console.log('File received:', file.name, 'Size:', file.size);
 
-    // Convert File to Buffer for upload
+    // Convert to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create form data for Lighthouse
-    const lighthouseFormData = new FormData();
+    // Use FormData with node-style append
+    const uploadFormData = new FormData();
     const blob = new Blob([buffer], { type: file.type });
-    lighthouseFormData.append('file', blob, file.name);
+    uploadFormData.append('file', blob, file.name);
 
-    console.log('Calling Lighthouse API...');
+    console.log('Uploading to Lighthouse...');
     
-    const response = await fetch('https://node.lighthouse.storage/api/v0/add', {
+    const response = await fetch('https://upload.lighthouse.storage/api/v0/add', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LIGHTHOUSE_API_KEY}`,
       },
-      body: lighthouseFormData,
+      body: uploadFormData,
     });
 
-    console.log('Lighthouse response status:', response.status);
     const responseText = await response.text();
-    console.log('Lighthouse response body:', responseText);
+    console.log('Lighthouse status:', response.status);
+    console.log('Lighthouse response:', responseText);
 
     if (!response.ok) {
-      console.error('Lighthouse error:', responseText);
       return NextResponse.json(
-        { error: `Lighthouse upload failed: ${responseText}` },
+        { error: `Upload failed: ${responseText}` },
         { status: response.status }
       );
     }
 
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error('Failed to parse Lighthouse response:', responseText);
-      return NextResponse.json(
-        { error: 'Invalid response from Lighthouse' },
-        { status: 500 }
-      );
-    }
-
-    console.log('Upload successful! CID:', data.Hash);
+    const data = JSON.parse(responseText);
     
     return NextResponse.json({
       success: true,
@@ -82,7 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Upload API error:', error);
+    console.error('Upload error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Upload failed' },
       { status: 500 }
