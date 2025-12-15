@@ -95,7 +95,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   };
 
   const handleMint = async () => {
-    if (!user?.account) {
+    if (!user?.address) {
       setMintingError('Please connect your wallet first');
       setMintingStatus('error');
       return;
@@ -147,7 +147,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         attributes: [
           { trait_type: 'Type', value: releaseType },
           { trait_type: 'Media', value: mediaType },
-          { trait_type: 'Artist', value: user.account },
+          { trait_type: 'Artist', value: user.address },
           { trait_type: 'Tracks', value: tracks.length },
           { trait_type: 'Edition Size', value: quantity },
         ],
@@ -187,7 +187,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         type: releaseType,
         title: title,
         description: description,
-        artistAddress: user.account,
+        artistAddress: user.address,
         coverUrl: coverResult.url!,
         coverCid: coverResult.cid,
         tracks: uploadedTracks,
@@ -495,7 +495,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                       Drop your {releaseType === 'album' ? 'tracks' : 'track'} here
                     </p>
                     <p className="text-zinc-500 text-sm">
-                      {mediaType === 'audio' ? 'MP3, WAV, or FLAC' : 'MP4, MOV, or WebM'}
+                      {mediaType === 'audio' ? 'MP3 or WAV' : 'MP4, MOV, or WebM'}
                     </p>
                   </div>
                 ) : (
