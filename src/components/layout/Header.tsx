@@ -1,14 +1,16 @@
 'use client';
 
-import { Search, Bell, MessageCircle, Menu } from 'lucide-react';
+import { Search, Bell, MessageCircle, Menu, Wallet } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 
 interface HeaderProps {
   onMessagesClick: () => void;
   onMenuClick: () => void;
+  onAuthClick?: () => void;
+  isLoggedIn?: boolean;
 }
 
-export default function Header({ onMessagesClick, onMenuClick }: HeaderProps) {
+export default function Header({ onMessagesClick, onMenuClick, onAuthClick, isLoggedIn }: HeaderProps) {
   const { theme } = useTheme();
   
   return (
@@ -30,6 +32,7 @@ export default function Header({ onMessagesClick, onMenuClick }: HeaderProps) {
           <Menu size={24} />
         </button>
 
+        {/* Search - hidden on small screens */}
         <div className="flex-1 max-w-xl hidden sm:block">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" size={18} />
@@ -46,6 +49,7 @@ export default function Header({ onMessagesClick, onMenuClick }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Mobile search button */}
           <button className={`p-2 rounded-xl transition-colors sm:hidden ${
             theme === 'dark' 
               ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' 
@@ -53,6 +57,19 @@ export default function Header({ onMessagesClick, onMenuClick }: HeaderProps) {
           }`}>
             <Search size={20} />
           </button>
+
+          {/* Connect Wallet button - shown on mobile when not logged in */}
+          {!isLoggedIn && onAuthClick && (
+            <button
+              onClick={onAuthClick}
+              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-xl transition-all text-sm"
+            >
+              <Wallet size={16} />
+              <span className="hidden xs:inline">Connect</span>
+            </button>
+          )}
+
+          {/* Notifications */}
           <button className={`p-2 rounded-xl transition-colors relative ${
             theme === 'dark' 
               ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' 
@@ -61,6 +78,8 @@ export default function Header({ onMessagesClick, onMenuClick }: HeaderProps) {
             <Bell size={20} />
             <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
           </button>
+
+          {/* Messages */}
           <button
             onClick={onMessagesClick}
             className={`p-2 rounded-xl transition-colors ${
