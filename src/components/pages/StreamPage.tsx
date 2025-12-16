@@ -21,9 +21,16 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
 
   const handlePlayRelease = (release: Release) => {
     if (release.tracks.length > 0) {
-      const track = release.tracks[0];
+      const releaseTrack = release.tracks[0];
       onPlayTrack({
-        ...track,
+        id: parseInt(releaseTrack.id) || 0,
+        title: releaseTrack.title,
+        duration: releaseTrack.duration?.toString() || '0:00',
+        price: release.songPrice,
+        available: release.totalEditions - release.soldEditions,
+        plays: 0,
+        mediaType: 'audio',
+        ipfsHash: releaseTrack.audioCid,
         artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
         cover: release.coverUrl,
       });
@@ -155,7 +162,14 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
                 <div
                   key={`${release.id}-${track.id}`}
                   onClick={() => onPlayTrack({
-                    ...track,
+                    id: parseInt(track.id) || 0,
+                    title: track.title,
+                    duration: track.duration?.toString() || '0:00',
+                    price: release.songPrice,
+                    available: release.totalEditions - release.soldEditions,
+                    plays: 0,
+                    mediaType: 'audio',
+                    ipfsHash: track.audioCid,
                     artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
                     cover: release.coverUrl,
                   })}
