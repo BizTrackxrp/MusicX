@@ -3,8 +3,28 @@
 import { useState, useEffect } from 'react';
 import { Play, Music, Wallet, Disc3, TrendingUp, Sparkles } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
-import { getAllReleases, Release } from '@/lib/releases-store';
 import { Album, Track } from '@/types';
+
+interface Release {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  artistAddress: string;
+  artistName: string;
+  coverUrl: string;
+  coverCid: string;
+  songPrice: number;
+  albumPrice: number;
+  totalEditions: number;
+  soldEditions: number;
+  tracks: Array<{
+    id: string;
+    title: string;
+    audioUrl: string;
+    audioCid: string;
+  }>;
+}
 
 interface StreamPageProps {
   onPlayTrack: (track: Track & { artist?: string; cover?: string }) => void;
@@ -16,7 +36,28 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
   const [releases, setReleases] = useState<Release[]>([]);
 
   useEffect(() => {
-    setReleases(getAllReleases());
+    async function loadReleases() {
+      try {
+        const res = await fetch('/api/releases');
+        const data = await res.json();
+        if (data.success && data.releases) {
+          setReleases(data.releases);
+        }
+      } catch (error) {
+        console.error('Failed to load releases:', error);
+        // Fallback to localStorage
+        const stored = localStorage.getItem('xrpmusic_releases');
+        if (stored) {
+          setReleases(JSON.parse(stored));
+        }
+      }
+    }
+    loadReleases();
+
+    // Listen for new releases
+    const handleNewRelease = () => loadReleases();
+    window.addEventListener('releaseCreated', handleNewRelease);
+    return () => window.removeEventListener('releaseCreated', handleNewRelease);
   }, []);
 
   const handlePlayRelease = (release: Release) => {
