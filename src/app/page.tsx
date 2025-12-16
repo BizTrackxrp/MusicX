@@ -66,8 +66,12 @@ export default function Home() {
         <Header 
           onMessagesClick={() => setShowMessenger(true)} 
           onMenuClick={() => setSidebarOpen(true)}
+          onAuthClick={() => setShowAuth(true)}
+          isLoggedIn={!!user}
         />
-        <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 pb-32 transition-colors ${
+        <main className={`min-h-[calc(100vh-64px)] p-4 lg:p-6 transition-colors ${
+          currentTrack ? 'pb-24 lg:pb-28' : 'pb-6'
+        } ${
           theme === 'dark'
             ? 'bg-gradient-to-b from-zinc-900/50 to-black'
             : 'bg-gradient-to-b from-white to-slate-50'
