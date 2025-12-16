@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Home, ShoppingBag, User, Plus, Wallet, Music, Moon, Sun, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
@@ -27,6 +28,44 @@ export default function Sidebar({
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const { disconnect } = useXaman();
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  
+  // Load profile name from localStorage
+  useEffect(() => {
+    if (user?.wallet?.address) {
+      const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        setProfileName(parsed.name || null);
+        setProfileAvatar(parsed.avatarUrl || null);
+      }
+    } else {
+      setProfileName(null);
+      setProfileAvatar(null);
+    }
+  }, [user?.wallet?.address]);
+
+  // Listen for profile updates
+  useEffect(() => {
+    const handleStorageChange = () => {
+      if (user?.wallet?.address) {
+        const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile);
+          setProfileName(parsed.name || null);
+          setProfileAvatar(parsed.avatarUrl || null);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('profileUpdated', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('profileUpdated', handleStorageChange);
+    };
+  }, [user?.wallet?.address]);
   
   const navItems = [
     { id: 'stream' as const, label: 'Stream', icon: Home },
@@ -42,6 +81,21 @@ export default function Sidebar({
   const handleLogout = () => {
     disconnect();
     onLogout();
+    setProfileName(null);
+    setProfileAvatar(null);
+  };
+
+  const getDisplayName = () => {
+    if (profileName) return profileName;
+    if (user?.wallet?.address) return `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`;
+    return 'Connected';
+  };
+
+  const getInitial = () => {
+    if (profileName) return profileName[0].toUpperCase();
+    if (user?.wallet?.address) return user.wallet.address[0].toUpperCase();
+    if (user?.email) return user.email[0].toUpperCase();
+    return 'U';
   };
 
   return (
@@ -139,12 +193,20 @@ export default function Sidebar({
           {user ? (
             <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100'}`}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white">
-                  {user.wallet ? 'X' : user.email?.[0]?.toUpperCase() || 'U'}
-                </div>
+                {profileAvatar ? (
+                  <img 
+                    src={profileAvatar} 
+                    alt="Profile" 
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white">
+                    {getInitial()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                    {user.wallet ? 'Xaman Wallet' : user.email || 'Connected'}
+                    {user.wallet ? getDisplayName() : user.email || 'Connected'}
                   </p>
                   <p className="text-zinc-500 text-sm truncate">
                     {user.wallet ? user.wallet.address.slice(0, 8) + '...' + user.wallet.address.slice(-4) : 'Email login'}
