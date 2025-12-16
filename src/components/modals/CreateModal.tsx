@@ -6,7 +6,6 @@ import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/lib/ipfs';
 import { mintNFT } from '@/lib/xrpl-mint';
-import { saveRelease, Release, Track } from '@/lib/releases-store';
 
 interface CreateModalProps {
   isOpen: boolean;
@@ -19,7 +18,16 @@ interface TrackFile {
   title: string;
 }
 
-type MintingStatus = 'idle' | 'uploading-cover' | 'uploading-audio' | 'uploading-metadata' | 'minting' | 'complete' | 'error';
+interface Track {
+  id: string;
+  title: string;
+  audioUrl: string;
+  audioCid: string;
+  duration?: number;
+  nftTokenId?: string;
+}
+
+type MintingStatus = 'idle' | 'uploading-cover' | 'uploading-audio' | 'uploading-metadata' | 'minting' | 'saving' | 'complete' | 'error';
 type MediaType = 'audio' | 'video';
 
 export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
@@ -51,17 +59,42 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // Check for profile on mount and when user changes
+  // Check for profile from API on mount and when user changes
   useEffect(() => {
-    if (user?.address) {
-      const savedProfile = localStorage.getItem(`profile_${user.address}`);
-      if (savedProfile) {
-        const { name } = JSON.parse(savedProfile);
-        setArtistName(name || null);
-      } else {
-        setArtistName(null);
+    async function loadProfile() {
+      if (user?.address) {
+        try {
+          const res = await fetch(`/api/profile?address=${user.address}`);
+          const data = await res.json();
+          if (data.success && data.profile?.name) {
+            setArtistName(data.profile.name);
+          } else {
+            // Fallback to localStorage for backwards compatibility
+            const savedProfile = localStorage.getItem(`profile_${user.address}`);
+            if (savedProfile) {
+              const { name } = JSON.parse(savedProfile);
+              setArtistName(name || null);
+            } else {
+              setArtistName(null);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load profile:', error);
+          // Fallback to localStorage
+          const savedProfile = localStorage.getItem(`profile_${user.address}`);
+          if (savedProfile) {
+            const { name } = JSON.parse(savedProfile);
+            setArtistName(name || null);
+          } else {
+            setArtistName(null);
+          }
+        }
+        setProfileChecked(true);
       }
-      setProfileChecked(true);
+    }
+    
+    if (isOpen) {
+      loadProfile();
     }
   }, [user?.address, isOpen]);
 
@@ -91,7 +124,6 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
             <button
               onClick={() => {
                 onClose();
-                // Navigate to profile page - we'll emit an event or use a callback
                 window.dispatchEvent(new CustomEvent('navigate', { detail: 'profile' }));
               }}
               className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold rounded-xl transition-all"
@@ -253,7 +285,11 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         throw new Error(mintResult.error || 'Minting failed');
       }
 
-      const release: Release = {
+      // Save to database
+      setMintingStatus('saving');
+      setMintingMessage('Saving release to database...');
+      
+      const releaseData = {
         id: Math.random().toString(36).substr(2, 9),
         type: releaseType,
         title: title,
@@ -267,15 +303,31 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
         albumPrice: releaseType === 'album' ? albumPrice : undefined,
         totalEditions: quantity,
         soldEditions: 0,
-        createdAt: new Date().toISOString(),
         metadataCid: metadataResult.cid,
         txHash: mintResult.txHash,
       };
 
-      saveRelease(release);
+      // Save to API (database)
+      const saveResponse = await fetch('/api/releases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(releaseData),
+      });
+
+      if (!saveResponse.ok) {
+        console.error('Failed to save to database, falling back to localStorage');
+        // Fallback to localStorage
+        const existing = localStorage.getItem('xrpmusic_releases');
+        const releases = existing ? JSON.parse(existing) : [];
+        releases.unshift({ ...releaseData, createdAt: new Date().toISOString() });
+        localStorage.setItem('xrpmusic_releases', JSON.stringify(releases));
+      }
 
       setMintingStatus('complete');
       setMintingMessage('Your music has been minted successfully! 🎉');
+      
+      // Dispatch event to refresh releases
+      window.dispatchEvent(new CustomEvent('releaseCreated'));
       
       setTimeout(() => {
         resetForm();
