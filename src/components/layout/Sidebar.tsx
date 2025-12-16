@@ -31,25 +31,54 @@ export default function Sidebar({
   const [profileName, setProfileName] = useState<string | null>(null);
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   
-  // Load profile name from localStorage
+  // Load profile from API (with localStorage fallback)
   useEffect(() => {
-    if (user?.wallet?.address) {
-      const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
-      if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        setProfileName(parsed.name || null);
-        setProfileAvatar(parsed.avatarUrl || null);
+    async function loadProfile() {
+      if (user?.wallet?.address) {
+        try {
+          const res = await fetch(`/api/profile?address=${user.wallet.address}`);
+          const data = await res.json();
+          if (data.success && data.profile) {
+            setProfileName(data.profile.name || null);
+            setProfileAvatar(data.profile.avatarUrl || null);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to load profile from API:', error);
+        }
+        
+        // Fallback to localStorage
+        const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile);
+          setProfileName(parsed.name || null);
+          setProfileAvatar(parsed.avatarUrl || null);
+        }
+      } else {
+        setProfileName(null);
+        setProfileAvatar(null);
       }
-    } else {
-      setProfileName(null);
-      setProfileAvatar(null);
     }
+    loadProfile();
   }, [user?.wallet?.address]);
 
   // Listen for profile updates
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handleProfileUpdate = async () => {
       if (user?.wallet?.address) {
+        try {
+          const res = await fetch(`/api/profile?address=${user.wallet.address}`);
+          const data = await res.json();
+          if (data.success && data.profile) {
+            setProfileName(data.profile.name || null);
+            setProfileAvatar(data.profile.avatarUrl || null);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to reload profile:', error);
+        }
+        
+        // Fallback to localStorage
         const savedProfile = localStorage.getItem(`profile_${user.wallet.address}`);
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
@@ -59,11 +88,11 @@ export default function Sidebar({
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('profileUpdated', handleStorageChange);
+    window.addEventListener('storage', handleProfileUpdate);
+    window.addEventListener('profileUpdated', handleProfileUpdate);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('profileUpdated', handleStorageChange);
+      window.removeEventListener('storage', handleProfileUpdate);
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
     };
   }, [user?.wallet?.address]);
   
