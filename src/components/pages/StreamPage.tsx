@@ -205,7 +205,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
                   key={`${release.id}-${track.id}`}
                   onClick={() => onPlayTrack({
                     id: parseInt(track.id) || 0,
-                    title: track.title,
+                    title: release.type === 'single' ? release.title : track.title,
                     duration: track.duration?.toString() || '0:00',
                     price: release.songPrice,
                     available: release.totalEditions - release.soldEditions,
@@ -233,7 +233,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className={`font-medium truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                      {track.title}
+                      {release.type === 'single' ? release.title : track.title}
                     </h4>
                     <p className="text-zinc-500 text-xs sm:text-sm truncate">
                       {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
