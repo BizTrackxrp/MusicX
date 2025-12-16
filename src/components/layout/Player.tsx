@@ -62,11 +62,15 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
     return null;
   }
 
+  const audioSrc = currentTrack?.ipfsHash 
+    ? `https://gateway.lighthouse.storage/ipfs/${currentTrack.ipfsHash}` 
+    : undefined;
+
   return (
     <>
       <audio
         ref={audioRef}
-        src={currentTrack?.audioUrl}
+        src={audioSrc}
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => setIsPlaying(false)}
       />
