@@ -23,6 +23,7 @@ interface Release {
     title: string;
     audioUrl: string;
     audioCid: string;
+    duration?: number;
   }>;
 }
 
