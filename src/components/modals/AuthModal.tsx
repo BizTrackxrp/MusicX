@@ -1,23 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Mail, Lock, Eye, EyeOff, Music } from 'lucide-react';
+import { X, Music, Wallet } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLogin: (user: { email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } }) => void;
+  onLogin: (user: { wallet: { type: 'xumm'; address: string } }) => void;
 }
 
 export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   const { theme } = useTheme();
   const { connect, isConnecting, user } = useXaman();
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'wallet'>('wallet');
-  const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   if (!isOpen) return null;
 
@@ -37,11 +32,6 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
     return null;
   }
 
-  const handleEmailLogin = () => {
-    onLogin({ email });
-    onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
@@ -60,139 +50,84 @@ export default function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) 
         </button>
 
         <div className="relative p-8">
-          <div className="flex items-center gap-3 mb-8">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
               <Music size={20} className="text-white" />
             </div>
-            <span className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>XRP Music</span>
+            <span className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+              XRP Music
+            </span>
           </div>
 
-          {mode === 'wallet' ? (
-            <div className="space-y-4">
-              <h2 className={`text-xl font-semibold mb-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Connect Wallet</h2>
+          {/* Title */}
+          <h2 className={`text-xl font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            Connect Your Wallet
+          </h2>
+          <p className={`mb-6 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+            Sign in with your Xaman wallet to mint, buy, and collect music NFTs on the XRP Ledger.
+          </p>
 
-              <button
-                onClick={handleXamanConnect}
-                disabled={isConnecting}
-                className={`w-full p-4 border rounded-xl flex items-center gap-4 transition-all disabled:opacity-50 ${
-                  theme === 'dark'
-                    ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700'
-                    : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
-                }`}
-              >
-                <img 
-                  src="/Xaman-logo.png" 
-                  alt="Xaman" 
-                  className="w-12 h-12 rounded-xl"
-                />
-                <div className="text-left flex-1">
-                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Xaman Wallet</p>
-                  <p className="text-zinc-500 text-sm">Scan QR or open on mobile</p>
-                </div>
-                {isConnecting && (
-                  <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                )}
-              </button>
-
-              <div className="flex items-center gap-4 my-6">
-                <div className={`flex-1 h-px ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
-                <span className="text-zinc-500 text-sm">or continue with email</span>
-                <div className={`flex-1 h-px ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
-              </div>
-
-              <button
-                onClick={() => setMode('login')}
-                className="w-full p-3 text-blue-500 hover:text-blue-400 transition-colors"
-              >
-                Sign in with email
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <h2 className={`text-xl font-semibold mb-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Create account' : 'Reset password'}
-              </h2>
-
-              <div className="space-y-3">
-                <div className="relative">
-                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={`w-full pl-12 pr-4 py-3 border rounded-xl transition-colors focus:outline-none focus:border-blue-500 ${
-                      theme === 'dark'
-                        ? 'bg-zinc-800/50 border-zinc-700 text-white placeholder-zinc-500'
-                        : 'bg-zinc-50 border-zinc-200 text-black placeholder-zinc-400'
-                    }`}
-                  />
-                </div>
-
-                {mode !== 'reset' && (
-                  <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full pl-12 pr-12 py-3 border rounded-xl transition-colors focus:outline-none focus:border-blue-500 ${
-                        theme === 'dark'
-                          ? 'bg-zinc-800/50 border-zinc-700 text-white placeholder-zinc-500'
-                          : 'bg-zinc-50 border-zinc-200 text-black placeholder-zinc-400'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {mode === 'login' && (
-                <button
-                  onClick={() => setMode('reset')}
-                  className="text-sm text-zinc-500 hover:text-blue-400 transition-colors"
-                >
-                  Forgot password?
-                </button>
-              )}
-
-              <button
-                onClick={handleEmailLogin}
-                className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                {mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
-              </button>
-
-              <button
-                onClick={() => setMode('wallet')}
-                className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
-                  theme === 'dark'
-                    ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                    : 'bg-zinc-100 hover:bg-zinc-200 text-black'
-                }`}
-              >
-                <img src="/Xaman-logo.png" alt="Xaman" className="w-5 h-5 rounded" />
-                Connect with Xaman
-              </button>
-
-              <p className="text-center text-zinc-500 text-sm mt-6">
-                {mode === 'login' ? "Don't have an account? " : mode === 'signup' ? 'Already have an account? ' : 'Remember your password? '}
-                <button
-                  onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                  className="text-blue-500 hover:text-blue-400 transition-colors"
-                >
-                  {mode === 'login' ? 'Sign up' : 'Sign in'}
-                </button>
+          {/* Xaman Connect Button */}
+          <button
+            onClick={handleXamanConnect}
+            disabled={isConnecting}
+            className={`w-full p-4 border rounded-xl flex items-center gap-4 transition-all disabled:opacity-50 ${
+              theme === 'dark'
+                ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700 hover:border-zinc-600'
+                : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 hover:border-zinc-300'
+            }`}
+          >
+            <img 
+              src="/Xaman-logo.png" 
+              alt="Xaman" 
+              className="w-12 h-12 rounded-xl"
+            />
+            <div className="text-left flex-1">
+              <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                Xaman Wallet
+              </p>
+              <p className="text-zinc-500 text-sm">
+                {isConnecting ? 'Opening Xaman...' : 'Scan QR or open on mobile'}
               </p>
             </div>
-          )}
+            {isConnecting && (
+              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            )}
+          </button>
+
+          {/* Info */}
+          <div className={`mt-6 p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-800/30' : 'bg-zinc-50'}`}>
+            <div className="flex items-start gap-3">
+              <Wallet size={20} className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                  Don&apos;t have Xaman?
+                </p>
+                <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  Download the Xaman app for{' '}
+                  <a 
+                    href="https://apps.apple.com/app/xumm/id1492302343" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                  >
+                    iOS
+                  </a>
+                  {' '}or{' '}
+                  <a 
+                    href="https://play.google.com/store/apps/details?id=com.xrpllabs.xumm" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                  >
+                    Android
+                  </a>
+                  {' '}to get started.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
