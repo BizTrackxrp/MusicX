@@ -2,24 +2,39 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Play, Wallet, Music, ExternalLink, Share2, Copy, Check, ArrowLeft } from 'lucide-react';
+import { Play, Wallet, Music, ExternalLink, Share2, Copy, Check, ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '@/lib/theme-context';
-import { getReleasesByArtist, Release } from '@/lib/releases-store';
 
 interface ProfileData {
   name: string;
   bio: string;
   avatarUrl: string | null;
   bannerUrl: string | null;
-  pageTheme: 'gradient' | 'solid' | 'image';
+  pageTheme: 'gradient' | 'solid';
   accentColor: string;
   gradientStart: string;
   gradientEnd: string;
   gradientAngle: number;
-  backgroundImageUrl: string | null;
-  backgroundOpacity: number;
-  backgroundBlur: number;
+}
+
+interface Release {
+  id: string;
+  type: string;
+  title: string;
+  artistName: string;
+  artistAddress: string;
+  coverUrl: string;
+  songPrice: number;
+  albumPrice?: number;
+  totalEditions: number;
+  soldEditions: number;
+  tracks: Array<{
+    id: string;
+    title: string;
+    audioUrl: string;
+    audioCid: string;
+  }>;
 }
 
 const DEFAULT_PROFILE: ProfileData = {
@@ -32,9 +47,6 @@ const DEFAULT_PROFILE: ProfileData = {
   gradientStart: '#0066FF',
   gradientEnd: '#00D4FF',
   gradientAngle: 135,
-  backgroundImageUrl: null,
-  backgroundOpacity: 20,
-  backgroundBlur: 20,
 };
 
 export default function ArtistPage() {
@@ -48,14 +60,43 @@ export default function ArtistPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (address) {
-      const savedProfile = localStorage.getItem(`profile_${address}`);
-      if (savedProfile) {
-        setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(savedProfile) });
+    async function loadData() {
+      if (!address) return;
+      
+      try {
+        // Load profile from API
+        const profileRes = await fetch(`/api/profile?address=${address}`);
+        const profileData = await profileRes.json();
+        
+        if (profileData.success && profileData.profile) {
+          setProfile({
+            name: profileData.profile.name || '',
+            bio: profileData.profile.bio || '',
+            avatarUrl: profileData.profile.avatarUrl || null,
+            bannerUrl: profileData.profile.bannerUrl || null,
+            pageTheme: profileData.profile.pageTheme || 'gradient',
+            accentColor: profileData.profile.accentColor || '#3B82F6',
+            gradientStart: profileData.profile.gradientStart || '#0066FF',
+            gradientEnd: profileData.profile.gradientEnd || '#00D4FF',
+            gradientAngle: profileData.profile.gradientAngle || 135,
+          });
+        }
+
+        // Load releases from API
+        const releasesRes = await fetch(`/api/releases?artist=${address}`);
+        const releasesData = await releasesRes.json();
+        
+        if (releasesData.success && releasesData.releases) {
+          setReleases(releasesData.releases);
+        }
+      } catch (error) {
+        console.error('Failed to load artist data:', error);
       }
-      setReleases(getReleasesByArtist(address));
+      
       setLoading(false);
     }
+
+    loadData();
   }, [address]);
 
   const copyLink = () => {
@@ -65,9 +106,6 @@ export default function ArtistPage() {
   };
 
   const getPageBackground = () => {
-    if (profile.pageTheme === 'image' && profile.backgroundImageUrl) {
-      return 'transparent';
-    }
     if (profile.pageTheme === 'gradient') {
       return `linear-gradient(${profile.gradientAngle}deg, ${profile.gradientStart}, ${profile.gradientEnd})`;
     }
@@ -89,32 +127,20 @@ export default function ArtistPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        <Loader2 size={32} className="text-blue-500 animate-spin" />
       </div>
     );
   }
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-black text-white' : 'bg-white text-black'}`}>
-      {profile.pageTheme === 'image' && profile.backgroundImageUrl ? (
-        <div 
-          className="fixed inset-0 bg-cover bg-center"
-          style={{ 
-            backgroundImage: `url(${profile.backgroundImageUrl})`,
-            filter: `blur(${profile.backgroundBlur}px)`,
-            opacity: profile.backgroundOpacity / 100,
-            transform: 'scale(1.1)',
-          }}
-        />
-      ) : (
-        <div 
-          className="fixed inset-0"
-          style={{ 
-            background: getPageBackground(),
-            opacity: 0.15,
-          }}
-        />
-      )}
+      <div 
+        className="fixed inset-0"
+        style={{ 
+          background: getPageBackground(),
+          opacity: 0.15,
+        }}
+      />
       
       <div className="fixed top-0 left-0 right-0 z-50 p-4">
         <div className={`max-w-6xl mx-auto flex items-center justify-between ${theme === 'dark' ? 'bg-black/50' : 'bg-white/50'} backdrop-blur-xl rounded-2xl px-4 py-3 border ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
@@ -261,7 +287,9 @@ export default function ArtistPage() {
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{track.title}</h4>
+                        <h4 className={`font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                          {release.type === 'single' ? release.title : track.title}
+                        </h4>
                         <p className="text-zinc-500 text-sm truncate">{release.title}</p>
                       </div>
                       <div className="text-right">
