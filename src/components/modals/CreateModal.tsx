@@ -54,6 +54,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
+  const [isCoverDragging, setIsCoverDragging] = useState(false);
   
   // Profile check
   const [artistName, setArtistName] = useState<string | null>(null);
@@ -157,6 +158,47 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       const reader = new FileReader();
       reader.onload = (e) => setCoverPreview(e.target?.result as string);
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle cover art from file or drag
+  const processCoverFile = (file: File) => {
+    if (file.type.startsWith('image/')) {
+      setCoverArt(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setCoverPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Cover drag handlers
+  const handleCoverDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsCoverDragging(true);
+  };
+
+  const handleCoverDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsCoverDragging(false);
+  };
+
+  const handleCoverDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleCoverDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsCoverDragging(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(f => f.type.startsWith('image/'));
+    if (imageFile) {
+      processCoverFile(imageFile);
     }
   };
 
@@ -671,25 +713,36 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   />
                   <div
                     onClick={() => coverInputRef.current?.click()}
-                    className={`aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-colors flex flex-col items-center justify-center overflow-hidden relative group ${
-                      theme === 'dark' 
-                        ? 'border-zinc-700 hover:border-blue-500/50' 
-                        : 'border-zinc-300 hover:border-blue-500/50'
+                    onDragEnter={handleCoverDragEnter}
+                    onDragLeave={handleCoverDragLeave}
+                    onDragOver={handleCoverDragOver}
+                    onDrop={handleCoverDrop}
+                    className={`aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center overflow-hidden relative group ${
+                      isCoverDragging
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : theme === 'dark' 
+                          ? 'border-zinc-700 hover:border-blue-500/50' 
+                          : 'border-zinc-300 hover:border-blue-500/50'
                     }`}
                   >
-                    {coverPreview ? (
+                    {isCoverDragging ? (
+                      <>
+                        <ImageIcon size={24} className="text-blue-500 mb-2" />
+                        <p className="text-blue-500 text-xs font-medium">Drop image</p>
+                      </>
+                    ) : coverPreview ? (
                       <>
                         <img src={coverPreview} alt="Cover" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-center justify-center">
-                          <p className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                            Click to change
+                        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center">
+                          <p className="text-white text-xs font-medium">
+                            Click or drag to change
                           </p>
                         </div>
                       </>
                     ) : (
                       <>
                         <ImageIcon size={24} className="text-zinc-500 mb-2" />
-                        <p className="text-zinc-500 text-xs">Click to upload</p>
+                        <p className="text-zinc-500 text-xs text-center px-2">Drag image or click to upload</p>
                       </>
                     )}
                   </div>
@@ -788,20 +841,6 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                         </>
                       )}
                     </div>
-                    
-                    {releaseType === 'album' && (
-                      <button
-                        onClick={() => folderInputRef.current?.click()}
-                        className={`w-full p-3 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 transition-colors ${
-                          theme === 'dark' 
-                            ? 'border-zinc-700 hover:border-blue-500/50 text-zinc-400 hover:text-blue-400' 
-                            : 'border-zinc-300 hover:border-blue-500/50 text-zinc-500 hover:text-blue-500'
-                        }`}
-                      >
-                        <FolderOpen size={18} />
-                        Or select a folder
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -874,14 +913,58 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
             <>
               <div>
                 <label className="block text-sm text-zinc-500 mb-2">Edition Size (Total Copies)</label>
-                <p className={`text-xs mb-3 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                  How many copies of {releaseType === 'album' ? 'each track' : 'this track'} will exist?
-                </p>
+                
+                {/* Scarcity Education Box */}
+                <div className={`p-4 rounded-xl mb-4 ${theme === 'dark' ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-blue-50 border border-blue-200'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="text-2xl">💎</div>
+                    <div>
+                      <h4 className={`font-semibold text-sm ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
+                        Scarcity = Value
+                      </h4>
+                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        Set how many copies will <strong>ever</strong> exist. Once minted, this can't be changed.
+                        Make it rare (1-10 copies) for super fans, or widely available (100-1000) to grow your audience.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(1)}
+                          className={`px-2 py-1 text-xs rounded-lg transition-colors ${quantity === 1 ? 'bg-blue-500 text-white' : theme === 'dark' ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'}`}
+                        >
+                          1 (Ultra Rare)
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(10)}
+                          className={`px-2 py-1 text-xs rounded-lg transition-colors ${quantity === 10 ? 'bg-blue-500 text-white' : theme === 'dark' ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'}`}
+                        >
+                          10 (Rare)
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(100)}
+                          className={`px-2 py-1 text-xs rounded-lg transition-colors ${quantity === 100 ? 'bg-blue-500 text-white' : theme === 'dark' ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'}`}
+                        >
+                          100 (Limited)
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(1000)}
+                          className={`px-2 py-1 text-xs rounded-lg transition-colors ${quantity === 1000 ? 'bg-blue-500 text-white' : theme === 'dark' ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'}`}
+                        >
+                          1000 (Open)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-4">
                   <input 
                     type="range" 
                     min="1" 
-                    max="1000" 
+                    max="10000" 
                     value={quantity} 
                     onChange={(e) => setQuantity(Number(e.target.value))} 
                     className="flex-1"
@@ -890,11 +973,19 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                     type="number"
                     value={quantity}
                     onChange={(e) => setQuantity(Number(e.target.value))}
+                    min="1"
                     className={`w-24 px-3 py-2 text-center rounded-lg border transition-colors focus:outline-none focus:border-blue-500 ${
                       theme === 'dark' ? 'bg-zinc-800/50 border-zinc-700 text-white' : 'bg-zinc-50 border-zinc-200 text-black'
                     }`}
                   />
                 </div>
+                <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  {quantity === 1 ? '👑 Only 1 person can ever own this!' : 
+                   quantity <= 10 ? '🔥 Super rare - collectors will love this!' :
+                   quantity <= 100 ? '✨ Limited edition - creates urgency!' :
+                   quantity <= 1000 ? '📀 Nice balance of scarcity and availability' :
+                   '🌍 Wide release - maximize your reach!'}
+                </p>
               </div>
 
               <div>
