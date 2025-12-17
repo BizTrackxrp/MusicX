@@ -1,23 +1,76 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, Shuffle, ChevronUp, ChevronDown, Heart, Plus, ListMusic } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
+import { useXaman } from '@/lib/xaman-context';
 import { Track } from '@/types';
+import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal';
 
 interface PlayerProps {
-  currentTrack: (Track & { artist?: string; cover?: string }) | null;
+  currentTrack: (Track & { artist?: string; cover?: string; releaseId?: string; trackId?: string }) | null;
   isPlaying: boolean;
   setIsPlaying: (playing: boolean) => void;
+  queue?: (Track & { artist?: string; cover?: string; releaseId?: string; trackId?: string })[];
+  onNext?: () => void;
+  onPrevious?: () => void;
+  onShuffle?: () => void;
+  isShuffled?: boolean;
 }
 
-export default function Player({ currentTrack, isPlaying, setIsPlaying }: PlayerProps) {
+export default function Player({ 
+  currentTrack, 
+  isPlaying, 
+  setIsPlaying,
+  queue = [],
+  onNext,
+  onPrevious,
+  onShuffle,
+  isShuffled = false
+}: PlayerProps) {
   const { theme } = useTheme();
+  const { user } = useXaman();
   const [volume, setVolume] = useState(80);
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isRepeat, setIsRepeat] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likedTracks, setLikedTracks] = useState<Set<string>>(new Set());
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Load user's liked tracks
+  useEffect(() => {
+    async function loadLikedTracks() {
+      if (!user?.address) {
+        setLikedTracks(new Set());
+        return;
+      }
+      
+      try {
+        const res = await fetch(`/api/likes?user=${user.address}&ids=true`);
+        const data = await res.json();
+        if (data.success && data.trackIds) {
+          setLikedTracks(new Set(data.trackIds));
+        }
+      } catch (error) {
+        console.error('Failed to load liked tracks:', error);
+      }
+    }
+    
+    loadLikedTracks();
+  }, [user?.address]);
+
+  // Check if current track is liked
+  useEffect(() => {
+    if (currentTrack?.trackId || currentTrack?.id) {
+      const trackId = currentTrack.trackId || currentTrack.id?.toString();
+      setIsLiked(likedTracks.has(trackId));
+    } else {
+      setIsLiked(false);
+    }
+  }, [currentTrack, likedTracks]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -50,6 +103,55 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
     }
   };
 
+  const handleEnded = () => {
+    if (isRepeat && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+    } else if (onNext) {
+      onNext();
+    } else {
+      setIsPlaying(false);
+    }
+  };
+
+  const handleLike = async () => {
+    if (!user?.address || !currentTrack) return;
+    
+    const trackId = currentTrack.trackId || currentTrack.id?.toString();
+    const releaseId = currentTrack.releaseId;
+    
+    if (!trackId) return;
+    
+    try {
+      const action = isLiked ? 'unlike' : 'like';
+      const res = await fetch('/api/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          userAddress: user.address,
+          trackId,
+          releaseId,
+        }),
+      });
+      
+      if (res.ok) {
+        setIsLiked(!isLiked);
+        setLikedTracks(prev => {
+          const newSet = new Set(prev);
+          if (isLiked) {
+            newSet.delete(trackId);
+          } else {
+            newSet.add(trackId);
+          }
+          return newSet;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to toggle like:', error);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -72,7 +174,14 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
         ref={audioRef}
         src={audioSrc}
         onTimeUpdate={handleTimeUpdate}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={handleEnded}
+      />
+      
+      {/* Add to Playlist Modal */}
+      <AddToPlaylistModal
+        isOpen={showAddToPlaylist}
+        onClose={() => setShowAddToPlaylist(false)}
+        track={currentTrack}
       />
       
       {/* Mobile Expanded Player */}
@@ -102,12 +211,40 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
             </div>
           </div>
 
-          {/* Track Info */}
-          <div className="px-8 text-center">
-            <h2 className={`text-2xl font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-              {currentTrack?.title || 'Unknown Track'}
-            </h2>
-            <p className="text-zinc-500 text-lg">{currentTrack?.artist || 'Unknown Artist'}</p>
+          {/* Track Info with Like/Add buttons */}
+          <div className="px-8">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0 text-center">
+                <h2 className={`text-2xl font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                  {currentTrack?.title || 'Unknown Track'}
+                </h2>
+                <p className="text-zinc-500 text-lg">{currentTrack?.artist || 'Unknown Artist'}</p>
+              </div>
+            </div>
+            
+            {/* Like and Add to Playlist buttons */}
+            {user?.address && (
+              <div className="flex items-center justify-center gap-6 mt-4">
+                <button 
+                  onClick={handleLike}
+                  className={`p-3 rounded-full transition-colors ${
+                    isLiked 
+                      ? 'text-red-500' 
+                      : theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black'
+                  }`}
+                >
+                  <Heart size={28} fill={isLiked ? 'currentColor' : 'none'} />
+                </button>
+                <button 
+                  onClick={() => setShowAddToPlaylist(true)}
+                  className={`p-3 rounded-full transition-colors ${
+                    theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black'
+                  }`}
+                >
+                  <Plus size={28} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Progress */}
@@ -131,10 +268,16 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
 
           {/* Controls */}
           <div className="flex items-center justify-center gap-8 py-8">
-            <button className={`p-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+            <button 
+              onClick={onShuffle}
+              className={`p-2 ${isShuffled ? 'text-blue-500' : theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}
+            >
               <Shuffle size={24} />
             </button>
-            <button className={`p-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            <button 
+              onClick={onPrevious}
+              className={`p-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+            >
               <SkipBack size={28} />
             </button>
             <button
@@ -143,10 +286,16 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
             >
               {isPlaying ? <Pause size={32} /> : <Play size={32} className="ml-1" />}
             </button>
-            <button className={`p-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+            <button 
+              onClick={onNext}
+              className={`p-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+            >
               <SkipForward size={28} />
             </button>
-            <button className={`p-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+            <button 
+              onClick={() => setIsRepeat(!isRepeat)}
+              className={`p-2 ${isRepeat ? 'text-blue-500' : theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}
+            >
               <Repeat size={24} />
             </button>
           </div>
@@ -209,9 +358,49 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
             <ChevronUp size={20} className={`lg:hidden ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`} />
           </button>
 
+          {/* Desktop: Like and Add to Playlist */}
+          {user?.address && (
+            <div className="hidden lg:flex items-center gap-1">
+              <button 
+                onClick={handleLike}
+                className={`p-2 rounded-full transition-colors ${
+                  isLiked 
+                    ? 'text-red-500' 
+                    : theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black'
+                }`}
+                title={isLiked ? 'Remove from Liked Songs' : 'Add to Liked Songs'}
+              >
+                <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+              </button>
+              <button 
+                onClick={() => setShowAddToPlaylist(true)}
+                className={`p-2 rounded-full transition-colors ${
+                  theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-black'
+                }`}
+                title="Add to Playlist"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          )}
+
           {/* Desktop Controls */}
-          <div className="hidden lg:flex items-center gap-4">
-            <button className={`p-2 ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
+          <div className="hidden lg:flex items-center gap-2">
+            <button 
+              onClick={onShuffle}
+              className={`p-2 rounded-full transition-colors ${
+                isShuffled 
+                  ? 'text-blue-500' 
+                  : theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'
+              }`}
+              title="Shuffle"
+            >
+              <Shuffle size={18} />
+            </button>
+            <button 
+              onClick={onPrevious}
+              className={`p-2 ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}
+            >
               <SkipBack size={20} />
             </button>
             <button
@@ -220,8 +409,22 @@ export default function Player({ currentTrack, isPlaying, setIsPlaying }: Player
             >
               {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
             </button>
-            <button className={`p-2 ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}>
+            <button 
+              onClick={onNext}
+              className={`p-2 ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'}`}
+            >
               <SkipForward size={20} />
+            </button>
+            <button 
+              onClick={() => setIsRepeat(!isRepeat)}
+              className={`p-2 rounded-full transition-colors ${
+                isRepeat 
+                  ? 'text-blue-500' 
+                  : theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-black'
+              }`}
+              title="Repeat"
+            >
+              <Repeat size={18} />
             </button>
           </div>
 
