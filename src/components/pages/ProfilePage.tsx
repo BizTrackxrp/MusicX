@@ -872,3 +872,4 @@ export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: P
     </div>
   );
 }
+
