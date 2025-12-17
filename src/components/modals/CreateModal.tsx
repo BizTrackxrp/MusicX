@@ -270,7 +270,10 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
     setIsDragging(false);
     
     // Check if browser supports directory reading
-    if (e.dataTransfer.items && e.dataTransfer.items[0]?.webkitGetAsEntry) {
+    const firstItem = e.dataTransfer.items?.[0];
+    const supportsWebkitGetAsEntry = firstItem && typeof firstItem.webkitGetAsEntry === 'function';
+    
+    if (supportsWebkitGetAsEntry) {
       const files = await getAllFilesFromDataTransfer(e.dataTransfer);
       processFiles(files);
     } else {
