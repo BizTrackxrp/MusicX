@@ -25,6 +25,7 @@ export default function Home() {
   const [showAuth, setShowAuth] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showMessenger, setShowMessenger] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
 
   const handlePlayTrack = (track: Track & { artist?: string; cover?: string }) => {
@@ -51,6 +52,8 @@ export default function Home() {
         onAuthClick={() => setShowAuth(true)}
         onCreateClick={() => setShowCreate(true)}
         onLogout={() => setUser(null)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <main className="ml-64 min-h-screen pb-32">
