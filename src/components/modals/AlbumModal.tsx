@@ -303,3 +303,4 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
     </div>
   );
 }
+
