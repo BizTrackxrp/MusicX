@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Play, Music, Wallet, Disc3, TrendingUp, Sparkles } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { Album, Track } from '@/types';
+import AlbumModal from '@/components/modals/AlbumModal';
 
 interface Release {
   id: string;
@@ -30,11 +31,13 @@ interface Release {
 interface StreamPageProps {
   onPlayTrack: (track: Track & { artist?: string; cover?: string }) => void;
   onSelectAlbum: (album: Album) => void;
+  currentlyPlayingId?: number | null;
 }
 
-export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPageProps) {
+export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayingId }: StreamPageProps) {
   const { theme } = useTheme();
   const [releases, setReleases] = useState<Release[]>([]);
+  const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
 
   useEffect(() => {
     async function loadReleases() {
@@ -137,6 +140,15 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
 
   return (
     <div className="space-y-8">
+      {/* Album Modal */}
+      <AlbumModal
+        isOpen={selectedRelease !== null}
+        onClose={() => setSelectedRelease(null)}
+        release={selectedRelease}
+        onPlayTrack={onPlayTrack}
+        currentlyPlaying={currentlyPlayingId}
+      />
+
       {/* Latest Releases */}
       <section>
         <div className="flex items-center justify-between mb-4">
@@ -154,7 +166,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
                   ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' 
                   : 'bg-white border-zinc-200 hover:border-zinc-300'
               }`}
-              onClick={() => handlePlayRelease(release)}
+              onClick={() => setSelectedRelease(release)}
             >
               <div className="relative aspect-square">
                 <img 
@@ -163,7 +175,13 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum }: StreamPagePro
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                  <button className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all">
+                  <button 
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlayRelease(release);
+                    }}
+                  >
                     <Play size={20} fill="white" className="text-white ml-0.5" />
                   </button>
                 </div>
