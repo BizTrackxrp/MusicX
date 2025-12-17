@@ -145,8 +145,8 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         isOpen={selectedRelease !== null}
         onClose={() => setSelectedRelease(null)}
         release={selectedRelease}
-        onPlayTrack={onPlayTrack}
-        currentlyPlaying={currentlyPlayingId}
+        onPlay={onPlayTrack}
+        currentlyPlayingId={currentlyPlayingId}
       />
 
       {/* Latest Releases */}
