@@ -295,3 +295,4 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
     </div>
   );
 }
+
