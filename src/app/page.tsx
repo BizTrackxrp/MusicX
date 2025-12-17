@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import Player from '@/components/layout/Player';
@@ -11,13 +11,14 @@ import StreamPage from '@/components/pages/StreamPage';
 import MarketplacePage from '@/components/pages/MarketplacePage';
 import ProfilePage from '@/components/pages/ProfilePage';
 import { useTheme } from '@/lib/theme-context';
+import { useXaman } from '@/lib/xaman-context';
 import { Track, Album } from '@/types';
 import { getAllTracks } from '@/lib/mock-data';
 
 export default function Home() {
   const { theme } = useTheme();
+  const { user: xamanUser } = useXaman();
   const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
-  const [user, setUser] = useState<{ email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } } | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(getAllTracks()[0]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -26,6 +27,22 @@ export default function Home() {
   const [showMessenger, setShowMessenger] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+
+  // Create a user object that matches expected format from Xaman context
+  const user = xamanUser ? { wallet: { type: 'xumm' as const, address: xamanUser.address } } : null;
+
+  // Listen for navigation events (e.g., from CreateModal redirecting to profile)
+  useEffect(() => {
+    const handleNavigate = (event: CustomEvent<string>) => {
+      const page = event.detail;
+      if (page === 'stream' || page === 'marketplace' || page === 'profile') {
+        setCurrentPage(page);
+      }
+    };
+
+    window.addEventListener('navigate', handleNavigate as EventListener);
+    return () => window.removeEventListener('navigate', handleNavigate as EventListener);
+  }, []);
 
   const handlePlayTrack = (track: Track & { artist?: string; cover?: string }) => {
     setCurrentTrack(track);
@@ -50,7 +67,7 @@ export default function Home() {
         user={user}
         onAuthClick={() => setShowAuth(true)}
         onCreateClick={() => setShowCreate(true)}
-        onLogout={() => setUser(null)}
+        onLogout={() => {}} // Logout handled by Xaman context
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -90,7 +107,7 @@ export default function Home() {
       </main>
 
       <Player currentTrack={currentTrack} isPlaying={isPlaying} setIsPlaying={setIsPlaying} />
-      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} onLogin={setUser} />
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} onLogin={() => {}} />
       <CreateModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
       <Messenger isOpen={showMessenger} onClose={() => setShowMessenger(false)} />
     </div>
