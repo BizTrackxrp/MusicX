@@ -18,7 +18,6 @@ export default function Home() {
   const { theme } = useTheme();
   const [currentPage, setCurrentPage] = useState<'stream' | 'marketplace' | 'profile'>('stream');
   const [user, setUser] = useState<{ email?: string; wallet?: { type: 'xumm' | 'bifrost'; address: string } } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [currentTrack, setCurrentTrack] = useState<(Track & { artist?: string; cover?: string }) | null>(getAllTracks()[0]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -58,9 +57,10 @@ export default function Home() {
 
       <main className="ml-64 min-h-screen pb-32">
         <Header
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          onMessengerClick={() => setShowMessenger(true)}
+          onMessagesClick={() => setShowMessenger(true)}
+          onMenuClick={() => setSidebarOpen(true)}
+          onAuthClick={() => setShowAuth(true)}
+          isLoggedIn={!!user}
         />
         <div className="p-8">
           {currentPage === 'stream' && (
