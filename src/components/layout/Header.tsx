@@ -336,3 +336,4 @@ export default function Header({ onMessagesClick, onMenuClick, onAuthClick, isLo
     </>
   );
 }
+
