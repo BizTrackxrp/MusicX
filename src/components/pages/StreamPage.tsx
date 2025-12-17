@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Play, Music, Wallet, Disc3, TrendingUp, Sparkles } from 'lucide-react';
+import { Play, Music, Wallet, Disc3, TrendingUp, Sparkles, ShoppingCart } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { Album, Track } from '@/types';
 import AlbumModal from '@/components/modals/AlbumModal';
@@ -82,6 +82,13 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
     }
   };
 
+  const handleBuyTrack = (e: React.MouseEvent, release: Release, trackIndex: number) => {
+    e.stopPropagation();
+    // TODO: Implement buy flow
+    console.log('Buy track:', release.tracks[trackIndex]?.title || release.title);
+    alert('Buy flow coming soon! 🚀');
+  };
+
   // Empty state - show when no releases
   if (releases.length === 0) {
     return (
@@ -158,53 +165,83 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         </div>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
-          {releases.slice(0, 10).map((release) => (
-            <div
-              key={release.id}
-              className={`group rounded-xl sm:rounded-2xl overflow-hidden border transition-all hover:scale-[1.02] cursor-pointer ${
-                theme === 'dark' 
-                  ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' 
-                  : 'bg-white border-zinc-200 hover:border-zinc-300'
-              }`}
-              onClick={() => setSelectedRelease(release)}
-            >
-              <div className="relative aspect-square">
-                <img 
-                  src={release.coverUrl} 
-                  alt={release.title} 
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                  <button 
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePlayRelease(release);
-                    }}
-                  >
-                    <Play size={20} fill="white" className="text-white ml-0.5" />
-                  </button>
+          {releases.slice(0, 10).map((release) => {
+            const available = release.totalEditions - release.soldEditions;
+            const isSoldOut = available <= 0;
+            
+            return (
+              <div
+                key={release.id}
+                className={`group rounded-xl sm:rounded-2xl overflow-hidden border transition-all hover:scale-[1.02] cursor-pointer ${
+                  theme === 'dark' 
+                    ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' 
+                    : 'bg-white border-zinc-200 hover:border-zinc-300'
+                }`}
+                onClick={() => setSelectedRelease(release)}
+              >
+                <div className="relative aspect-square">
+                  <img 
+                    src={release.coverUrl} 
+                    alt={release.title} 
+                    className={`w-full h-full object-cover ${isSoldOut ? 'opacity-50' : ''}`}
+                  />
+                  
+                  {/* Hover play button */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                    <button 
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayRelease(release);
+                      }}
+                    >
+                      <Play size={20} fill="white" className="text-white ml-0.5" />
+                    </button>
+                  </div>
+                  
+                  {/* Type badge */}
+                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-500/90 text-white text-xs font-bold rounded-full uppercase">
+                    {release.type}
+                  </div>
+                  
+                  {/* Sold out badge */}
+                  {isSoldOut && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="px-4 py-2 bg-black/80 text-white font-bold text-sm rounded-lg uppercase tracking-wide">
+                        Sold Out
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-500/90 text-white text-xs font-bold rounded-full uppercase">
-                  {release.type}
+                
+                {/* Card info - always visible */}
+                <div className="p-3 sm:p-4">
+                  <h3 className={`font-semibold truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                    {release.title}
+                  </h3>
+                  <p className={`text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
+                  </p>
+                  
+                  {/* Price and availability - always visible */}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/50">
+                    <span className="text-blue-500 font-bold text-sm">
+                      {release.albumPrice || release.songPrice} XRP
+                    </span>
+                    <span className={`text-xs font-medium ${
+                      isSoldOut 
+                        ? 'text-red-500' 
+                        : available < 10 
+                          ? 'text-amber-500' 
+                          : theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                    }`}>
+                      {isSoldOut ? 'Sold Out' : `${available} left`}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="p-3 sm:p-4">
-                <h3 className={`font-semibold truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                  {release.title}
-                </h3>
-                <p className="text-zinc-500 text-xs sm:text-sm truncate">
-                  {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
-                </p>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-blue-500 font-bold text-sm">{release.songPrice} XRP</span>
-                  <span className="text-zinc-500 text-xs">
-                    {release.totalEditions - release.soldEditions} left
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -217,51 +254,99 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
           <div className={`rounded-xl sm:rounded-2xl border overflow-hidden ${
             theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200'
           }`}>
-            {releases.flatMap((release) =>
-              release.tracks.map((track, index) => (
-                <div
-                  key={`${release.id}-${track.id}`}
-                  onClick={() => onPlayTrack({
-                    id: parseInt(track.id) || 0,
-                    title: release.type === 'single' ? release.title : track.title,
-                    duration: track.duration?.toString() || '0:00',
-                    price: release.songPrice,
-                    available: release.totalEditions - release.soldEditions,
-                    plays: 0,
-                    mediaType: 'audio',
-                    ipfsHash: track.audioCid,
-                    artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
-                    cover: release.coverUrl,
-                  })}
-                  className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 cursor-pointer transition-colors group ${
-                    theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
-                  } ${index !== releases.flatMap(r => r.tracks).length - 1 ? (
-                    theme === 'dark' ? 'border-b border-zinc-800/50' : 'border-b border-zinc-100'
-                  ) : ''}`}
-                >
-                  <div className="relative flex-shrink-0">
-                    <img 
-                      src={release.coverUrl} 
-                      alt={track.title} 
-                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center">
-                      <Play size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="white" />
+            {releases.flatMap((release, releaseIndex) =>
+              release.tracks.map((track, trackIndex) => {
+                const available = release.totalEditions - release.soldEditions;
+                const isSoldOut = available <= 0;
+                const globalIndex = releases.slice(0, releaseIndex).reduce((acc, r) => acc + r.tracks.length, 0) + trackIndex;
+                const totalTracks = releases.reduce((acc, r) => acc + r.tracks.length, 0);
+                
+                return (
+                  <div
+                    key={`${release.id}-${track.id}`}
+                    onClick={() => !isSoldOut && onPlayTrack({
+                      id: parseInt(track.id) || 0,
+                      title: release.type === 'single' ? release.title : track.title,
+                      duration: track.duration?.toString() || '0:00',
+                      price: release.songPrice,
+                      available: available,
+                      plays: 0,
+                      mediaType: 'audio',
+                      ipfsHash: track.audioCid,
+                      artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
+                      cover: release.coverUrl,
+                    })}
+                    className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-colors group ${
+                      isSoldOut 
+                        ? 'opacity-60 cursor-not-allowed' 
+                        : 'cursor-pointer'
+                    } ${
+                      theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
+                    } ${globalIndex !== totalTracks - 1 ? (
+                      theme === 'dark' ? 'border-b border-zinc-800/50' : 'border-b border-zinc-100'
+                    ) : ''}`}
+                  >
+                    {/* Album art with play overlay */}
+                    <div className="relative flex-shrink-0">
+                      <img 
+                        src={release.coverUrl} 
+                        alt={track.title} 
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover"
+                      />
+                      {!isSoldOut && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center">
+                          <Play size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="white" />
+                        </div>
+                      )}
                     </div>
+                    
+                    {/* Track info */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className={`font-medium truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                        {release.type === 'single' ? release.title : track.title}
+                      </h4>
+                      <p className={`text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
+                      </p>
+                    </div>
+                    
+                    {/* Availability */}
+                    <div className={`hidden sm:block text-xs font-medium px-2 py-1 rounded-full ${
+                      isSoldOut 
+                        ? 'bg-red-500/20 text-red-400' 
+                        : available < 10 
+                          ? 'bg-amber-500/20 text-amber-400' 
+                          : theme === 'dark' 
+                            ? 'bg-zinc-800 text-zinc-400' 
+                            : 'bg-zinc-100 text-zinc-600'
+                    }`}>
+                      {isSoldOut ? 'Sold Out' : `${available} left`}
+                    </div>
+                    
+                    {/* Buy button */}
+                    <button 
+                      onClick={(e) => !isSoldOut && handleBuyTrack(e, release, trackIndex)}
+                      disabled={isSoldOut}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors flex-shrink-0 ${
+                        isSoldOut
+                          ? theme === 'dark' 
+                            ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' 
+                            : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-400 text-white'
+                      }`}
+                    >
+                      {isSoldOut ? (
+                        'Sold Out'
+                      ) : (
+                        <>
+                          <ShoppingCart size={14} />
+                          {release.songPrice} XRP
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className={`font-medium truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                      {release.type === 'single' ? release.title : track.title}
-                    </h4>
-                    <p className="text-zinc-500 text-xs sm:text-sm truncate">
-                      {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-blue-500 font-bold text-sm">{release.songPrice} XRP</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
@@ -269,4 +354,3 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
     </div>
   );
 }
-
