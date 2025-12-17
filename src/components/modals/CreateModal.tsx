@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video, User } from 'lucide-react';
+import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video, User, FolderOpen } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/lib/ipfs';
@@ -57,6 +57,7 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   const [profileChecked, setProfileChecked] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   // Check for profile from API on mount and when user changes
@@ -163,7 +164,15 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
       file,
       title: file.name.replace(/\.[^/.]+$/, ''),
     }));
-    setTracks([...tracks, ...newTracks]);
+    const updatedTracks = [...tracks, ...newTracks];
+    setTracks(updatedTracks);
+    
+    // Auto-suggest album price with ~10% discount for albums
+    if (releaseType === 'album' && updatedTracks.length > 0) {
+      const fullPrice = updatedTracks.length * songPrice;
+      const suggestedPrice = Math.floor(fullPrice * 0.9); // 10% discount
+      setAlbumPrice(suggestedPrice > 0 ? suggestedPrice : fullPrice);
+    }
   };
 
   const updateTrackTitle = (id: string, newTitle: string) => {
@@ -399,30 +408,36 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
           </div>
         </div>
 
+        {/* Fixed minting overlay - always visible */}
+        {isMinting && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center">
+            <div className={`p-8 rounded-2xl text-center max-w-sm mx-4 ${theme === 'dark' ? 'bg-zinc-900' : 'bg-white'} shadow-2xl`}>
+              {mintingStatus === 'complete' ? (
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Check size={40} className="text-green-500" />
+                </div>
+              ) : (
+                <Loader2 size={56} className="mx-auto mb-4 text-blue-500 animate-spin" />
+              )}
+              <p className={`font-semibold text-lg ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                {mintingMessage}
+              </p>
+              {mintingStatus === 'minting' && (
+                <p className="text-sm text-zinc-500 mt-3">
+                  Check your Xaman app to sign the transaction
+                </p>
+              )}
+              {mintingStatus === 'uploading-audio' && (
+                <p className="text-sm text-zinc-500 mt-3">
+                  This may take a moment for larger files
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="relative p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           
-          {isMinting && (
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-10 flex items-center justify-center">
-              <div className={`p-6 rounded-2xl text-center max-w-sm ${theme === 'dark' ? 'bg-zinc-900' : 'bg-white'}`}>
-                {mintingStatus === 'complete' ? (
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Check size={32} className="text-green-500" />
-                  </div>
-                ) : (
-                  <Loader2 size={48} className="mx-auto mb-4 text-blue-500 animate-spin" />
-                )}
-                <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                  {mintingMessage}
-                </p>
-                {mintingStatus === 'minting' && (
-                  <p className="text-sm text-zinc-500 mt-2">
-                    A new tab will open for Xaman
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
           {mintingStatus === 'error' && (
             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
               <AlertCircle size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
@@ -548,18 +563,25 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   />
                   <div
                     onClick={() => coverInputRef.current?.click()}
-                    className={`aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-colors flex flex-col items-center justify-center overflow-hidden ${
+                    className={`aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-colors flex flex-col items-center justify-center overflow-hidden relative group ${
                       theme === 'dark' 
                         ? 'border-zinc-700 hover:border-blue-500/50' 
                         : 'border-zinc-300 hover:border-blue-500/50'
                     }`}
                   >
                     {coverPreview ? (
-                      <img src={coverPreview} alt="Cover" className="w-full h-full object-cover" />
+                      <>
+                        <img src={coverPreview} alt="Cover" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-center justify-center">
+                          <p className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                            Click to change
+                          </p>
+                        </div>
+                      </>
                     ) : (
                       <>
                         <ImageIcon size={24} className="text-zinc-500 mb-2" />
-                        <p className="text-zinc-500 text-xs">Upload</p>
+                        <p className="text-zinc-500 text-xs">Click to upload</p>
                       </>
                     )}
                   </div>
@@ -609,23 +631,50 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                   onChange={handleTracksUpload}
                   className="hidden"
                 />
+                
+                {/* Hidden folder input for albums */}
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  accept={mediaType === 'audio' ? 'audio/*' : 'video/*'}
+                  onChange={handleTracksUpload}
+                  className="hidden"
+                  {...{ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>}
+                />
 
                 {tracks.length === 0 ? (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer group transition-colors ${
-                      theme === 'dark' 
-                        ? 'border-zinc-700 hover:border-blue-500/50' 
-                        : 'border-zinc-300 hover:border-blue-500/50'
-                    }`}
-                  >
-                    <Upload size={32} className="mx-auto text-zinc-500 group-hover:text-blue-500 mb-2" />
-                    <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                      Drop your {releaseType === 'album' ? 'tracks' : 'track'} here
-                    </p>
-                    <p className="text-zinc-500 text-sm">
-                      {mediaType === 'audio' ? 'MP3 or WAV' : 'MP4, MOV, or WebM'}
-                    </p>
+                  <div className="space-y-3">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer group transition-colors ${
+                        theme === 'dark' 
+                          ? 'border-zinc-700 hover:border-blue-500/50' 
+                          : 'border-zinc-300 hover:border-blue-500/50'
+                      }`}
+                    >
+                      <Upload size={32} className="mx-auto text-zinc-500 group-hover:text-blue-500 mb-2" />
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                        {releaseType === 'album' ? 'Select tracks' : 'Drop your track here'}
+                      </p>
+                      <p className="text-zinc-500 text-sm">
+                        {mediaType === 'audio' ? 'MP3 or WAV' : 'MP4, MOV, or WebM'}
+                        {releaseType === 'album' && ' • Select multiple files'}
+                      </p>
+                    </div>
+                    
+                    {releaseType === 'album' && (
+                      <button
+                        onClick={() => folderInputRef.current?.click()}
+                        className={`w-full p-3 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 transition-colors ${
+                          theme === 'dark' 
+                            ? 'border-zinc-700 hover:border-blue-500/50 text-zinc-400 hover:text-blue-400' 
+                            : 'border-zinc-300 hover:border-blue-500/50 text-zinc-500 hover:text-blue-500'
+                        }`}
+                      >
+                        <FolderOpen size={18} />
+                        Or select a folder
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -636,30 +685,33 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                           theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100'
                         }`}
                       >
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${
                           theme === 'dark' ? 'bg-zinc-700 text-zinc-400' : 'bg-zinc-200 text-zinc-600'
                         }`}>
                           {index + 1}
                         </span>
                         {mediaType === 'audio' ? (
-                          <Music size={16} className="text-blue-500" />
+                          <Music size={16} className="text-blue-500 flex-shrink-0" />
                         ) : (
-                          <Video size={16} className="text-blue-500" />
+                          <Video size={16} className="text-blue-500 flex-shrink-0" />
                         )}
                         <input
                           type="text"
                           value={track.title}
                           onChange={(e) => updateTrackTitle(track.id, e.target.value)}
-                          className={`flex-1 bg-transparent border-none focus:outline-none ${
-                            theme === 'dark' ? 'text-white' : 'text-black'
+                          placeholder="Enter track name"
+                          className={`flex-1 px-2 py-1 rounded-lg border focus:outline-none focus:border-blue-500 transition-colors min-w-0 ${
+                            theme === 'dark' 
+                              ? 'bg-zinc-900/50 border-zinc-700 text-white placeholder-zinc-500' 
+                              : 'bg-white border-zinc-200 text-black placeholder-zinc-400'
                           }`}
                         />
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-zinc-500 flex-shrink-0">
                           {(track.file.size / 1024 / 1024).toFixed(1)} MB
                         </span>
                         <button 
                           onClick={() => removeTrack(track.id)}
-                          className="p-1 text-zinc-500 hover:text-red-500 transition-colors"
+                          className="p-1 text-zinc-500 hover:text-red-500 transition-colors flex-shrink-0"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -746,9 +798,26 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500">XRP</span>
                   </div>
-                  <p className="text-xs text-blue-500 mt-2">
-                    💡 Individual: {tracks.length} × {songPrice} = {tracks.length * songPrice} XRP | Bundle saves {tracks.length * songPrice - albumPrice} XRP
-                  </p>
+                  {tracks.length > 0 && (
+                    <div className={`mt-3 p-3 rounded-lg ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
+                      <p className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        Individual tracks: {tracks.length} × {songPrice} XRP = <span className="font-semibold">{tracks.length * songPrice} XRP</span>
+                      </p>
+                      {albumPrice < tracks.length * songPrice ? (
+                        <p className="text-xs text-green-500 mt-1">
+                          ✨ Fans save {tracks.length * songPrice - albumPrice} XRP with the album bundle!
+                        </p>
+                      ) : albumPrice === tracks.length * songPrice ? (
+                        <p className="text-xs text-amber-500 mt-1">
+                          💡 Consider a discount to encourage album purchases
+                        </p>
+                      ) : (
+                        <p className="text-xs text-red-500 mt-1">
+                          ⚠️ Album costs more than buying tracks individually
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
