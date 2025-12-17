@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Play, Grid, List, Filter, ShoppingBag } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { Album, Track } from '@/types';
+import AlbumModal from '@/components/modals/AlbumModal';
 
 interface Release {
   id: string;
@@ -31,13 +32,15 @@ interface MarketplacePageProps {
   setViewMode: (mode: 'grid' | 'list') => void;
   onSelectAlbum: (album: Album) => void;
   onPlayTrack: (track: Track & { artist?: string; cover?: string }) => void;
+  currentlyPlayingId?: number | null;
 }
 
-export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, onPlayTrack }: MarketplacePageProps) {
+export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, onPlayTrack, currentlyPlayingId }: MarketplacePageProps) {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<'all' | 'singles' | 'albums'>('all');
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
 
   useEffect(() => {
     async function loadReleases() {
@@ -95,6 +98,15 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
 
   return (
     <div className="space-y-6">
+      {/* Album Modal */}
+      <AlbumModal
+        isOpen={selectedRelease !== null}
+        onClose={() => setSelectedRelease(null)}
+        release={selectedRelease}
+        onPlayTrack={onPlayTrack}
+        currentlyPlaying={currentlyPlayingId}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
@@ -177,7 +189,7 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
                     ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' 
                     : 'bg-white border-zinc-200 hover:border-zinc-300'
                 }`}
-                onClick={() => handlePlayTrack(release)}
+                onClick={() => setSelectedRelease(release)}
               >
                 <div className="relative aspect-square">
                   <img 
@@ -186,7 +198,13 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <button className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all">
+                    <button 
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayTrack(release);
+                      }}
+                    >
                       <Play size={20} fill="white" className="text-white ml-0.5" />
                     </button>
                   </div>
@@ -227,7 +245,7 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
             return (
               <div
                 key={release.id}
-                onClick={() => handlePlayTrack(release)}
+                onClick={() => setSelectedRelease(release)}
                 className={`flex items-center gap-4 p-4 cursor-pointer transition-colors group ${
                   theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
                 } ${index !== filteredReleases.length - 1 ? (
@@ -240,7 +258,13 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
                     alt={release.title} 
                     className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center">
+                  <div 
+                    className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlayTrack(release);
+                    }}
+                  >
                     <Play size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="white" />
                   </div>
                 </div>
