@@ -103,8 +103,8 @@ export default function MarketplacePage({ viewMode, setViewMode, onSelectAlbum, 
         isOpen={selectedRelease !== null}
         onClose={() => setSelectedRelease(null)}
         release={selectedRelease}
-        onPlayTrack={onPlayTrack}
-        currentlyPlaying={currentlyPlayingId}
+        onPlay={onPlayTrack}
+        currentlyPlayingId={currentlyPlayingId}
       />
 
       {/* Header */}
