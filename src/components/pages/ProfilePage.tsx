@@ -99,6 +99,22 @@ export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: P
   const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
   const [tempProfile, setTempProfile] = useState<ProfileData>(DEFAULT_PROFILE);
 
+  // Function to load releases
+  const loadReleases = async () => {
+    if (!user?.wallet?.address) return;
+    
+    try {
+      const releasesRes = await fetch(`/api/releases?artist=${user.wallet.address}`);
+      const releasesData = await releasesRes.json();
+      
+      if (releasesData.success && releasesData.releases) {
+        setReleases(releasesData.releases);
+      }
+    } catch (error) {
+      console.error('Failed to load releases:', error);
+    }
+  };
+
   // Load profile and releases from API
   useEffect(() => {
     async function loadData() {
@@ -139,13 +155,8 @@ export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: P
           }
         }
 
-        // Load releases from API
-        const releasesRes = await fetch(`/api/releases?artist=${user.wallet.address}`);
-        const releasesData = await releasesRes.json();
-        
-        if (releasesData.success && releasesData.releases) {
-          setReleases(releasesData.releases);
-        }
+        // Load releases
+        await loadReleases();
       } catch (error) {
         console.error('Failed to load profile data:', error);
         // Fallback to localStorage
@@ -162,6 +173,17 @@ export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: P
     }
 
     loadData();
+  }, [user?.wallet?.address]);
+
+  // Listen for new releases (after minting)
+  useEffect(() => {
+    const handleReleaseCreated = () => {
+      console.log('Release created event received, refreshing releases...');
+      loadReleases();
+    };
+
+    window.addEventListener('releaseCreated', handleReleaseCreated);
+    return () => window.removeEventListener('releaseCreated', handleReleaseCreated);
   }, [user?.wallet?.address]);
 
   const handleSave = async () => {
@@ -872,4 +894,3 @@ export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: P
     </div>
   );
 }
-
