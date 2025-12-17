@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Wallet, Upload, DollarSign, Music, Camera, Palette, X, Check, Image as ImageIcon, Share2, Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { Settings, Wallet, Upload, DollarSign, Music, Camera, Palette, X, Check, Image as ImageIcon, Share2, Copy, ExternalLink, Loader2, Play } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { uploadFileToIPFS } from '@/lib/ipfs';
+import AlbumModal from '@/components/modals/AlbumModal';
+import { Track } from '@/types';
 
 interface ProfilePageProps {
   user: { email?: string; wallet?: { address: string } } | null;
+  onPlayTrack?: (track: Track & { artist?: string; cover?: string }) => void;
+  currentlyPlayingId?: number | null;
 }
 
 export interface ProfileData {
@@ -25,6 +29,7 @@ interface Release {
   id: string;
   type: string;
   title: string;
+  description?: string;
   artistName: string;
   artistAddress: string;
   coverUrl: string;
@@ -32,7 +37,14 @@ interface Release {
   albumPrice?: number;
   totalEditions: number;
   soldEditions: number;
-  tracks: Array<{ id: string; title: string }>;
+  createdAt?: string;
+  tracks: Array<{
+    id: string;
+    title: string;
+    audioUrl: string;
+    audioCid: string;
+    duration?: number;
+  }>;
 }
 
 const PRESET_GRADIENTS = [
@@ -68,7 +80,7 @@ const DEFAULT_PROFILE: ProfileData = {
   gradientAngle: 135,
 };
 
-export default function ProfilePage({ user }: ProfilePageProps) {
+export default function ProfilePage({ user, onPlayTrack, currentlyPlayingId }: ProfilePageProps) {
   const { theme } = useTheme();
   const [profileTab, setProfileTab] = useState<'posted' | 'owned' | 'sold'>('posted');
   const [isEditing, setIsEditing] = useState(false);
@@ -76,6 +88,7 @@ export default function ProfilePage({ user }: ProfilePageProps) {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -290,6 +303,15 @@ export default function ProfilePage({ user }: ProfilePageProps) {
 
   return (
     <div className="space-y-6">
+      {/* Album Modal */}
+      <AlbumModal
+        isOpen={selectedRelease !== null}
+        onClose={() => setSelectedRelease(null)}
+        release={selectedRelease}
+        onPlay={onPlayTrack || (() => {})}
+        currentlyPlayingId={currentlyPlayingId}
+      />
+
       {/* Share Link Banner */}
       {profile.name && !isEditing && (
         <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl ${
@@ -755,11 +777,41 @@ export default function ProfilePage({ user }: ProfilePageProps) {
               {releases.map((release) => {
                 const available = release.totalEditions - release.soldEditions;
                 return (
-                  <div key={release.id} className={`rounded-xl sm:rounded-2xl overflow-hidden border group transition-all hover:scale-[1.02] ${
-                    theme === 'dark' ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-zinc-200'
-                  }`}>
+                  <div 
+                    key={release.id} 
+                    className={`rounded-xl sm:rounded-2xl overflow-hidden border group transition-all hover:scale-[1.02] cursor-pointer ${
+                      theme === 'dark' ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-zinc-200'
+                    }`}
+                    onClick={() => setSelectedRelease(release)}
+                  >
                     <div className="relative">
                       <img src={release.coverUrl} alt={release.title} className="w-full aspect-square object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <button 
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Play first track
+                            if (onPlayTrack && release.tracks.length > 0) {
+                              const track = release.tracks[0];
+                              onPlayTrack({
+                                id: parseInt(track.id) || 0,
+                                title: release.type === 'single' ? release.title : track.title,
+                                duration: track.duration?.toString() || '0:00',
+                                price: release.songPrice,
+                                available: available,
+                                plays: 0,
+                                mediaType: 'audio',
+                                ipfsHash: track.audioCid,
+                                artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
+                                cover: release.coverUrl,
+                              });
+                            }
+                          }}
+                        >
+                          <Play size={20} fill="white" className="text-white ml-0.5" />
+                        </button>
+                      </div>
                       <div 
                         className="absolute top-2 left-2 px-2 py-0.5 text-white text-xs font-bold rounded-full uppercase"
                         style={{ background: getAccentGradient() }}
