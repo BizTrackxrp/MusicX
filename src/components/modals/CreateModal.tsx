@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, DragEvent } from 'react';
 import { X, Music, Disc, Upload, Plus, Check, TrendingUp, Image as ImageIcon, Trash2, Loader2, AlertCircle, Video, User, FolderOpen } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { useXaman } from '@/lib/xaman-context';
@@ -51,6 +51,9 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
   const [mintingStatus, setMintingStatus] = useState<MintingStatus>('idle');
   const [mintingMessage, setMintingMessage] = useState('');
   const [mintingError, setMintingError] = useState('');
+  
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
   
   // Profile check
   const [artistName, setArtistName] = useState<string | null>(null);
@@ -157,21 +160,123 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
     }
   };
 
-  const handleTracksUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const newTracks = files.map((file) => ({
+  const isValidMediaFile = (file: File): boolean => {
+    if (mediaType === 'audio') {
+      return file.type.startsWith('audio/') || /\.(mp3|wav|flac|aac|ogg|m4a)$/i.test(file.name);
+    } else {
+      return file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name);
+    }
+  };
+
+  const processFiles = (files: File[]) => {
+    const validFiles = files.filter(isValidMediaFile);
+    
+    if (validFiles.length === 0) return;
+    
+    const newTracks = validFiles.map((file) => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
       title: file.name.replace(/\.[^/.]+$/, ''),
     }));
+    
     const updatedTracks = [...tracks, ...newTracks];
     setTracks(updatedTracks);
     
     // Auto-suggest album price with ~10% discount for albums
     if (releaseType === 'album' && updatedTracks.length > 0) {
       const fullPrice = updatedTracks.length * songPrice;
-      const suggestedPrice = Math.floor(fullPrice * 0.9); // 10% discount
+      const suggestedPrice = Math.floor(fullPrice * 0.9);
       setAlbumPrice(suggestedPrice > 0 ? suggestedPrice : fullPrice);
+    }
+  };
+
+  const handleTracksUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+  };
+
+  // Handle drag events
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragging to false if we're leaving the drop zone entirely
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Recursively get all files from dropped items (supports folders)
+  const getAllFilesFromDataTransfer = async (dataTransfer: DataTransfer): Promise<File[]> => {
+    const files: File[] = [];
+    const items = Array.from(dataTransfer.items);
+    
+    const processEntry = async (entry: FileSystemEntry): Promise<void> => {
+      if (entry.isFile) {
+        const fileEntry = entry as FileSystemFileEntry;
+        return new Promise((resolve) => {
+          fileEntry.file((file) => {
+            files.push(file);
+            resolve();
+          });
+        });
+      } else if (entry.isDirectory) {
+        const dirEntry = entry as FileSystemDirectoryEntry;
+        const reader = dirEntry.createReader();
+        
+        return new Promise((resolve) => {
+          const readEntries = () => {
+            reader.readEntries(async (entries) => {
+              if (entries.length === 0) {
+                resolve();
+              } else {
+                for (const entry of entries) {
+                  await processEntry(entry);
+                }
+                readEntries(); // Continue reading (directories can have batched results)
+              }
+            });
+          };
+          readEntries();
+        });
+      }
+    };
+    
+    // Process all dropped items
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          await processEntry(entry);
+        }
+      }
+    }
+    
+    return files;
+  };
+
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    // Check if browser supports directory reading
+    if (e.dataTransfer.items && e.dataTransfer.items[0]?.webkitGetAsEntry) {
+      const files = await getAllFilesFromDataTransfer(e.dataTransfer);
+      processFiles(files);
+    } else {
+      // Fallback for browsers without directory support
+      const files = Array.from(e.dataTransfer.files);
+      processFiles(files);
     }
   };
 
@@ -644,22 +749,41 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
 
                 {tracks.length === 0 ? (
                   <div className="space-y-3">
+                    {/* Main drop zone with drag & drop support */}
                     <div
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer group transition-colors ${
-                        theme === 'dark' 
-                          ? 'border-zinc-700 hover:border-blue-500/50' 
-                          : 'border-zinc-300 hover:border-blue-500/50'
+                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer group transition-all ${
+                        isDragging
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : theme === 'dark' 
+                            ? 'border-zinc-700 hover:border-blue-500/50' 
+                            : 'border-zinc-300 hover:border-blue-500/50'
                       }`}
                     >
-                      <Upload size={32} className="mx-auto text-zinc-500 group-hover:text-blue-500 mb-2" />
-                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                        {releaseType === 'album' ? 'Select tracks' : 'Drop your track here'}
-                      </p>
-                      <p className="text-zinc-500 text-sm">
-                        {mediaType === 'audio' ? 'MP3 or WAV' : 'MP4, MOV, or WebM'}
-                        {releaseType === 'album' && ' • Select multiple files'}
-                      </p>
+                      {isDragging ? (
+                        <>
+                          <FolderOpen size={32} className="mx-auto text-blue-500 mb-2" />
+                          <p className="text-blue-500 font-medium">Drop files or folder here</p>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={32} className="mx-auto text-zinc-500 group-hover:text-blue-500 mb-2" />
+                          <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                            {releaseType === 'album' 
+                              ? 'Drag individual files or a whole folder full of your songs'
+                              : 'Drop your track here'
+                            }
+                          </p>
+                          <p className="text-zinc-500 text-sm mt-1">
+                            {mediaType === 'audio' ? 'MP3, WAV, FLAC, AAC' : 'MP4, MOV, WebM'}
+                            {releaseType === 'album' && ' • Or click to browse'}
+                          </p>
+                        </>
+                      )}
                     </div>
                     
                     {releaseType === 'album' && (
@@ -719,17 +843,23 @@ export default function CreateModal({ isOpen, onClose }: CreateModalProps) {
                     ))}
                     
                     {releaseType === 'album' && (
-                      <button
+                      <div
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`w-full p-3 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 transition-colors ${
-                          theme === 'dark' 
-                            ? 'border-zinc-700 hover:border-blue-500/50 text-zinc-500' 
-                            : 'border-zinc-300 hover:border-blue-500/50 text-zinc-500'
+                        className={`w-full p-3 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          isDragging
+                            ? 'border-blue-500 bg-blue-500/10 text-blue-500'
+                            : theme === 'dark' 
+                              ? 'border-zinc-700 hover:border-blue-500/50 text-zinc-500' 
+                              : 'border-zinc-300 hover:border-blue-500/50 text-zinc-500'
                         }`}
                       >
                         <Plus size={16} />
-                        Add more tracks
-                      </button>
+                        {isDragging ? 'Drop to add more tracks' : 'Add more tracks'}
+                      </div>
                     )}
                   </div>
                 )}
