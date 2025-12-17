@@ -42,6 +42,7 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
   if (!isOpen || !release) return null;
 
   const available = release.totalEditions - release.soldEditions;
+  const isSoldOut = available <= 0;
   const isAlbum = release.type === 'album';
   const totalIndividualPrice = release.tracks.length * release.songPrice;
   const albumSavings = isAlbum && release.albumPrice ? totalIndividualPrice - release.albumPrice : 0;
@@ -62,6 +63,22 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
         cover: release.coverUrl,
       });
     }
+  };
+
+  const handleBuyAlbum = () => {
+    if (isSoldOut) return;
+    // TODO: Implement buy flow
+    console.log('Buy album:', release.title);
+    alert('Buy flow coming soon! 🚀');
+  };
+
+  const handleBuyTrack = (e: React.MouseEvent, trackIndex: number) => {
+    e.stopPropagation();
+    if (isSoldOut) return;
+    // TODO: Implement buy flow
+    const track = release.tracks[trackIndex];
+    console.log('Buy track:', track?.title || release.title);
+    alert('Buy flow coming soon! 🚀');
   };
 
   const formatDuration = (seconds?: number) => {
@@ -106,12 +123,19 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
             
             <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
               {/* Cover Art */}
-              <div className="flex-shrink-0 mx-auto sm:mx-0">
+              <div className="flex-shrink-0 mx-auto sm:mx-0 relative">
                 <img 
                   src={release.coverUrl} 
                   alt={release.title}
-                  className="w-48 h-48 sm:w-56 sm:h-56 rounded-xl shadow-2xl object-cover"
+                  className={`w-48 h-48 sm:w-56 sm:h-56 rounded-xl shadow-2xl object-cover ${isSoldOut ? 'opacity-60' : ''}`}
                 />
+                {isSoldOut && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="px-4 py-2 bg-black/80 text-white font-bold text-lg rounded-lg uppercase tracking-wide">
+                      Sold Out
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Release Info */}
@@ -147,11 +171,13 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
 
                 {/* Availability */}
                 <div className={`mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm self-center sm:self-start ${
-                  available < 10 
-                    ? 'bg-red-500/20 text-red-400' 
-                    : theme === 'dark' ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-100 text-zinc-600'
+                  isSoldOut
+                    ? 'bg-red-500/20 text-red-400'
+                    : available < 10 
+                      ? 'bg-amber-500/20 text-amber-400' 
+                      : theme === 'dark' ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-100 text-zinc-600'
                 }`}>
-                  {available < 10 ? '🔥' : '📀'} {available} of {release.totalEditions} available
+                  {isSoldOut ? '🚫 Sold Out' : available < 10 ? '🔥' : '📀'} {isSoldOut ? `${release.totalEditions} editions sold` : `${available} of ${release.totalEditions} available`}
                 </div>
               </div>
             </div>
@@ -168,14 +194,30 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
             </button>
             
             {isAlbum && release.albumPrice ? (
-              <button className="flex items-center gap-2 px-5 py-3 bg-green-500 hover:bg-green-400 text-white font-semibold rounded-full transition-colors">
+              <button 
+                onClick={handleBuyAlbum}
+                disabled={isSoldOut}
+                className={`flex items-center gap-2 px-5 py-3 font-semibold rounded-full transition-colors ${
+                  isSoldOut
+                    ? 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-400 text-white'
+                }`}
+              >
                 <ShoppingCart size={18} />
-                Buy Album • {release.albumPrice} XRP
+                {isSoldOut ? 'Sold Out' : `Buy Album • ${release.albumPrice} XRP`}
               </button>
             ) : (
-              <button className="flex items-center gap-2 px-5 py-3 bg-green-500 hover:bg-green-400 text-white font-semibold rounded-full transition-colors">
+              <button 
+                onClick={handleBuyAlbum}
+                disabled={isSoldOut}
+                className={`flex items-center gap-2 px-5 py-3 font-semibold rounded-full transition-colors ${
+                  isSoldOut
+                    ? 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-400 text-white'
+                }`}
+              >
                 <ShoppingCart size={18} />
-                Buy • {release.songPrice} XRP
+                {isSoldOut ? 'Sold Out' : `Buy • ${release.songPrice} XRP`}
               </button>
             )}
             
@@ -194,7 +236,7 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
             </button>
 
             {/* Album savings badge */}
-            {isAlbum && albumSavings > 0 && (
+            {isAlbum && albumSavings > 0 && !isSoldOut && (
               <div className="ml-auto text-sm">
                 <span className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}>
                   Save <span className="text-green-500 font-semibold">{albumSavings} XRP</span> with album
@@ -256,6 +298,19 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
                       </p>
                     </div>
                     
+                    {/* Availability badge */}
+                    <div className={`hidden sm:block text-xs font-medium px-2 py-1 rounded-full ${
+                      isSoldOut 
+                        ? 'bg-red-500/20 text-red-400' 
+                        : available < 10 
+                          ? 'bg-amber-500/20 text-amber-400' 
+                          : theme === 'dark' 
+                            ? 'bg-zinc-800 text-zinc-400' 
+                            : 'bg-zinc-100 text-zinc-600'
+                    }`}>
+                      {isSoldOut ? 'Sold Out' : `${available} left`}
+                    </div>
+                    
                     {/* Duration */}
                     <span className={`hidden sm:block text-sm ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
                       {formatDuration(track.duration)}
@@ -263,17 +318,24 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
                     
                     {/* Buy button */}
                     <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Buy single track logic
-                      }}
-                      className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
-                        theme === 'dark' 
-                          ? 'bg-zinc-800 hover:bg-zinc-700 text-white' 
-                          : 'bg-zinc-100 hover:bg-zinc-200 text-black'
+                      onClick={(e) => handleBuyTrack(e, index)}
+                      disabled={isSoldOut}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                        isSoldOut
+                          ? theme === 'dark' 
+                            ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' 
+                            : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-400 text-white'
                       }`}
                     >
-                      {release.songPrice} XRP
+                      {isSoldOut ? (
+                        'Sold Out'
+                      ) : (
+                        <>
+                          <ShoppingCart size={14} />
+                          {release.songPrice} XRP
+                        </>
+                      )}
                     </button>
                   </div>
                 );
@@ -303,4 +365,3 @@ export default function AlbumModal({ release, isOpen, onClose, onPlay, currently
     </div>
   );
 }
-
