@@ -227,7 +227,8 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
                   key={`${release.id}-${trackData.id}`}
                   onClick={() => !isSoldOut && handlePlayTrack(release, trackData, trackData.trackIndex)}
                   style={{
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: '48px 1fr auto',
                     alignItems: 'center',
                     gap: 12,
                     padding: 12,
@@ -236,7 +237,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
                     borderBottom: index !== allTracks.length - 1 ? `1px solid ${cardBorder}` : 'none',
                   }}
                 >
-                  <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                  <div style={{ position: 'relative', width: 48, height: 48 }}>
                     <img src={release.coverUrl} alt={trackData.displayTitle} style={{ width: '100%', height: '100%', borderRadius: 6, objectFit: 'cover' }} />
                     {isThisPlaying && isPlaying && (
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: 6 }}>
@@ -249,16 +250,16 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
                     )}
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 100, overflow: 'hidden' }}>
-                    <p style={{ color: isThisPlaying ? '#22c55e' : textColor, fontWeight: 500, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <p style={{ color: isThisPlaying ? '#22c55e' : textColor, fontWeight: 500, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
                       {trackData.displayTitle}
                     </p>
-                    <p style={{ color: mutedColor, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ color: mutedColor, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
                       {getArtistDisplay(release)}
                     </p>
                   </div>
 
-                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {isSoldOut ? (
                       <span style={{ fontSize: 12, fontWeight: 500, color: '#ef4444' }}>Sold</span>
                     ) : (
