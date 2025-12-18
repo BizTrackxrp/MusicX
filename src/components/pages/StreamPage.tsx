@@ -43,8 +43,8 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
 
   // Direct color values - no CSS variables, no Tailwind
   const textColor = theme === 'dark' ? '#ffffff' : '#000000';
-  const mutedColor = theme === 'dark' ? '#a1a1aa' : '#52525b';
-  const cardBg = theme === 'dark' ? 'rgba(39, 39, 42, 0.8)' : 'rgba(255, 255, 255, 1)';
+  const mutedColor = theme === 'dark' ? '#d4d4d8' : '#52525b';  // Lighter gray for dark mode
+  const cardBg = theme === 'dark' ? '#27272a' : '#ffffff';  // Solid colors
   const cardBorder = theme === 'dark' ? '#3f3f46' : '#e4e4e7';
 
   useEffect(() => {
@@ -249,7 +249,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
                     )}
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 100, overflow: 'hidden' }}>
                     <p style={{ color: isThisPlaying ? '#22c55e' : textColor, fontWeight: 500, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {trackData.displayTitle}
                     </p>
