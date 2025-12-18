@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Play, Music, Wallet, Disc3, TrendingUp, Sparkles, ShoppingCart } from 'lucide-react';
+import { Play, Pause, Music, Wallet, Disc3, TrendingUp, Sparkles, Clock, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { Album, Track } from '@/types';
 import AlbumModal from '@/components/modals/AlbumModal';
@@ -19,6 +19,7 @@ interface Release {
   albumPrice: number;
   totalEditions: number;
   soldEditions: number;
+  createdAt?: string;
   tracks: Array<{
     id: string;
     title: string;
@@ -29,12 +30,13 @@ interface Release {
 }
 
 interface StreamPageProps {
-  onPlayTrack: (track: Track & { artist?: string; cover?: string }) => void;
+  onPlayTrack: (track: Track & { artist?: string; cover?: string; releaseId?: string; trackId?: string }) => void;
   onSelectAlbum: (album: Album) => void;
   currentlyPlayingId?: number | null;
+  isPlaying?: boolean;
 }
 
-export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayingId }: StreamPageProps) {
+export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayingId, isPlaying }: StreamPageProps) {
   const { theme } = useTheme();
   const [releases, setReleases] = useState<Release[]>([]);
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
@@ -49,7 +51,6 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         }
       } catch (error) {
         console.error('Failed to load releases:', error);
-        // Fallback to localStorage
         const stored = localStorage.getItem('xrpmusic_releases');
         if (stored) {
           setReleases(JSON.parse(stored));
@@ -58,86 +59,86 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
     }
     loadReleases();
 
-    // Listen for new releases
     const handleNewRelease = () => loadReleases();
     window.addEventListener('releaseCreated', handleNewRelease);
     return () => window.removeEventListener('releaseCreated', handleNewRelease);
   }, []);
 
-  const handlePlayRelease = (release: Release) => {
-    if (release.tracks.length > 0) {
-      const releaseTrack = release.tracks[0];
-      onPlayTrack({
-        id: parseInt(releaseTrack.id) || 0,
-        title: releaseTrack.title,
-        duration: releaseTrack.duration?.toString() || '0:00',
-        price: release.songPrice,
-        available: release.totalEditions - release.soldEditions,
-        plays: 0,
-        mediaType: 'audio',
-        ipfsHash: releaseTrack.audioCid,
-        artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
-        cover: release.coverUrl,
-      });
-    }
+  const handlePlayTrack = (release: Release, track: Release['tracks'][0], index: number) => {
+    const available = release.totalEditions - release.soldEditions;
+    onPlayTrack({
+      id: parseInt(track.id) || index,
+      title: release.type === 'single' ? release.title : track.title,
+      duration: formatDuration(track.duration),
+      price: release.songPrice,
+      available: available,
+      plays: 0,
+      mediaType: 'audio',
+      ipfsHash: track.audioCid,
+      artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
+      cover: release.coverUrl,
+      releaseId: release.id,
+      trackId: track.id,
+    });
   };
 
-  const handleBuyTrack = (e: React.MouseEvent, release: Release, trackIndex: number) => {
-    e.stopPropagation();
-    // TODO: Implement buy flow
-    console.log('Buy track:', release.tracks[trackIndex]?.title || release.title);
-    alert('Buy flow coming soon! 🚀');
+  const formatDuration = (seconds?: number): string => {
+    if (!seconds) return '3:30';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Empty state - show when no releases
+  const getArtistDisplay = (release: Release): string => {
+    return release.artistName || `${release.artistAddress.slice(0, 6)}...${release.artistAddress.slice(-4)}`;
+  };
+
+  // Build flat track list
+  const allTracks = releases.flatMap(release => 
+    release.tracks.map((track, idx) => ({
+      ...track,
+      release,
+      trackIndex: idx,
+      displayTitle: release.type === 'single' ? release.title : track.title,
+    }))
+  );
+
+  // Empty state
   if (releases.length === 0) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4">
-        {/* Hero Section */}
         <div className="text-center max-w-lg mx-auto">
-          {/* Logo/Icon */}
-          <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-            <Music size={40} className="text-white sm:w-12 sm:h-12" />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <Music size={32} className="text-white" />
           </div>
 
-          <h1 className={`text-2xl sm:text-3xl md:text-4xl font-bold mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+          <h1 className={`text-xl sm:text-2xl md:text-3xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
             Welcome to XRP Music
           </h1>
           
-          <p className={`text-base sm:text-lg mb-8 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-            The decentralized music platform on the XRP Ledger. Mint, collect, and stream exclusive music NFTs.
+          <p className={`text-sm sm:text-base mb-6 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+            The decentralized music platform on the XRP Ledger
           </p>
 
-          {/* Features */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <Disc3 className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-              <h3 className={`font-semibold text-sm ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Mint Music</h3>
-              <p className="text-zinc-500 text-xs mt-1">Create limited edition NFTs</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+              <Disc3 className="w-6 h-6 mx-auto mb-1 text-blue-500" />
+              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Mint</p>
             </div>
-            <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <TrendingUp className="w-8 h-8 mx-auto mb-2 text-green-500" />
-              <h3 className={`font-semibold text-sm ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Earn Royalties</h3>
-              <p className="text-zinc-500 text-xs mt-1">Get paid on every resale</p>
+            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+              <TrendingUp className="w-6 h-6 mx-auto mb-1 text-green-500" />
+              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Earn</p>
             </div>
-            <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <Sparkles className="w-8 h-8 mx-auto mb-2 text-purple-500" />
-              <h3 className={`font-semibold text-sm ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Collect & Stream</h3>
-              <p className="text-zinc-500 text-xs mt-1">Own exclusive releases</p>
+            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
+              <Sparkles className="w-6 h-6 mx-auto mb-1 text-purple-500" />
+              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Collect</p>
             </div>
           </div>
 
-          {/* CTA */}
-          <div className={`p-6 rounded-2xl ${theme === 'dark' ? 'bg-zinc-900/80 border border-zinc-800' : 'bg-zinc-50 border border-zinc-200'}`}>
-            <Wallet className="w-10 h-10 mx-auto mb-3 text-blue-500" />
-            <h3 className={`font-semibold text-lg mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-              Get Started
-            </h3>
-            <p className="text-zinc-500 text-sm mb-4">
-              Connect your Xaman wallet to start minting and collecting music NFTs
-            </p>
-            <p className="text-zinc-600 text-xs">
-              Tap the <span className="font-medium">☰ menu</span> or <span className="text-blue-500 font-medium">Connect</span> button above
+          <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/80 border border-zinc-800' : 'bg-zinc-50 border border-zinc-200'}`}>
+            <Wallet className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+            <p className={`text-sm ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+              Connect your Xaman wallet to get started
             </p>
           </div>
         </div>
@@ -146,7 +147,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Album Modal */}
       <AlbumModal
         isOpen={selectedRelease !== null}
@@ -156,86 +157,103 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         currentlyPlayingId={currentlyPlayingId}
       />
 
-      {/* Latest Releases */}
+      {/* Latest Releases - Horizontal scroll on mobile, grid on desktop */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className={`text-lg sm:text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
             Latest Releases
           </h2>
+          {releases.length > 5 && (
+            <button className={`text-xs font-semibold ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'}`}>
+              See all
+            </button>
+          )}
         </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
-          {releases.slice(0, 10).map((release) => {
+        {/* Mobile: Horizontal scroll | Desktop: Grid */}
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 sm:overflow-visible">
+          {releases.slice(0, 12).map((release) => {
             const available = release.totalEditions - release.soldEditions;
             const isSoldOut = available <= 0;
+            const isCurrentlyPlaying = release.tracks.some(t => parseInt(t.id) === currentlyPlayingId);
             
             return (
               <div
                 key={release.id}
-                className={`group rounded-xl sm:rounded-2xl overflow-hidden border transition-all hover:scale-[1.02] cursor-pointer ${
+                className={`flex-shrink-0 w-32 sm:w-auto rounded-lg p-2 transition-colors cursor-pointer ${
                   theme === 'dark' 
-                    ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' 
-                    : 'bg-white border-zinc-200 hover:border-zinc-300'
+                    ? 'bg-zinc-900/50 hover:bg-zinc-800/80' 
+                    : 'bg-white hover:bg-zinc-50 border border-zinc-200'
                 }`}
                 onClick={() => setSelectedRelease(release)}
               >
-                <div className="relative aspect-square">
-                  <img 
-                    src={release.coverUrl} 
-                    alt={release.title} 
-                    className={`w-full h-full object-cover ${isSoldOut ? 'opacity-50' : ''}`}
-                  />
+                {/* Cover Art - Small on mobile */}
+                <div className={`relative aspect-square rounded-md overflow-hidden mb-2 ${
+                  isSoldOut ? 'opacity-50' : ''
+                }`}>
+                  {release.coverUrl ? (
+                    <img 
+                      src={release.coverUrl} 
+                      alt={release.title} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center ${
+                      theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'
+                    }`}>
+                      <Music size={24} className="text-zinc-500" />
+                    </div>
+                  )}
                   
-                  {/* Hover play button */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <button 
-                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePlayRelease(release);
-                      }}
-                    >
-                      <Play size={20} fill="white" className="text-white ml-0.5" />
-                    </button>
-                  </div>
+                  {/* Play button overlay - always visible when playing */}
+                  {isCurrentlyPlaying && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+                        {isPlaying ? (
+                          <Pause size={18} fill="white" className="text-white" />
+                        ) : (
+                          <Play size={18} fill="white" className="text-white ml-0.5" />
+                        )}
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Type badge */}
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-500/90 text-white text-xs font-bold rounded-full uppercase">
+                  <div className={`absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
+                    release.type === 'album' 
+                      ? 'bg-purple-500 text-white' 
+                      : release.type === 'ep'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-emerald-500 text-white'
+                  }`}>
                     {release.type}
                   </div>
                   
-                  {/* Sold out badge */}
                   {isSoldOut && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="px-4 py-2 bg-black/80 text-white font-bold text-sm rounded-lg uppercase tracking-wide">
+                      <span className="px-2 py-0.5 bg-black/70 text-white text-[10px] font-bold rounded uppercase">
                         Sold Out
-                      </div>
+                      </span>
                     </div>
                   )}
                 </div>
                 
-                {/* Card info - always visible */}
-                <div className="p-3 sm:p-4">
-                  <h3 className={`font-semibold truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                {/* Info - Always visible */}
+                <div className="space-y-0.5">
+                  <h3 className={`font-semibold text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
                     {release.title}
                   </h3>
-                  <p className={`text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                    {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
+                  <p className={`text-[10px] sm:text-xs truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    {getArtistDisplay(release)}
                   </p>
-                  
-                  {/* Price and availability - always visible */}
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/50">
-                    <span className="text-blue-500 font-bold text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-xs font-bold text-blue-500">
                       {release.albumPrice || release.songPrice} XRP
                     </span>
-                    <span className={`text-xs font-medium ${
-                      isSoldOut 
-                        ? 'text-red-500' 
-                        : available < 10 
-                          ? 'text-amber-500' 
-                          : theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                    <span className={`text-[9px] sm:text-[10px] ${
+                      isSoldOut ? 'text-red-400' : available < 10 ? 'text-amber-400' : theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
                     }`}>
-                      {isSoldOut ? 'Sold Out' : `${available} left`}
+                      {isSoldOut ? 'Sold' : `${available} left`}
                     </span>
                   </div>
                 </div>
@@ -245,112 +263,121 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         </div>
       </section>
 
-      {/* All Tracks */}
-      {releases.length > 0 && (
+      {/* All Tracks - Compact rows like Spotify mobile */}
+      {allTracks.length > 0 && (
         <section>
-          <h2 className={`text-xl sm:text-2xl font-bold mb-4 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+          <h2 className={`text-lg sm:text-xl font-bold mb-3 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
             All Tracks
           </h2>
-          <div className={`rounded-xl sm:rounded-2xl border overflow-hidden ${
-            theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200'
-          }`}>
-            {releases.flatMap((release, releaseIndex) =>
-              release.tracks.map((track, trackIndex) => {
-                const available = release.totalEditions - release.soldEditions;
-                const isSoldOut = available <= 0;
-                const globalIndex = releases.slice(0, releaseIndex).reduce((acc, r) => acc + r.tracks.length, 0) + trackIndex;
-                const totalTracks = releases.reduce((acc, r) => acc + r.tracks.length, 0);
-                
-                return (
-                  <div
-                    key={`${release.id}-${track.id}`}
-                    onClick={() => !isSoldOut && onPlayTrack({
-                      id: parseInt(track.id) || 0,
-                      title: release.type === 'single' ? release.title : track.title,
-                      duration: track.duration?.toString() || '0:00',
-                      price: release.songPrice,
-                      available: available,
-                      plays: 0,
-                      mediaType: 'audio',
-                      ipfsHash: track.audioCid,
-                      artist: release.artistName || release.artistAddress.slice(0, 8) + '...',
-                      cover: release.coverUrl,
-                    })}
-                    className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-colors group ${
-                      isSoldOut 
-                        ? 'opacity-60 cursor-not-allowed' 
-                        : 'cursor-pointer'
-                    } ${
-                      theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
-                    } ${globalIndex !== totalTracks - 1 ? (
-                      theme === 'dark' ? 'border-b border-zinc-800/50' : 'border-b border-zinc-100'
-                    ) : ''}`}
-                  >
-                    {/* Album art with play overlay */}
-                    <div className="relative flex-shrink-0">
-                      <img 
-                        src={release.coverUrl} 
-                        alt={track.title} 
-                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover"
-                      />
-                      {!isSoldOut && (
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center">
-                          <Play size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="white" />
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Track info */}
-                    <div className="flex-1 min-w-0">
-                      <h4 className={`font-medium truncate text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                        {release.type === 'single' ? release.title : track.title}
-                      </h4>
-                      <p className={`text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                        {release.artistName || `${release.artistAddress.slice(0, 6)}...`}
-                      </p>
-                    </div>
-                    
-                    {/* Availability */}
-                    <div className={`hidden sm:block text-xs font-medium px-2 py-1 rounded-full ${
-                      isSoldOut 
-                        ? 'bg-red-500/20 text-red-400' 
-                        : available < 10 
-                          ? 'bg-amber-500/20 text-amber-400' 
-                          : theme === 'dark' 
-                            ? 'bg-zinc-800 text-zinc-400' 
-                            : 'bg-zinc-100 text-zinc-600'
-                    }`}>
-                      {isSoldOut ? 'Sold Out' : `${available} left`}
-                    </div>
-                    
-                    {/* Buy button */}
-                    <button 
-                      onClick={(e) => !isSoldOut && handleBuyTrack(e, release, trackIndex)}
-                      disabled={isSoldOut}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors flex-shrink-0 ${
-                        isSoldOut
-                          ? theme === 'dark' 
-                            ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' 
-                            : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                          : 'bg-green-500 hover:bg-green-400 text-white'
-                      }`}
-                    >
-                      {isSoldOut ? (
-                        'Sold Out'
-                      ) : (
-                        <>
-                          <ShoppingCart size={14} />
-                          {release.songPrice} XRP
-                        </>
-                      )}
-                    </button>
+          
+          <div className="space-y-1">
+            {allTracks.map((trackData, index) => {
+              const release = trackData.release;
+              const track = trackData;
+              const trackIndex = trackData.trackIndex;
+              const displayTitle = trackData.displayTitle;
+              
+              const available = release.totalEditions - release.soldEditions;
+              const isSoldOut = available <= 0;
+              const trackId = `${release.id}-${track.id}`;
+              const isThisPlaying = parseInt(track.id) === currentlyPlayingId;
+
+              return (
+                <div
+                  key={trackId}
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer ${
+                    isThisPlaying 
+                      ? theme === 'dark' ? 'bg-zinc-800' : 'bg-blue-50'
+                      : theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-100'
+                  } ${isSoldOut ? 'opacity-50' : ''}`}
+                  onClick={() => !isSoldOut && handlePlayTrack(release, track, trackIndex)}
+                >
+                  {/* Album Art - Small square */}
+                  <div className="relative w-12 h-12 flex-shrink-0">
+                    <img 
+                      src={release.coverUrl} 
+                      alt={displayTitle}
+                      className="w-full h-full rounded object-cover"
+                    />
+                    {isThisPlaying && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded">
+                        {isPlaying ? (
+                          <div className="flex gap-0.5 items-end h-4">
+                            <div className="w-0.5 h-full bg-green-500 rounded-full animate-pulse" />
+                            <div className="w-0.5 h-3 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.15s' }} />
+                            <div className="w-0.5 h-full bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }} />
+                          </div>
+                        ) : (
+                          <Pause size={16} className="text-white" />
+                        )}
+                      </div>
+                    )}
                   </div>
-                );
-              })
-            )}
+
+                  {/* Track Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium text-sm truncate ${
+                      isThisPlaying 
+                        ? 'text-green-500' 
+                        : theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                    }`}>
+                      {displayTitle}
+                    </p>
+                    <p className={`text-xs truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {getArtistDisplay(release)}
+                    </p>
+                  </div>
+
+                  {/* Price & Play indicator */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSoldOut ? (
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                        theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'
+                      }`}>
+                        Sold
+                      </span>
+                    ) : (
+                      <>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-blue-500">{release.songPrice} XRP</p>
+                          <p className={`text-[10px] ${available < 10 ? 'text-amber-400' : theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                            {available} left
+                          </p>
+                        </div>
+                        <ChevronRight size={16} className={theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
+
+      {/* Quick Stats - Compact */}
+      <section className="grid grid-cols-4 gap-2">
+        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
+          <p className="text-lg sm:text-xl font-bold text-blue-500">{releases.length}</p>
+          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Releases</p>
+        </div>
+        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
+          <p className="text-lg sm:text-xl font-bold text-purple-500">{allTracks.length}</p>
+          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Tracks</p>
+        </div>
+        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
+          <p className="text-lg sm:text-xl font-bold text-green-500">
+            {new Set(releases.map(r => r.artistAddress)).size}
+          </p>
+          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Artists</p>
+        </div>
+        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
+          <p className="text-lg sm:text-xl font-bold text-amber-500">
+            {releases.reduce((acc, r) => acc + r.soldEditions, 0)}
+          </p>
+          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Sold</p>
+        </div>
+      </section>
     </div>
   );
 }
