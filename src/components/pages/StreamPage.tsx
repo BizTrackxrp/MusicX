@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Play, Pause, Music, Wallet, Disc3, TrendingUp, Sparkles, Clock, ChevronRight } from 'lucide-react';
+import { Play, Pause, Music, Wallet, Disc3, TrendingUp, Sparkles, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/lib/theme-context';
 import { Album, Track } from '@/types';
 import AlbumModal from '@/components/modals/AlbumModal';
@@ -40,6 +40,17 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   const { theme } = useTheme();
   const [releases, setReleases] = useState<Release[]>([]);
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
+
+  // Colors based on theme
+  const colors = {
+    text: theme === 'dark' ? '#ffffff' : '#18181b',
+    textMuted: theme === 'dark' ? '#a1a1aa' : '#71717a',
+    textFaint: theme === 'dark' ? '#71717a' : '#a1a1aa',
+    bg: theme === 'dark' ? 'rgba(24, 24, 27, 0.5)' : '#ffffff',
+    bgHover: theme === 'dark' ? 'rgba(39, 39, 42, 0.8)' : '#f4f4f5',
+    border: theme === 'dark' ? '#27272a' : '#e4e4e7',
+    accent: '#3b82f6',
+  };
 
   useEffect(() => {
     async function loadReleases() {
@@ -106,38 +117,43 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   // Empty state
   if (releases.length === 0) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center px-4">
-        <div className="text-center max-w-lg mx-auto">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-            <Music size={32} className="text-white" />
+      <div style={{ minHeight: '70vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 16px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '32rem', margin: '0 auto' }}>
+          <div style={{ 
+            width: 80, height: 80, margin: '0 auto 16px', borderRadius: 16,
+            background: 'linear-gradient(to bottom right, #3b82f6, #9333ea)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 10px 25px rgba(59, 130, 246, 0.25)'
+          }}>
+            <Music size={32} color="white" />
           </div>
 
-          <h1 className={`text-xl sm:text-2xl md:text-3xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: colors.text }}>
             Welcome to XRP Music
           </h1>
           
-          <p className={`text-sm sm:text-base mb-6 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+          <p style={{ fontSize: 14, marginBottom: 24, color: colors.textMuted }}>
             The decentralized music platform on the XRP Ledger
           </p>
 
-          <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
-            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <Disc3 className="w-6 h-6 mx-auto mb-1 text-blue-500" />
-              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Mint</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 24 }}>
+            <div style={{ padding: 12, borderRadius: 12, background: colors.bg, border: `1px solid ${colors.border}` }}>
+              <Disc3 style={{ width: 24, height: 24, margin: '0 auto 4px', color: '#3b82f6' }} />
+              <p style={{ fontWeight: 500, fontSize: 12, color: colors.text }}>Mint</p>
             </div>
-            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <TrendingUp className="w-6 h-6 mx-auto mb-1 text-green-500" />
-              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Earn</p>
+            <div style={{ padding: 12, borderRadius: 12, background: colors.bg, border: `1px solid ${colors.border}` }}>
+              <TrendingUp style={{ width: 24, height: 24, margin: '0 auto 4px', color: '#22c55e' }} />
+              <p style={{ fontWeight: 500, fontSize: 12, color: colors.text }}>Earn</p>
             </div>
-            <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-white border border-zinc-200'}`}>
-              <Sparkles className="w-6 h-6 mx-auto mb-1 text-purple-500" />
-              <p className={`font-medium text-xs ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Collect</p>
+            <div style={{ padding: 12, borderRadius: 12, background: colors.bg, border: `1px solid ${colors.border}` }}>
+              <Sparkles style={{ width: 24, height: 24, margin: '0 auto 4px', color: '#a855f7' }} />
+              <p style={{ fontWeight: 500, fontSize: 12, color: colors.text }}>Collect</p>
             </div>
           </div>
 
-          <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-zinc-900/80 border border-zinc-800' : 'bg-zinc-50 border border-zinc-200'}`}>
-            <Wallet className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-            <p className={`text-sm ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+          <div style={{ padding: 16, borderRadius: 12, background: colors.bg, border: `1px solid ${colors.border}` }}>
+            <Wallet style={{ width: 32, height: 32, margin: '0 auto 8px', color: '#3b82f6' }} />
+            <p style={{ fontSize: 14, color: colors.textMuted }}>
               Connect your Xaman wallet to get started
             </p>
           </div>
@@ -147,7 +163,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
       {/* Album Modal */}
       <AlbumModal
         isOpen={selectedRelease !== null}
@@ -157,21 +173,19 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         currentlyPlayingId={currentlyPlayingId}
       />
 
-      {/* Latest Releases - Horizontal scroll on mobile, grid on desktop */}
+      {/* Latest Releases */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className={`text-lg sm:text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: colors.text }}>
             Latest Releases
           </h2>
-          {releases.length > 5 && (
-            <button className={`text-xs font-semibold ${theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'}`}>
-              See all
-            </button>
-          )}
         </div>
         
-        {/* Mobile: Horizontal scroll | Desktop: Grid */}
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 sm:overflow-visible">
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: 16 
+        }}>
           {releases.slice(0, 12).map((release) => {
             const available = release.totalEditions - release.soldEditions;
             const isSoldOut = available <= 0;
@@ -180,80 +194,125 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
             return (
               <div
                 key={release.id}
-                className={`flex-shrink-0 w-32 sm:w-auto rounded-lg p-2 transition-colors cursor-pointer ${
-                  theme === 'dark' 
-                    ? 'bg-zinc-900/50 hover:bg-zinc-800/80' 
-                    : 'bg-white hover:bg-zinc-50 border border-zinc-200'
-                }`}
                 onClick={() => setSelectedRelease(release)}
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  background: colors.bg,
+                  border: `1px solid ${colors.border}`,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = colors.bgHover}
+                onMouseLeave={(e) => e.currentTarget.style.background = colors.bg}
               >
-                {/* Cover Art - Small on mobile */}
-                <div className={`relative aspect-square rounded-md overflow-hidden mb-2 ${
-                  isSoldOut ? 'opacity-50' : ''
-                }`}>
+                {/* Cover Art */}
+                <div style={{ 
+                  position: 'relative', 
+                  aspectRatio: '1', 
+                  borderRadius: 8, 
+                  overflow: 'hidden',
+                  marginBottom: 12,
+                  opacity: isSoldOut ? 0.5 : 1
+                }}>
                   {release.coverUrl ? (
                     <img 
                       src={release.coverUrl} 
                       alt={release.title} 
-                      className="w-full h-full object-cover"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <div className={`w-full h-full flex items-center justify-center ${
-                      theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'
-                    }`}>
-                      <Music size={24} className="text-zinc-500" />
-                    </div>
-                  )}
-                  
-                  {/* Play button overlay - always visible when playing */}
-                  {isCurrentlyPlaying && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-                        {isPlaying ? (
-                          <Pause size={18} fill="white" className="text-white" />
-                        ) : (
-                          <Play size={18} fill="white" className="text-white ml-0.5" />
-                        )}
-                      </div>
+                    <div style={{ 
+                      width: '100%', height: '100%', 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: colors.bgHover
+                    }}>
+                      <Music size={32} color={colors.textMuted} />
                     </div>
                   )}
                   
                   {/* Type badge */}
-                  <div className={`absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
-                    release.type === 'album' 
-                      ? 'bg-purple-500 text-white' 
-                      : release.type === 'ep'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-emerald-500 text-white'
-                  }`}>
+                  <div style={{
+                    position: 'absolute', top: 6, left: 6,
+                    padding: '2px 8px',
+                    fontSize: 10, fontWeight: 700,
+                    borderRadius: 4,
+                    textTransform: 'uppercase',
+                    background: release.type === 'album' ? '#a855f7' : release.type === 'ep' ? '#3b82f6' : '#10b981',
+                    color: 'white'
+                  }}>
                     {release.type}
                   </div>
                   
+                  {/* Sold out badge */}
                   {isSoldOut && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="px-2 py-0.5 bg-black/70 text-white text-[10px] font-bold rounded uppercase">
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        background: 'rgba(0,0,0,0.8)',
+                        color: 'white',
+                        fontSize: 11, fontWeight: 700,
+                        borderRadius: 4,
+                        textTransform: 'uppercase'
+                      }}>
                         Sold Out
                       </span>
                     </div>
                   )}
+                  
+                  {/* Playing indicator */}
+                  {isCurrentlyPlaying && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'rgba(0,0,0,0.4)'
+                    }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: '50%',
+                        background: '#22c55e',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}>
+                        {isPlaying ? <Pause size={18} color="white" fill="white" /> : <Play size={18} color="white" fill="white" />}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
-                {/* Info - Always visible */}
-                <div className="space-y-0.5">
-                  <h3 className={`font-semibold text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
+                {/* Info */}
+                <div>
+                  <h3 style={{ 
+                    fontWeight: 600, 
+                    fontSize: 14, 
+                    color: colors.text,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginBottom: 4
+                  }}>
                     {release.title}
                   </h3>
-                  <p className={`text-[10px] sm:text-xs truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  <p style={{ 
+                    fontSize: 12, 
+                    color: colors.textMuted,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginBottom: 8
+                  }}>
                     {getArtistDisplay(release)}
                   </p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] sm:text-xs font-bold text-blue-500">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6' }}>
                       {release.albumPrice || release.songPrice} XRP
                     </span>
-                    <span className={`text-[9px] sm:text-[10px] ${
-                      isSoldOut ? 'text-red-400' : available < 10 ? 'text-amber-400' : theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
-                    }`}>
-                      {isSoldOut ? 'Sold' : `${available} left`}
+                    <span style={{ 
+                      fontSize: 11, 
+                      color: isSoldOut ? '#ef4444' : available < 10 ? '#f59e0b' : colors.textFaint 
+                    }}>
+                      {isSoldOut ? 'Sold Out' : `${available} left`}
                     </span>
                   </div>
                 </div>
@@ -263,14 +322,14 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         </div>
       </section>
 
-      {/* All Tracks - Compact rows like Spotify mobile */}
+      {/* All Tracks */}
       {allTracks.length > 0 && (
         <section>
-          <h2 className={`text-lg sm:text-xl font-bold mb-3 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16, color: colors.text }}>
             All Tracks
           </h2>
           
-          <div className="space-y-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {allTracks.map((trackData, index) => {
               const release = trackData.release;
               const track = trackData;
@@ -285,66 +344,92 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
               return (
                 <div
                   key={trackId}
-                  className={`flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer ${
-                    isThisPlaying 
-                      ? theme === 'dark' ? 'bg-zinc-800' : 'bg-blue-50'
-                      : theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-100'
-                  } ${isSoldOut ? 'opacity-50' : ''}`}
                   onClick={() => !isSoldOut && handlePlayTrack(release, track, trackIndex)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 10,
+                    borderRadius: 8,
+                    cursor: isSoldOut ? 'not-allowed' : 'pointer',
+                    opacity: isSoldOut ? 0.5 : 1,
+                    background: isThisPlaying ? (theme === 'dark' ? 'rgba(39, 39, 42, 0.8)' : '#eff6ff') : 'transparent',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => !isThisPlaying && (e.currentTarget.style.background = colors.bgHover)}
+                  onMouseLeave={(e) => !isThisPlaying && (e.currentTarget.style.background = 'transparent')}
                 >
-                  {/* Album Art - Small square */}
-                  <div className="relative w-12 h-12 flex-shrink-0">
+                  {/* Album Art */}
+                  <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
                     <img 
                       src={release.coverUrl} 
                       alt={displayTitle}
-                      className="w-full h-full rounded object-cover"
+                      style={{ width: '100%', height: '100%', borderRadius: 6, objectFit: 'cover' }}
                     />
                     {isThisPlaying && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded">
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(0,0,0,0.4)', borderRadius: 6
+                      }}>
                         {isPlaying ? (
-                          <div className="flex gap-0.5 items-end h-4">
-                            <div className="w-0.5 h-full bg-green-500 rounded-full animate-pulse" />
-                            <div className="w-0.5 h-3 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.15s' }} />
-                            <div className="w-0.5 h-full bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }} />
+                          <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 16 }}>
+                            <div style={{ width: 3, height: '100%', background: '#22c55e', borderRadius: 2, animation: 'pulse 1s infinite' }} />
+                            <div style={{ width: 3, height: '60%', background: '#22c55e', borderRadius: 2, animation: 'pulse 1s infinite 0.15s' }} />
+                            <div style={{ width: 3, height: '100%', background: '#22c55e', borderRadius: 2, animation: 'pulse 1s infinite 0.3s' }} />
                           </div>
                         ) : (
-                          <Pause size={16} className="text-white" />
+                          <Pause size={16} color="white" />
                         )}
                       </div>
                     )}
                   </div>
 
                   {/* Track Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-medium text-sm truncate ${
-                      isThisPlaying 
-                        ? 'text-green-500' 
-                        : theme === 'dark' ? 'text-white' : 'text-zinc-900'
-                    }`}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ 
+                      fontWeight: 500, 
+                      fontSize: 14, 
+                      color: isThisPlaying ? '#22c55e' : colors.text,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
                       {displayTitle}
                     </p>
-                    <p className={`text-xs truncate ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    <p style={{ 
+                      fontSize: 12, 
+                      color: colors.textMuted,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
                       {getArtistDisplay(release)}
                     </p>
                   </div>
 
-                  {/* Price & Play indicator */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Price */}
+                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {isSoldOut ? (
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                        theme === 'dark' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'
-                      }`}>
-                        Sold
+                      <span style={{
+                        fontSize: 11, fontWeight: 500,
+                        padding: '4px 10px', borderRadius: 12,
+                        background: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+                        color: theme === 'dark' ? '#f87171' : '#dc2626'
+                      }}>
+                        Sold Out
                       </span>
                     ) : (
                       <>
-                        <div className="text-right">
-                          <p className="text-xs font-semibold text-blue-500">{release.songPrice} XRP</p>
-                          <p className={`text-[10px] ${available < 10 ? 'text-amber-400' : theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: '#3b82f6' }}>
+                            {release.songPrice} XRP
+                          </p>
+                          <p style={{ fontSize: 11, color: available < 10 ? '#f59e0b' : colors.textFaint }}>
                             {available} left
                           </p>
                         </div>
-                        <ChevronRight size={16} className={theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'} />
+                        <ChevronRight size={16} color={colors.textFaint} />
                       </>
                     )}
                   </div>
@@ -355,27 +440,27 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
         </section>
       )}
 
-      {/* Quick Stats - Compact */}
-      <section className="grid grid-cols-4 gap-2">
-        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
-          <p className="text-lg sm:text-xl font-bold text-blue-500">{releases.length}</p>
-          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Releases</p>
+      {/* Quick Stats */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div style={{ padding: 12, borderRadius: 8, textAlign: 'center', background: colors.bg, border: `1px solid ${colors.border}` }}>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#3b82f6' }}>{releases.length}</p>
+          <p style={{ fontSize: 11, color: colors.textFaint }}>Releases</p>
         </div>
-        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
-          <p className="text-lg sm:text-xl font-bold text-purple-500">{allTracks.length}</p>
-          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Tracks</p>
+        <div style={{ padding: 12, borderRadius: 8, textAlign: 'center', background: colors.bg, border: `1px solid ${colors.border}` }}>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#a855f7' }}>{allTracks.length}</p>
+          <p style={{ fontSize: 11, color: colors.textFaint }}>Tracks</p>
         </div>
-        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
-          <p className="text-lg sm:text-xl font-bold text-green-500">
+        <div style={{ padding: 12, borderRadius: 8, textAlign: 'center', background: colors.bg, border: `1px solid ${colors.border}` }}>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#22c55e' }}>
             {new Set(releases.map(r => r.artistAddress)).size}
           </p>
-          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Artists</p>
+          <p style={{ fontSize: 11, color: colors.textFaint }}>Artists</p>
         </div>
-        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-zinc-200'}`}>
-          <p className="text-lg sm:text-xl font-bold text-amber-500">
+        <div style={{ padding: 12, borderRadius: 8, textAlign: 'center', background: colors.bg, border: `1px solid ${colors.border}` }}>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#f59e0b' }}>
             {releases.reduce((acc, r) => acc + r.soldEditions, 0)}
           </p>
-          <p className={`text-[10px] sm:text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Sold</p>
+          <p style={{ fontSize: 11, color: colors.textFaint }}>Sold</p>
         </div>
       </section>
     </div>
