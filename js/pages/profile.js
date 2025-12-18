@@ -1,0 +1,367 @@
+/**
+ * XRP Music - Profile Page
+ * User profile with releases, collection, and settings
+ */
+
+const ProfilePage = {
+  releases: [],
+  activeTab: 'posted',
+  isEditing: false,
+  tempProfile: null,
+  
+  /**
+   * Render profile page
+   */
+  async render() {
+    if (!AppState.user?.address) {
+      this.renderNotLoggedIn();
+      return;
+    }
+    
+    UI.showLoading();
+    
+    try {
+      this.releases = await API.getReleasesByArtist(AppState.user.address);
+      const profile = await API.getProfile(AppState.user.address);
+      if (profile) {
+        setProfile(profile);
+      }
+      
+      this.isEditing = false;
+      this.tempProfile = null;
+      this.renderContent();
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+      this.renderError();
+    }
+  },
+  
+  renderNotLoggedIn() {
+    const html = `
+      <div class="empty-state" style="min-height: 60vh;">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+          <line x1="1" y1="10" x2="23" y2="10"></line>
+        </svg>
+        <h3>Connect Your Wallet</h3>
+        <p>Connect your Xaman wallet to view your profile.</p>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showAuth()">
+          Connect Wallet
+        </button>
+      </div>
+    `;
+    UI.renderPage(html);
+  },
+  
+  renderContent() {
+    const profile = AppState.profile || {};
+    const displayName = getDisplayName();
+    const address = AppState.user.address;
+    
+    const html = `
+      <div class="profile-page animate-fade-in">
+        <!-- Banner -->
+        <div class="profile-banner">
+          ${profile.bannerUrl ? `<img src="${profile.bannerUrl}" alt="Banner">` : ''}
+        </div>
+        
+        <!-- Profile Card -->
+        <div class="profile-card">
+          <div class="profile-avatar">
+            ${profile.avatarUrl 
+              ? `<img src="${profile.avatarUrl}" alt="Avatar">`
+              : `<span>${getUserInitial()}</span>`
+            }
+          </div>
+          
+          <div class="profile-info">
+            <h1 class="profile-name">${displayName}</h1>
+            <p class="profile-address">${Helpers.truncateAddress(address, 8, 6)}</p>
+            ${profile.bio ? `<p class="profile-bio">${profile.bio}</p>` : ''}
+            
+            <div class="profile-links">
+              ${profile.website ? `
+                <a href="${profile.website}" target="_blank" class="profile-link">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                  </svg>
+                </a>
+              ` : ''}
+              ${profile.twitter ? `
+                <a href="https://twitter.com/${profile.twitter}" target="_blank" class="profile-link">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
+                </a>
+              ` : ''}
+            </div>
+          </div>
+          
+          <button class="btn btn-secondary" id="edit-profile-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Edit Profile
+          </button>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="profile-tabs">
+          <button class="tab-btn ${this.activeTab === 'posted' ? 'active' : ''}" data-tab="posted">
+            My Releases
+            <span class="tab-count">${this.releases.length}</span>
+          </button>
+          <button class="tab-btn ${this.activeTab === 'collected' ? 'active' : ''}" data-tab="collected">
+            Collected
+            <span class="tab-count">0</span>
+          </button>
+        </div>
+        
+        <!-- Tab Content -->
+        <div class="profile-tab-content">
+          ${this.activeTab === 'posted' ? this.renderPostedTab() : this.renderCollectedTab()}
+        </div>
+      </div>
+      
+      <style>
+        .profile-banner {
+          height: 200px;
+          background: linear-gradient(135deg, var(--accent), #8b5cf6);
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+          margin-bottom: -60px;
+        }
+        .profile-banner img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .profile-card {
+          display: flex;
+          align-items: flex-end;
+          gap: 20px;
+          padding: 0 24px;
+          margin-bottom: 32px;
+        }
+        @media (max-width: 640px) {
+          .profile-card {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 0 16px;
+          }
+        }
+        .profile-avatar {
+          width: 120px;
+          height: 120px;
+          border-radius: 50%;
+          border: 4px solid var(--bg-primary);
+          background: linear-gradient(135deg, var(--accent), #8b5cf6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 40px;
+          font-weight: 700;
+          color: white;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+        .profile-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .profile-info {
+          flex: 1;
+          min-width: 0;
+          padding-bottom: 16px;
+        }
+        .profile-name {
+          font-size: 28px;
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+        .profile-address {
+          color: var(--text-muted);
+          font-size: 14px;
+          margin-bottom: 8px;
+        }
+        .profile-bio {
+          color: var(--text-secondary);
+          font-size: 14px;
+          margin-bottom: 12px;
+        }
+        .profile-links {
+          display: flex;
+          gap: 12px;
+        }
+        .profile-link {
+          color: var(--text-muted);
+          transition: color 150ms;
+        }
+        .profile-link:hover {
+          color: var(--accent);
+        }
+        .profile-tabs {
+          display: flex;
+          gap: 8px;
+          border-bottom: 1px solid var(--border-color);
+          padding: 0 24px 4px;
+          margin-bottom: 24px;
+        }
+        .tab-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 20px;
+          border: none;
+          border-radius: 12px 12px 0 0;
+          background: transparent;
+          color: var(--text-muted);
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .tab-btn:hover {
+          color: var(--text-secondary);
+        }
+        .tab-btn.active {
+          background: var(--bg-hover);
+          color: var(--text-primary);
+        }
+        .tab-count {
+          padding: 2px 8px;
+          background: var(--bg-hover);
+          border-radius: 10px;
+          font-size: 12px;
+        }
+        .profile-tab-content {
+          padding: 0 24px;
+        }
+      </style>
+    `;
+    
+    UI.renderPage(html);
+    this.bindEvents();
+  },
+  
+  renderPostedTab() {
+    if (this.releases.length === 0) {
+      return `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18V5l12-2v13"></path>
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+          </svg>
+          <h3>No Releases Yet</h3>
+          <p>Create your first release and start selling your music as NFTs!</p>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">
+            Create Release
+          </button>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="release-grid">
+        ${this.releases.map(release => this.renderReleaseCard(release)).join('')}
+      </div>
+    `;
+  },
+  
+  renderCollectedTab() {
+    return `
+      <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+        <h3>No Collected NFTs</h3>
+        <p>NFTs you purchase will appear here.</p>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Router.navigate('marketplace')">
+          Browse Marketplace
+        </button>
+      </div>
+    `;
+  },
+  
+  renderReleaseCard(release) {
+    const available = release.totalEditions - release.soldEditions;
+    const price = release.albumPrice || release.songPrice;
+    
+    return `
+      <div class="release-card" data-release-id="${release.id}">
+        <div class="release-card-cover">
+          ${release.coverUrl 
+            ? `<img src="${release.coverUrl}" alt="${release.title}">`
+            : `<div class="placeholder">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+              </div>`
+          }
+          <span class="release-type-badge ${release.type}">${release.type}</span>
+          <span class="release-availability">${available} left</span>
+        </div>
+        <div class="release-card-info">
+          <div class="release-card-title">${release.title}</div>
+          <div class="release-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
+          <div class="release-card-footer">
+            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+  
+  renderError() {
+    const html = `
+      <div class="empty-state" style="min-height: 60vh;">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+        <h3>Failed to Load</h3>
+        <p>There was an error loading your profile.</p>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="ProfilePage.render()">
+          Retry
+        </button>
+      </div>
+    `;
+    UI.renderPage(html);
+  },
+  
+  bindEvents() {
+    // Tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.activeTab = btn.dataset.tab;
+        this.renderContent();
+      });
+    });
+    
+    // Edit profile button
+    document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
+      Modals.showEditProfile();
+    });
+    
+    // Release cards
+    document.querySelectorAll('.release-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const releaseId = card.dataset.releaseId;
+        const release = this.releases.find(r => r.id === releaseId);
+        if (release) {
+          Modals.showRelease(release);
+        }
+      });
+    });
+  },
+};
