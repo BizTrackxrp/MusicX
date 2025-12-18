@@ -41,6 +41,12 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   const [releases, setReleases] = useState<Release[]>([]);
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
 
+  // Direct color values - no CSS variables, no Tailwind
+  const textColor = theme === 'dark' ? '#ffffff' : '#000000';
+  const mutedColor = theme === 'dark' ? '#a1a1aa' : '#52525b';
+  const cardBg = theme === 'dark' ? 'rgba(39, 39, 42, 0.8)' : 'rgba(255, 255, 255, 1)';
+  const cardBorder = theme === 'dark' ? '#3f3f46' : '#e4e4e7';
+
   useEffect(() => {
     async function loadReleases() {
       try {
@@ -107,13 +113,17 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4">
         <div className="text-center max-w-lg mx-auto">
           <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-            <Music size={32} className="text-white" />
+            <Music size={32} color="#ffffff" />
           </div>
-          <h1 className="text-main text-2xl font-bold mb-2">Welcome to XRP Music</h1>
-          <p className="text-secondary text-base mb-6">The decentralized music platform on the XRP Ledger</p>
-          <div className="bg-card p-4 rounded-xl">
-            <Wallet className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-            <p className="text-secondary">Connect your Xaman wallet to get started</p>
+          <h1 style={{ color: textColor, fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
+            Welcome to XRP Music
+          </h1>
+          <p style={{ color: mutedColor, fontSize: 16, marginBottom: 24 }}>
+            The decentralized music platform on the XRP Ledger
+          </p>
+          <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, padding: 16, borderRadius: 12 }}>
+            <Wallet style={{ width: 32, height: 32, margin: '0 auto 8px', color: '#3b82f6' }} />
+            <p style={{ color: mutedColor }}>Connect your Xaman wallet to get started</p>
           </div>
         </div>
       </div>
@@ -121,7 +131,7 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
   }
 
   return (
-    <div className="space-y-8">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
       <AlbumModal
         isOpen={selectedRelease !== null}
         onClose={() => setSelectedRelease(null)}
@@ -132,7 +142,9 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
 
       {/* Latest Releases */}
       <section>
-        <h2 className="text-main text-2xl font-bold mb-4">Latest Releases</h2>
+        <h2 style={{ color: textColor, fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+          Latest Releases
+        </h2>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {releases.slice(0, 12).map((release) => {
@@ -143,35 +155,50 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
               <div
                 key={release.id}
                 onClick={() => setSelectedRelease(release)}
-                className="bg-card p-3 rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                style={{
+                  background: cardBg,
+                  border: `1px solid ${cardBorder}`,
+                  padding: 12,
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                }}
               >
-                <div className={`relative aspect-square rounded-lg overflow-hidden mb-3 ${isSoldOut ? 'opacity-50' : ''}`}>
+                <div style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, opacity: isSoldOut ? 0.5 : 1 }}>
                   {release.coverUrl ? (
-                    <img src={release.coverUrl} alt={release.title} className="w-full h-full object-cover" />
+                    <img src={release.coverUrl} alt={release.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                      <Music size={32} className="text-gray-500" />
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#27272a' }}>
+                      <Music size={32} color="#71717a" />
                     </div>
                   )}
                   
-                  <span className={`absolute top-2 left-2 px-2 py-0.5 text-xs font-bold rounded text-white uppercase ${
-                    release.type === 'album' ? 'bg-purple-500' : release.type === 'ep' ? 'bg-blue-500' : 'bg-green-500'
-                  }`}>
+                  <span style={{
+                    position: 'absolute', top: 8, left: 8,
+                    padding: '2px 8px', fontSize: 11, fontWeight: 700, borderRadius: 4,
+                    textTransform: 'uppercase', color: '#ffffff',
+                    background: release.type === 'album' ? '#a855f7' : release.type === 'ep' ? '#3b82f6' : '#22c55e'
+                  }}>
                     {release.type}
                   </span>
                   
                   {isSoldOut && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded">SOLD OUT</span>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+                      <span style={{ padding: '4px 12px', background: '#ef4444', color: '#ffffff', fontSize: 11, fontWeight: 700, borderRadius: 4 }}>SOLD OUT</span>
                     </div>
                   )}
                 </div>
                 
-                <h3 className="text-main font-bold text-sm truncate">{release.title}</h3>
-                <p className="text-secondary text-sm truncate">{getArtistDisplay(release)}</p>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-blue-500 font-bold text-sm">{release.albumPrice || release.songPrice} XRP</span>
-                  <span className={`text-xs ${isSoldOut ? 'text-red-500' : available < 10 ? 'text-orange-500' : 'text-secondary'}`}>
+                <h3 style={{ color: textColor, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                  {release.title}
+                </h3>
+                <p style={{ color: mutedColor, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 8 }}>
+                  {getArtistDisplay(release)}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13 }}>
+                    {release.albumPrice || release.songPrice} XRP
+                  </span>
+                  <span style={{ color: isSoldOut ? '#ef4444' : available < 10 ? '#f97316' : mutedColor, fontSize: 12 }}>
                     {isSoldOut ? 'Sold Out' : `${available} left`}
                   </span>
                 </div>
@@ -184,9 +211,11 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
       {/* All Tracks */}
       {allTracks.length > 0 && (
         <section>
-          <h2 className="text-main text-2xl font-bold mb-4">All Tracks</h2>
+          <h2 style={{ color: textColor, fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+            All Tracks
+          </h2>
           
-          <div className="bg-card rounded-xl overflow-hidden">
+          <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, overflow: 'hidden' }}>
             {allTracks.map((trackData, index) => {
               const release = trackData.release;
               const available = release.totalEditions - release.soldEditions;
@@ -197,40 +226,48 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
                 <div
                   key={`${release.id}-${trackData.id}`}
                   onClick={() => !isSoldOut && handlePlayTrack(release, trackData, trackData.trackIndex)}
-                  className={`flex items-center gap-3 p-3 cursor-pointer hover:opacity-80 transition-opacity ${
-                    isSoldOut ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${index !== allTracks.length - 1 ? 'border-b border-white/10' : ''}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 12,
+                    cursor: isSoldOut ? 'not-allowed' : 'pointer',
+                    opacity: isSoldOut ? 0.5 : 1,
+                    borderBottom: index !== allTracks.length - 1 ? `1px solid ${cardBorder}` : 'none',
+                  }}
                 >
-                  <div className="relative w-12 h-12 flex-shrink-0">
-                    <img src={release.coverUrl} alt={trackData.displayTitle} className="w-full h-full rounded object-cover" />
+                  <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                    <img src={release.coverUrl} alt={trackData.displayTitle} style={{ width: '100%', height: '100%', borderRadius: 6, objectFit: 'cover' }} />
                     {isThisPlaying && isPlaying && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
-                        <div className="flex gap-0.5">
-                          <div className="w-1 h-4 bg-green-500 animate-pulse rounded"></div>
-                          <div className="w-1 h-3 bg-green-500 animate-pulse rounded"></div>
-                          <div className="w-1 h-4 bg-green-500 animate-pulse rounded"></div>
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: 6 }}>
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          <div style={{ width: 3, height: 16, background: '#22c55e', borderRadius: 2 }}></div>
+                          <div style={{ width: 3, height: 12, background: '#22c55e', borderRadius: 2 }}></div>
+                          <div style={{ width: 3, height: 16, background: '#22c55e', borderRadius: 2 }}></div>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-medium truncate ${isThisPlaying ? 'text-green-500' : 'text-main'}`}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ color: isThisPlaying ? '#22c55e' : textColor, fontWeight: 500, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {trackData.displayTitle}
                     </p>
-                    <p className="text-secondary text-sm truncate">{getArtistDisplay(release)}</p>
+                    <p style={{ color: mutedColor, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {getArtistDisplay(release)}
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {isSoldOut ? (
-                      <span className="text-xs font-medium text-red-500">Sold</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: '#ef4444' }}>Sold</span>
                     ) : (
                       <>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-blue-500">{release.songPrice} XRP</p>
-                          <p className={`text-xs ${available < 10 ? 'text-orange-500' : 'text-secondary'}`}>{available} left</p>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#3b82f6' }}>{release.songPrice} XRP</p>
+                          <p style={{ fontSize: 11, color: available < 10 ? '#f97316' : mutedColor }}>{available} left</p>
                         </div>
-                        <ChevronRight size={16} className="text-secondary" />
+                        <ChevronRight size={16} color={mutedColor} />
                       </>
                     )}
                   </div>
@@ -244,14 +281,14 @@ export default function StreamPage({ onPlayTrack, onSelectAlbum, currentlyPlayin
       {/* Stats */}
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Releases', value: releases.length, color: 'text-blue-500' },
-          { label: 'Tracks', value: allTracks.length, color: 'text-purple-500' },
-          { label: 'Artists', value: new Set(releases.map(r => r.artistAddress)).size, color: 'text-green-500' },
-          { label: 'Sold', value: releases.reduce((acc, r) => acc + r.soldEditions, 0), color: 'text-orange-500' },
+          { label: 'Releases', value: releases.length, color: '#3b82f6' },
+          { label: 'Tracks', value: allTracks.length, color: '#a855f7' },
+          { label: 'Artists', value: new Set(releases.map(r => r.artistAddress)).size, color: '#22c55e' },
+          { label: 'Sold', value: releases.reduce((acc, r) => acc + r.soldEditions, 0), color: '#f97316' },
         ].map((stat) => (
-          <div key={stat.label} className="bg-card p-4 rounded-xl text-center">
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-            <p className="text-secondary">{stat.label}</p>
+          <div key={stat.label} style={{ background: cardBg, border: `1px solid ${cardBorder}`, padding: 16, borderRadius: 12, textAlign: 'center' }}>
+            <p style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>{stat.value}</p>
+            <p style={{ color: mutedColor }}>{stat.label}</p>
           </div>
         ))}
       </section>
