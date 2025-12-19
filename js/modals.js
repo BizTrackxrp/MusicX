@@ -1121,13 +1121,6 @@ const Modals = {
                       </svg>
                       <span>Single</span>
                     </button>
-                    <button type="button" class="release-type-btn" data-type="ep">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                        <line x1="9" y1="3" x2="9" y2="21"></line>
-                      </svg>
-                      <span>EP</span>
-                    </button>
                     <button type="button" class="release-type-btn" data-type="album">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="2" width="20" height="20" rx="2"></rect>
@@ -1271,7 +1264,7 @@ const Modals = {
         .create-modal { max-width: 540px; }
         .create-step-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; }
         .create-step.hidden { display: none; }
-        .release-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
+        .release-type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; }
         .release-type-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; background: var(--bg-hover); border: 2px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
         .release-type-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
         .release-type-btn.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
