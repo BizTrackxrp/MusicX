@@ -294,4 +294,52 @@ const XamanWallet = {
   dropsToXrp(drops) {
     return Number(drops) / 1_000_000;
   },
+  
+  /**
+   * Send XRP payment to an address
+   */
+  async sendPayment(destination, amountXRP, memo = '') {
+    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!AppState.user?.address) throw new Error('Wallet not connected');
+    
+    console.log(`Creating payment: ${amountXRP} XRP to ${destination}`);
+    
+    // Build transaction
+    const txJson = {
+      TransactionType: 'Payment',
+      Destination: destination,
+      Amount: this.xrpToDrops(amountXRP),
+    };
+    
+    // Add memo if provided
+    if (memo) {
+      txJson.Memos = [{
+        Memo: {
+          MemoType: this.stringToHex('text/plain'),
+          MemoData: this.stringToHex(memo),
+        }
+      }];
+    }
+    
+    const payload = await this.sdk.payload?.create({
+      txjson: txJson,
+      custom_meta: {
+        instruction: `Pay ${amountXRP} XRP for music NFT`,
+      },
+    });
+    
+    if (!payload) {
+      throw new Error('Failed to create payment payload');
+    }
+    
+    // Open Xaman for signing
+    if (payload.next?.always) {
+      window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
+    
+    // Wait for result
+    return this.waitForPayload(payload.uuid);
+  },
 };
