@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     const blob = new Blob([filePart.data], { type: filePart.contentType });
     formData.append('file', blob, filePart.filename);
     
-    const lighthouseResponse = await fetch('https://node.lighthouse.storage/api/v0/add', {
+    const lighthouseResponse = await fetch('https://upload.lighthouse.storage/api/v0/add', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${lighthouseApiKey}`,
