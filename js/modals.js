@@ -950,14 +950,51 @@ const Modals = {
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
               </div>
             </button>
+            <div class="auth-waiting hidden" id="auth-waiting">
+              <div class="spinner"></div>
+              <p>Waiting for Xaman approval...</p>
+              <p class="auth-waiting-hint">Check your Xaman app or the popup window</p>
+            </div>
           </div>
         </div>
       </div>
+      <style>
+        .auth-waiting { text-align: center; padding: 20px 0; }
+        .auth-waiting .spinner { width: 32px; height: 32px; margin: 0 auto 12px; }
+        .auth-waiting p { color: var(--text-secondary); font-size: 14px; margin: 0; }
+        .auth-waiting-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px !important; }
+        .auth-waiting.hidden { display: none; }
+        .xaman-btn.hidden { display: none; }
+      </style>
     `;
     this.show(html);
+    
     document.getElementById('xaman-connect-btn')?.addEventListener('click', async () => {
+      // Show waiting state
+      document.getElementById('xaman-connect-btn')?.classList.add('hidden');
+      document.getElementById('auth-waiting')?.classList.remove('hidden');
+      
+      // Start connection
       await XamanWallet.connect();
-      if (XamanWallet.isConnected()) this.close();
+      
+      // The SDK will fire 'success' event when user signs
+      // We'll poll to check if connected
+      let attempts = 0;
+      const maxAttempts = 120; // 2 minutes
+      const checkConnection = setInterval(() => {
+        attempts++;
+        if (XamanWallet.isConnected()) {
+          clearInterval(checkConnection);
+          this.close();
+          // Navigate to stream page after successful login
+          Router.navigate('stream');
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkConnection);
+          // Show button again on timeout
+          document.getElementById('xaman-connect-btn')?.classList.remove('hidden');
+          document.getElementById('auth-waiting')?.classList.add('hidden');
+        }
+      }, 1000);
     });
   },
   
