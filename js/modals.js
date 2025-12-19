@@ -7,54 +7,53 @@ const Modals = {
   activeModal: null,
   nowPlayingInterval: null,
   
+  genres: [
+    { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
+    { id: 'rap', name: 'Rap', color: '#ef4444' },
+    { id: 'electronic', name: 'Electronic', color: '#3b82f6' },
+    { id: 'rnb', name: 'R&B', color: '#a855f7' },
+    { id: 'pop', name: 'Pop', color: '#ec4899' },
+    { id: 'rock', name: 'Rock', color: '#84cc16' },
+    { id: 'country', name: 'Country', color: '#f59e0b' },
+    { id: 'jazz', name: 'Jazz', color: '#06b6d4' },
+    { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
+    { id: 'other', name: 'Other', color: '#6b7280' },
+  ],
+  
   show(html) {
     const container = document.getElementById('modals');
     if (!container) return;
-    
     container.innerHTML = html;
-    
     requestAnimationFrame(() => {
       container.querySelector('.modal-overlay')?.classList.add('visible');
     });
-    
     container.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) {
-        this.close();
-      }
+      if (e.target.classList.contains('modal-overlay')) this.close();
     });
-    
     container.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
       btn.addEventListener('click', () => this.close());
     });
-    
     document.addEventListener('keydown', this.handleEsc);
   },
   
   close() {
     const container = document.getElementById('modals');
     if (!container) return;
-    
     if (this.nowPlayingInterval) {
       clearInterval(this.nowPlayingInterval);
       this.nowPlayingInterval = null;
     }
-    
     const overlay = container.querySelector('.modal-overlay');
     if (overlay) {
       overlay.classList.remove('visible');
-      setTimeout(() => {
-        container.innerHTML = '';
-      }, 200);
+      setTimeout(() => { container.innerHTML = ''; }, 200);
     }
-    
     document.removeEventListener('keydown', this.handleEsc);
     this.activeModal = null;
   },
   
   handleEsc(e) {
-    if (e.key === 'Escape') {
-      Modals.close();
-    }
+    if (e.key === 'Escape') Modals.close();
   },
   
   async showNowPlaying() {
@@ -64,7 +63,6 @@ const Modals = {
     this.activeModal = 'now-playing';
     
     let release = AppState.releases.find(r => r.id === track.releaseId);
-    
     if (!release && track.releaseId) {
       try {
         const data = await API.getRelease(track.releaseId);
@@ -76,180 +74,430 @@ const Modals = {
     
     const isLiked = isTrackLiked(track.trackId || track.id?.toString());
     const available = release ? release.totalEditions - release.soldEditions : 0;
+    const total = release ? release.totalEditions : 0;
     const price = release ? (release.albumPrice || release.songPrice) : 0;
+    const soldOut = available <= 0;
+    const lowStock = available > 0 && available <= 10;
     
     const html = `
       <div class="modal-overlay now-playing-modal">
-        <div class="modal now-playing-content">
-          <button class="modal-close now-playing-close">
+        <div class="modal np-modal">
+          <button class="modal-close np-close">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           </button>
           
-          <div class="now-playing-cover">
-            <img src="${track.cover || '/placeholder.png'}" alt="${track.title}">
-          </div>
-          
-          <div class="now-playing-info">
-            <h1 class="now-playing-title">${track.title}</h1>
-            <button class="now-playing-artist" data-artist="${release?.artistAddress || ''}">
-              ${track.artist}
-            </button>
-          </div>
-          
-          <div class="now-playing-progress-section">
-            <div class="now-playing-progress" id="np-progress">
-              <div class="now-playing-progress-fill" id="np-progress-fill" style="width: ${AppState.player.progress}%"></div>
+          <div class="np-layout">
+            <!-- Left: Cover Art -->
+            <div class="np-cover-section">
+              <div class="np-cover">
+                <img src="${track.cover || '/placeholder.png'}" alt="${track.title}">
+              </div>
             </div>
-            <div class="now-playing-times">
-              <span id="np-current-time">${Helpers.formatDuration(Player.audio?.currentTime || 0)}</span>
-              <span id="np-duration">${Helpers.formatDuration(AppState.player.duration || 0)}</span>
-            </div>
-          </div>
-          
-          <div class="now-playing-controls">
-            <button class="np-control-btn ${AppState.player.isShuffled ? 'active' : ''}" id="np-shuffle-btn" title="Shuffle">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="16 3 21 3 21 8"></polyline>
-                <line x1="4" y1="20" x2="21" y2="3"></line>
-                <polyline points="21 16 21 21 16 21"></polyline>
-                <line x1="15" y1="15" x2="21" y2="21"></line>
-                <line x1="4" y1="4" x2="9" y2="9"></line>
-              </svg>
-            </button>
-            <button class="np-control-btn" id="np-prev-btn" title="Previous">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="19 20 9 12 19 4 19 20"></polygon>
-                <line x1="5" y1="19" x2="5" y2="5"></line>
-              </svg>
-            </button>
-            <button class="np-play-btn" id="np-play-btn">
-              ${AppState.player.isPlaying 
-                ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
-                : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>'
-              }
-            </button>
-            <button class="np-control-btn" id="np-next-btn" title="Next">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 4 15 12 5 20 5 4"></polygon>
-                <line x1="19" y1="5" x2="19" y2="19"></line>
-              </svg>
-            </button>
-            <button class="np-control-btn ${AppState.player.isRepeat ? 'active' : ''}" id="np-repeat-btn" title="Repeat">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="17 1 21 5 17 9"></polyline>
-                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                <polyline points="7 23 3 19 7 15"></polyline>
-                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-              </svg>
-            </button>
-          </div>
-          
-          <div class="now-playing-actions">
-            <button class="np-action-btn ${isLiked ? 'liked' : ''}" id="np-like-btn" title="Like">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-              </svg>
-            </button>
-            <button class="np-action-btn" id="np-add-btn" title="Add to Playlist">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
-          </div>
-          
-          ${release ? `
-            <div class="now-playing-release">
-              <div class="np-release-header">
-                <span class="release-type-badge ${release.type}">${release.type}</span>
-                <span class="np-release-title">${release.title}</span>
+            
+            <!-- Right: Info & Controls -->
+            <div class="np-info-section">
+              <div class="np-track-info">
+                <h1 class="np-title">${track.title}</h1>
+                <button class="np-artist" data-artist="${release?.artistAddress || ''}">${track.artist}</button>
+                ${release ? `<span class="np-release-type">${release.type === 'album' ? 'Album' : release.type === 'ep' ? 'EP' : 'Single'}: ${release.title}</span>` : ''}
               </div>
               
-              <div class="np-release-stats">
-                <div class="np-stat">
-                  <span class="np-stat-value">${price}</span>
-                  <span class="np-stat-label">XRP</span>
+              <!-- Progress -->
+              <div class="np-progress-section">
+                <div class="np-progress" id="np-progress">
+                  <div class="np-progress-fill" id="np-progress-fill" style="width: ${AppState.player.progress}%"></div>
                 </div>
-                <div class="np-stat">
-                  <span class="np-stat-value">${available}</span>
-                  <span class="np-stat-label">Available</span>
-                </div>
-                <div class="np-stat">
-                  <span class="np-stat-value">${release.totalEditions}</span>
-                  <span class="np-stat-label">Total</span>
+                <div class="np-times">
+                  <span id="np-current-time">${Helpers.formatDuration(Player.audio?.currentTime || 0)}</span>
+                  <span id="np-duration">${Helpers.formatDuration(AppState.player.duration || 0)}</span>
                 </div>
               </div>
               
-              ${available > 0 ? `
-                <button class="btn btn-primary np-buy-btn" id="np-buy-btn">Buy for ${price} XRP</button>
-              ` : '<div class="np-sold-out">Sold Out</div>'}
+              <!-- Controls -->
+              <div class="np-controls">
+                <button class="np-ctrl-btn ${AppState.player.isShuffled ? 'active' : ''}" id="np-shuffle-btn" title="Shuffle">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 3 21 3 21 8"></polyline>
+                    <line x1="4" y1="20" x2="21" y2="3"></line>
+                    <polyline points="21 16 21 21 16 21"></polyline>
+                    <line x1="15" y1="15" x2="21" y2="21"></line>
+                    <line x1="4" y1="4" x2="9" y2="9"></line>
+                  </svg>
+                </button>
+                <button class="np-ctrl-btn" id="np-prev-btn">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                    <line x1="5" y1="19" x2="5" y2="5"></line>
+                  </svg>
+                </button>
+                <button class="np-play-btn" id="np-play-btn">
+                  ${AppState.player.isPlaying 
+                    ? '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
+                    : '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>'
+                  }
+                </button>
+                <button class="np-ctrl-btn" id="np-next-btn">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                    <line x1="19" y1="5" x2="19" y2="19"></line>
+                  </svg>
+                </button>
+                <button class="np-ctrl-btn ${AppState.player.isRepeat ? 'active' : ''}" id="np-repeat-btn" title="Repeat">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="17 1 21 5 17 9"></polyline>
+                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                    <polyline points="7 23 3 19 7 15"></polyline>
+                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                  </svg>
+                </button>
+              </div>
               
-              ${release.tracks && release.tracks.length > 1 ? `
-                <div class="np-tracklist">
-                  <h3 class="np-tracklist-title">All Tracks</h3>
-                  <div class="np-tracks">
-                    ${release.tracks.map((t, idx) => {
-                      const isCurrentTrack = (t.id === track.id) || (t.id?.toString() === track.trackId);
-                      return `
-                        <div class="np-track-item ${isCurrentTrack ? 'playing' : ''}" data-track-idx="${idx}">
-                          <span class="np-track-num">${isCurrentTrack ? '▶' : idx + 1}</span>
-                          <span class="np-track-title">${release.type === 'single' ? release.title : t.title}</span>
-                          <span class="np-track-duration">${Helpers.formatDuration(t.duration)}</span>
-                        </div>
-                      `;
-                    }).join('')}
+              <!-- Actions -->
+              <div class="np-actions">
+                <button class="np-action-btn ${isLiked ? 'liked' : ''}" id="np-like-btn" title="Like">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                  </svg>
+                  <span>Like</span>
+                </button>
+                <button class="np-action-btn" id="np-add-btn" title="Add to Playlist">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>Add to Playlist</span>
+                </button>
+              </div>
+              
+              ${release ? `
+                <!-- Purchase Section -->
+                <div class="np-purchase">
+                  <div class="np-scarcity ${soldOut ? 'sold-out' : lowStock ? 'low-stock' : ''}">
+                    <div class="np-scarcity-bar">
+                      <div class="np-scarcity-fill" style="width: ${total > 0 ? ((total - available) / total) * 100 : 0}%"></div>
+                    </div>
+                    <div class="np-scarcity-text">
+                      ${soldOut 
+                        ? '<span class="np-sold-out-text">SOLD OUT</span>'
+                        : `<span class="np-available">${available}</span> of <span>${total}</span> remaining`
+                      }
+                    </div>
                   </div>
+                  
+                  ${!soldOut ? `
+                    <button class="np-buy-btn" id="np-buy-btn">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                      </svg>
+                      Buy NFT for ${price} XRP
+                    </button>
+                  ` : ''}
                 </div>
               ` : ''}
+            </div>
+          </div>
+          
+          ${release?.tracks && release.tracks.length > 1 ? `
+            <!-- Track List -->
+            <div class="np-tracklist">
+              <h3 class="np-tracklist-title">ALL TRACKS IN THIS ${release.type === 'album' ? 'ALBUM' : 'RELEASE'}</h3>
+              <div class="np-tracks">
+                ${release.tracks.map((t, idx) => {
+                  const isCurrentTrack = (t.id === track.id) || (t.id?.toString() === track.trackId);
+                  return `
+                    <div class="np-track-row ${isCurrentTrack ? 'playing' : ''}" data-track-idx="${idx}">
+                      <span class="np-track-num">${isCurrentTrack ? '▶' : idx + 1}</span>
+                      <span class="np-track-name">${release.type === 'single' ? release.title : t.title}</span>
+                      <span class="np-track-dur">${Helpers.formatDuration(t.duration)}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
             </div>
           ` : ''}
         </div>
       </div>
       
       <style>
-        .now-playing-modal .modal { max-width: 420px; max-height: 90vh; overflow-y: auto; background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%); border-radius: var(--radius-2xl); }
-        .now-playing-content { padding: 24px; padding-top: 48px; }
-        .now-playing-close { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
-        .now-playing-cover { width: 100%; aspect-ratio: 1; border-radius: var(--radius-xl); overflow: hidden; box-shadow: var(--shadow-xl); margin-bottom: 24px; }
-        .now-playing-cover img { width: 100%; height: 100%; object-fit: cover; }
-        .now-playing-info { text-align: center; margin-bottom: 24px; }
-        .now-playing-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-        .now-playing-artist { font-size: 16px; color: var(--text-secondary); background: none; border: none; cursor: pointer; transition: color 150ms; }
-        .now-playing-artist:hover { color: var(--accent); }
-        .now-playing-progress-section { margin-bottom: 16px; }
-        .now-playing-progress { height: 4px; background: var(--border-color); border-radius: 2px; cursor: pointer; overflow: hidden; }
-        .now-playing-progress-fill { height: 100%; background: var(--accent); transition: width 100ms linear; }
-        .now-playing-times { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--text-muted); }
-        .now-playing-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 24px; }
-        .np-control-btn { padding: 8px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
-        .np-control-btn:hover { color: var(--text-primary); }
-        .np-control-btn.active { color: var(--accent); }
-        .np-play-btn { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 150ms, background 150ms; }
+        .np-modal {
+          width: 95%;
+          max-width: 800px;
+          max-height: 90vh;
+          overflow-y: auto;
+          background: var(--bg-secondary);
+          border-radius: var(--radius-2xl);
+          padding: 0;
+        }
+        .np-close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          z-index: 10;
+          padding: 8px;
+          background: var(--bg-hover);
+          border: none;
+          border-radius: 50%;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .np-close:hover {
+          background: var(--border-color);
+          color: var(--text-primary);
+        }
+        .np-layout {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
+          padding: 24px;
+        }
+        @media (min-width: 600px) {
+          .np-layout {
+            grid-template-columns: 280px 1fr;
+            padding: 32px;
+          }
+        }
+        .np-cover-section {
+          display: flex;
+          justify-content: center;
+        }
+        .np-cover {
+          width: 100%;
+          max-width: 280px;
+          aspect-ratio: 1;
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .np-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .np-info-section {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+        .np-track-info {
+          text-align: center;
+        }
+        @media (min-width: 600px) {
+          .np-track-info { text-align: left; }
+        }
+        .np-title {
+          font-size: 28px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .np-artist {
+          font-size: 18px;
+          color: var(--text-secondary);
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          transition: color 150ms;
+        }
+        .np-artist:hover { color: var(--accent); }
+        .np-release-type {
+          display: block;
+          font-size: 13px;
+          color: var(--text-muted);
+          margin-top: 4px;
+        }
+        .np-progress-section { margin-top: auto; }
+        .np-progress {
+          height: 6px;
+          background: var(--border-color);
+          border-radius: 3px;
+          cursor: pointer;
+          overflow: hidden;
+        }
+        .np-progress-fill {
+          height: 100%;
+          background: var(--accent);
+          border-radius: 3px;
+          transition: width 100ms linear;
+        }
+        .np-times {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 8px;
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .np-controls {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+        }
+        @media (min-width: 600px) {
+          .np-controls { justify-content: flex-start; }
+        }
+        .np-ctrl-btn {
+          padding: 10px;
+          background: transparent;
+          border: none;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 150ms;
+          border-radius: var(--radius-md);
+        }
+        .np-ctrl-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .np-ctrl-btn.active { color: var(--accent); }
+        .np-play-btn {
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          background: var(--accent);
+          border: none;
+          color: white;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 150ms, background 150ms;
+          margin: 0 8px;
+        }
         .np-play-btn:hover { transform: scale(1.05); background: var(--accent-hover); }
-        .now-playing-actions { display: flex; justify-content: center; gap: 24px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color); }
-        .np-action-btn { padding: 12px; background: var(--bg-hover); border: none; border-radius: 50%; color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
+        .np-actions {
+          display: flex;
+          gap: 12px;
+          justify-content: center;
+        }
+        @media (min-width: 600px) {
+          .np-actions { justify-content: flex-start; }
+        }
+        .np-action-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 16px;
+          background: var(--bg-hover);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          color: var(--text-secondary);
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 150ms;
+        }
         .np-action-btn:hover { background: var(--border-color); color: var(--text-primary); }
-        .np-action-btn.liked { color: var(--error); }
-        .now-playing-release { background: var(--bg-card); border-radius: var(--radius-xl); padding: 16px; }
-        .np-release-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-        .np-release-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-        .np-release-stats { display: flex; justify-content: space-around; margin-bottom: 16px; }
-        .np-stat { text-align: center; }
-        .np-stat-value { display: block; font-size: 20px; font-weight: 700; color: var(--accent); }
-        .np-stat-label { font-size: 12px; color: var(--text-muted); }
-        .np-buy-btn { width: 100%; margin-bottom: 16px; }
-        .np-sold-out { text-align: center; padding: 12px; background: var(--bg-hover); border-radius: var(--radius-lg); color: var(--error); font-weight: 600; margin-bottom: 16px; }
-        .np-tracklist { border-top: 1px solid var(--border-color); padding-top: 16px; }
-        .np-tracklist-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; }
-        .np-track-item { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: var(--radius-md); cursor: pointer; transition: background 150ms; }
-        .np-track-item:hover { background: var(--bg-hover); }
-        .np-track-item.playing { background: rgba(59, 130, 246, 0.1); }
-        .np-track-item.playing .np-track-title { color: var(--accent); }
-        .np-track-num { width: 20px; font-size: 13px; color: var(--text-muted); text-align: center; }
-        .np-track-title { flex: 1; font-size: 14px; color: var(--text-primary); }
-        .np-track-duration { font-size: 13px; color: var(--text-muted); }
+        .np-action-btn.liked { color: var(--error); border-color: var(--error); }
+        .np-purchase {
+          padding: 20px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+        }
+        .np-scarcity { margin-bottom: 16px; }
+        .np-scarcity-bar {
+          height: 8px;
+          background: var(--bg-hover);
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 8px;
+        }
+        .np-scarcity-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--accent), #a855f7);
+          border-radius: 4px;
+          transition: width 300ms;
+        }
+        .np-scarcity.low-stock .np-scarcity-fill { background: linear-gradient(90deg, var(--warning), var(--error)); }
+        .np-scarcity.sold-out .np-scarcity-fill { background: var(--error); }
+        .np-scarcity-text {
+          font-size: 14px;
+          color: var(--text-secondary);
+          text-align: center;
+        }
+        .np-available {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--accent);
+        }
+        .np-scarcity.low-stock .np-available { color: var(--warning); }
+        .np-sold-out-text {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--error);
+        }
+        .np-buy-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          width: 100%;
+          padding: 16px 24px;
+          background: linear-gradient(135deg, var(--accent), #a855f7);
+          border: none;
+          border-radius: var(--radius-lg);
+          color: white;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 150ms, box-shadow 150ms;
+        }
+        .np-buy-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+        }
+        .np-tracklist {
+          padding: 24px;
+          padding-top: 0;
+          border-top: 1px solid var(--border-color);
+          margin-top: 0;
+        }
+        @media (min-width: 600px) {
+          .np-tracklist { padding: 0 32px 32px; }
+        }
+        .np-tracklist-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-muted);
+          letter-spacing: 0.5px;
+          margin: 20px 0 12px;
+        }
+        .np-tracks {
+          background: var(--bg-card);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+        }
+        .np-track-row {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 14px 16px;
+          cursor: pointer;
+          transition: background 150ms;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .np-track-row:last-child { border-bottom: none; }
+        .np-track-row:hover { background: var(--bg-hover); }
+        .np-track-row.playing { background: rgba(59, 130, 246, 0.1); }
+        .np-track-row.playing .np-track-name { color: var(--accent); }
+        .np-track-num {
+          width: 24px;
+          font-size: 14px;
+          color: var(--text-muted);
+          text-align: center;
+        }
+        .np-track-name {
+          flex: 1;
+          font-size: 15px;
+          color: var(--text-primary);
+        }
+        .np-track-dur {
+          font-size: 14px;
+          color: var(--text-muted);
+        }
       </style>
     `;
     
@@ -289,7 +537,7 @@ const Modals = {
       const btn = document.getElementById('np-like-btn');
       if (btn) {
         btn.classList.toggle('liked', isLiked);
-        btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+        btn.querySelector('svg').setAttribute('fill', isLiked ? 'currentColor' : 'none');
       }
     });
     
@@ -300,25 +548,28 @@ const Modals = {
       Player.audio.currentTime = percent * Player.audio.duration;
     });
     
-    document.querySelector('.now-playing-artist')?.addEventListener('click', () => {
-      const artistAddress = document.querySelector('.now-playing-artist')?.dataset.artist;
+    document.querySelector('.np-artist')?.addEventListener('click', () => {
+      const artistAddress = document.querySelector('.np-artist')?.dataset.artist;
       if (artistAddress) {
         this.close();
         Router.navigate('artist', { address: artistAddress });
       }
     });
     
+    // Buy button - triggers purchase flow
     document.getElementById('np-buy-btn')?.addEventListener('click', () => {
       if (!AppState.user?.address) {
         this.close();
         this.showAuth();
         return;
       }
-      alert('Buy feature coming soon!');
+      if (release) {
+        this.showPurchase(release);
+      }
     });
     
     if (release?.tracks) {
-      document.querySelectorAll('.np-track-item').forEach(item => {
+      document.querySelectorAll('.np-track-row').forEach(item => {
         item.addEventListener('click', () => {
           const idx = parseInt(item.dataset.trackIdx, 10);
           const t = release.tracks[idx];
@@ -333,7 +584,6 @@ const Modals = {
               releaseId: release.id,
               duration: t.duration,
             };
-            
             const queue = release.tracks.map((tr, i) => ({
               id: parseInt(tr.id) || i,
               trackId: tr.id?.toString(),
@@ -344,10 +594,8 @@ const Modals = {
               releaseId: release.id,
               duration: tr.duration,
             }));
-            
             Player.playTrack(playTrack, queue, idx);
-            
-            document.querySelectorAll('.np-track-item').forEach((el, i) => {
+            document.querySelectorAll('.np-track-row').forEach((el, i) => {
               el.classList.toggle('playing', i === idx);
               el.querySelector('.np-track-num').textContent = i === idx ? '▶' : i + 1;
             });
@@ -363,12 +611,10 @@ const Modals = {
         clearInterval(this.nowPlayingInterval);
         return;
       }
-      
       const progress = AppState.player.progress;
       const fill = document.getElementById('np-progress-fill');
       const currentTime = document.getElementById('np-current-time');
       const duration = document.getElementById('np-duration');
-      
       if (fill) fill.style.width = `${progress}%`;
       if (currentTime) currentTime.textContent = Helpers.formatDuration(Player.audio?.currentTime || 0);
       if (duration) duration.textContent = Helpers.formatDuration(Player.audio?.duration || 0);
@@ -379,13 +625,309 @@ const Modals = {
     const btn = document.getElementById('np-play-btn');
     if (!btn) return;
     btn.innerHTML = AppState.player.isPlaying 
-      ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
-      : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+      ? '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
+      : '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+  },
+
+  /**
+   * Show Purchase/Checkout Modal
+   */
+  showPurchase(release) {
+    this.activeModal = 'purchase';
+    
+    const price = release.albumPrice || release.songPrice;
+    const available = release.totalEditions - release.soldEditions;
+    
+    const html = `
+      <div class="modal-overlay">
+        <div class="modal purchase-modal">
+          <div class="modal-header">
+            <div class="modal-title">Complete Purchase</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <!-- Item Preview -->
+            <div class="purchase-item">
+              <div class="purchase-cover">
+                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
+              </div>
+              <div class="purchase-details">
+                <div class="purchase-title">${release.title}</div>
+                <div class="purchase-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
+                <div class="purchase-type">${release.type} • ${release.tracks?.length || 1} track${release.tracks?.length !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+            
+            <!-- Price Summary -->
+            <div class="purchase-summary">
+              <div class="purchase-row">
+                <span>NFT Price</span>
+                <span>${price} XRP</span>
+              </div>
+              <div class="purchase-row">
+                <span>Network Fee</span>
+                <span>~0.00001 XRP</span>
+              </div>
+              <div class="purchase-row purchase-total">
+                <span>Total</span>
+                <span>${price} XRP</span>
+              </div>
+            </div>
+            
+            <!-- Scarcity Reminder -->
+            <div class="purchase-scarcity">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Only <strong>${available}</strong> of ${release.totalEditions} remaining!</span>
+            </div>
+            
+            <!-- Purchase Status -->
+            <div class="purchase-status" id="purchase-status" style="display: none;">
+              <div class="purchase-status-icon">
+                <div class="spinner"></div>
+              </div>
+              <div class="purchase-status-text">Waiting for payment...</div>
+              <div class="purchase-status-sub">Check your Xaman app to sign the transaction</div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="purchase-actions" id="purchase-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary purchase-confirm-btn" id="confirm-purchase-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+                Pay with Xaman
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .purchase-modal {
+          max-width: 440px;
+        }
+        .purchase-item {
+          display: flex;
+          gap: 16px;
+          padding: 16px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-lg);
+          margin-bottom: 20px;
+        }
+        .purchase-cover {
+          width: 80px;
+          height: 80px;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          flex-shrink: 0;
+          background: var(--bg-card);
+        }
+        .purchase-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .purchase-details {
+          flex: 1;
+          min-width: 0;
+        }
+        .purchase-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .purchase-artist {
+          font-size: 14px;
+          color: var(--text-secondary);
+          margin-bottom: 4px;
+        }
+        .purchase-type {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .purchase-summary {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+        .purchase-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          font-size: 14px;
+          color: var(--text-secondary);
+        }
+        .purchase-row.purchase-total {
+          border-top: 1px solid var(--border-color);
+          margin-top: 8px;
+          padding-top: 16px;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .purchase-scarcity {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: rgba(245, 158, 11, 0.1);
+          border: 1px solid rgba(245, 158, 11, 0.3);
+          border-radius: var(--radius-lg);
+          font-size: 13px;
+          color: var(--warning);
+          margin-bottom: 20px;
+        }
+        .purchase-status {
+          text-align: center;
+          padding: 24px;
+          margin-bottom: 20px;
+        }
+        .purchase-status-icon {
+          margin-bottom: 16px;
+        }
+        .purchase-status-icon .spinner {
+          width: 48px;
+          height: 48px;
+          border-width: 3px;
+          margin: 0 auto;
+        }
+        .purchase-status-icon.success {
+          color: var(--success);
+        }
+        .purchase-status-icon.error {
+          color: var(--error);
+        }
+        .purchase-status-text {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .purchase-status-sub {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .purchase-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .purchase-actions .btn {
+          flex: 1;
+        }
+        .purchase-confirm-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+      </style>
+    `;
+    
+    this.show(html);
+    
+    // Bind confirm button
+    document.getElementById('confirm-purchase-btn')?.addEventListener('click', async () => {
+      await this.processPurchase(release);
+    });
+  },
+  
+  /**
+   * Process the actual purchase via Xaman
+   */
+  async processPurchase(release) {
+    const statusEl = document.getElementById('purchase-status');
+    const actionsEl = document.getElementById('purchase-actions');
+    const price = release.albumPrice || release.songPrice;
+    
+    // Show loading state
+    if (statusEl) statusEl.style.display = 'block';
+    if (actionsEl) actionsEl.style.display = 'none';
+    
+    try {
+      // Create payment request via Xaman
+      const result = await XamanWallet.sendPayment(
+        release.artistAddress,
+        price,
+        `XRP Music: ${release.title}`
+      );
+      
+      if (result.success) {
+        // Update status to success
+        if (statusEl) {
+          statusEl.innerHTML = `
+            <div class="purchase-status-icon success">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+            </div>
+            <div class="purchase-status-text">Purchase Complete!</div>
+            <div class="purchase-status-sub">Your NFT has been added to your collection</div>
+          `;
+        }
+        
+        // TODO: Record purchase in database
+        // await API.recordPurchase(release.id, AppState.user.address, result.txHash);
+        
+        // Show success for a moment then close
+        setTimeout(() => {
+          this.close();
+          // Refresh releases to update availability
+          if (typeof StreamPage !== 'undefined') {
+            StreamPage.render();
+          }
+        }, 2000);
+        
+      } else {
+        throw new Error(result.error || 'Payment failed');
+      }
+      
+    } catch (error) {
+      console.error('Purchase failed:', error);
+      
+      // Update status to error
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div class="purchase-status-icon error">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="purchase-status-text">Purchase Failed</div>
+          <div class="purchase-status-sub">${error.message || 'Transaction was cancelled or failed'}</div>
+        `;
+      }
+      
+      // Show actions again to allow retry
+      if (actionsEl) {
+        actionsEl.style.display = 'flex';
+        actionsEl.innerHTML = `
+          <button class="btn btn-secondary close-modal-btn" onclick="Modals.close()">Close</button>
+          <button class="btn btn-primary" onclick="Modals.showPurchase(${JSON.stringify(release).replace(/"/g, '&quot;')})">Try Again</button>
+        `;
+      }
+    }
   },
 
   showAuth() {
     this.activeModal = 'auth';
-    
     const html = `
       <div class="modal-overlay auth-modal">
         <div class="modal">
@@ -401,7 +943,6 @@ const Modals = {
           <div class="modal-body">
             <h3 class="auth-title">Welcome to XRP Music</h3>
             <p class="auth-description">Connect your Xaman wallet to stream, create, and collect music NFTs.</p>
-            
             <button class="xaman-btn" id="xaman-connect-btn">
               <img src="https://xumm.app/assets/icons/icon-512.png" alt="Xaman">
               <div class="xaman-btn-info">
@@ -413,23 +954,17 @@ const Modals = {
         </div>
       </div>
     `;
-    
     this.show(html);
-    
     document.getElementById('xaman-connect-btn')?.addEventListener('click', async () => {
       await XamanWallet.connect();
-      if (XamanWallet.isConnected()) {
-        this.close();
-      }
+      if (XamanWallet.isConnected()) this.close();
     });
   },
   
   showRelease(release) {
     this.activeModal = 'release';
-    
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
-    
     const html = `
       <div class="modal-overlay">
         <div class="modal" style="max-width: 600px;">
@@ -448,17 +983,13 @@ const Modals = {
             </div>
             <div style="padding: 24px;">
               <button class="artist-link" data-artist="${release.artistAddress}" style="display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); margin-bottom: 16px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">
-                  ${(release.artistName || 'A')[0].toUpperCase()}
-                </div>
+                <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">${(release.artistName || 'A')[0].toUpperCase()}</div>
                 <span>${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
               </button>
-              
               <div style="display: flex; justify-content: space-between; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 16px;">
                 <div><div style="font-size: 24px; font-weight: 700; color: var(--accent);">${price} XRP</div></div>
                 <div style="text-align: right;"><div style="font-size: 18px; font-weight: 600;">${available} / ${release.totalEditions}</div><div style="font-size: 13px; color: var(--text-muted);">available</div></div>
               </div>
-              
               ${release.tracks?.length > 0 ? `
                 <div style="margin-bottom: 16px;">
                   <h4 style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">TRACKS</h4>
@@ -473,7 +1004,6 @@ const Modals = {
                   </div>
                 </div>
               ` : ''}
-              
               <div style="display: flex; gap: 12px;">
                 <button class="btn btn-primary" style="flex: 1;" id="play-release-btn">Play</button>
                 ${available > 0 ? '<button class="btn btn-secondary" style="flex: 1;" id="buy-release-btn">Buy NFT</button>' : ''}
@@ -483,50 +1013,37 @@ const Modals = {
         </div>
       </div>
     `;
-    
     this.show(html);
-    
     document.getElementById('play-release-btn')?.addEventListener('click', () => {
       if (release.tracks?.length > 0) {
         const queue = release.tracks.map((t, i) => ({
-          id: parseInt(t.id) || i,
-          trackId: t.id?.toString(),
+          id: parseInt(t.id) || i, trackId: t.id?.toString(),
           title: release.type === 'single' ? release.title : t.title,
           artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-          cover: release.coverUrl,
-          ipfsHash: t.audioCid,
-          releaseId: release.id,
-          duration: t.duration,
+          cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
         }));
         Player.playTrack(queue[0], queue, 0);
         this.close();
       }
     });
-    
     document.querySelectorAll('.modal-track').forEach(item => {
       item.addEventListener('click', () => {
         const idx = parseInt(item.dataset.trackIdx, 10);
         if (release.tracks?.[idx]) {
           const queue = release.tracks.map((t, i) => ({
-            id: parseInt(t.id) || i,
-            trackId: t.id?.toString(),
+            id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-            cover: release.coverUrl,
-            ipfsHash: t.audioCid,
-            releaseId: release.id,
-            duration: t.duration,
+            cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
           }));
           Player.playTrack(queue[idx], queue, idx);
         }
       });
     });
-    
     document.getElementById('buy-release-btn')?.addEventListener('click', () => {
       if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
-      alert('Buy feature coming soon!');
+      this.showPurchase(release);
     });
-    
     document.querySelector('.artist-link')?.addEventListener('click', () => {
       const address = document.querySelector('.artist-link').dataset.artist;
       this.close();
@@ -544,7 +1061,6 @@ const Modals = {
     if (!AppState.user?.address) return;
     this.activeModal = 'edit-profile';
     const profile = AppState.profile || {};
-    
     const html = `
       <div class="modal-overlay">
         <div class="modal" style="max-width: 500px;">
@@ -565,7 +1081,26 @@ const Modals = {
               </div>
               <div class="form-group">
                 <label class="form-label">Bio</label>
-                <textarea class="form-input form-textarea" name="bio" placeholder="About yourself">${profile.bio || ''}</textarea>
+                <textarea class="form-input form-textarea" name="bio" placeholder="Tell us about yourself">${profile.bio || ''}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Choose up to 2 genres that fit your style</label>
+                <div class="genre-select-grid" id="genre-select">
+                  ${this.genres.map(genre => `
+                    <button type="button" class="genre-select-btn ${profile.genrePrimary === genre.id || profile.genreSecondary === genre.id ? 'selected' : ''}" 
+                            data-genre="${genre.id}" style="--genre-color: ${genre.color}">${genre.name}</button>
+                  `).join('')}
+                </div>
+                <input type="hidden" name="genrePrimary" id="genre-primary" value="${profile.genrePrimary || ''}">
+                <input type="hidden" name="genreSecondary" id="genre-secondary" value="${profile.genreSecondary || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Website</label>
+                <input type="url" class="form-input" name="website" value="${profile.website || ''}" placeholder="https://yoursite.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Twitter Handle</label>
+                <input type="text" class="form-input" name="twitter" value="${profile.twitter || ''}" placeholder="@username">
               </div>
               <div style="display: flex; gap: 12px; margin-top: 24px;">
                 <button type="button" class="btn btn-secondary close-modal-btn" style="flex: 1;">Cancel</button>
@@ -575,9 +1110,43 @@ const Modals = {
           </div>
         </div>
       </div>
+      <style>
+        .genre-select-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+        .genre-select-btn { padding: 10px 12px; border: 2px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-hover); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms; }
+        .genre-select-btn:hover { border-color: var(--genre-color); color: var(--text-primary); }
+        .genre-select-btn.selected { border-color: var(--genre-color); background: color-mix(in srgb, var(--genre-color) 20%, var(--bg-hover)); color: var(--genre-color); }
+      </style>
     `;
-    
     this.show(html);
+    this.bindEditProfileEvents();
+  },
+  
+  bindEditProfileEvents() {
+    const selectedGenres = [];
+    const profile = AppState.profile || {};
+    if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
+    if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
+    
+    document.querySelectorAll('.genre-select-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const genre = btn.dataset.genre;
+        const idx = selectedGenres.indexOf(genre);
+        if (idx > -1) {
+          selectedGenres.splice(idx, 1);
+          btn.classList.remove('selected');
+        } else if (selectedGenres.length < 2) {
+          selectedGenres.push(genre);
+          btn.classList.add('selected');
+        } else {
+          const oldGenre = selectedGenres.shift();
+          document.querySelector(`.genre-select-btn[data-genre="${oldGenre}"]`)?.classList.remove('selected');
+          selectedGenres.push(genre);
+          btn.classList.add('selected');
+        }
+        document.getElementById('genre-primary').value = selectedGenres[0] || '';
+        document.getElementById('genre-secondary').value = selectedGenres[1] || '';
+      });
+    });
     
     document.getElementById('edit-profile-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -586,13 +1155,19 @@ const Modals = {
         address: AppState.user.address,
         name: formData.get('name')?.trim() || null,
         bio: formData.get('bio')?.trim() || null,
+        website: formData.get('website')?.trim() || null,
+        twitter: formData.get('twitter')?.replace('@', '').trim() || null,
+        genrePrimary: formData.get('genrePrimary') || null,
+        genreSecondary: formData.get('genreSecondary') || null,
       };
       try {
         await API.saveProfile(updates);
         setProfile({ ...AppState.profile, ...updates });
         UI.updateUserCard();
         this.close();
+        if (typeof ProfilePage !== 'undefined') ProfilePage.render();
       } catch (error) {
+        console.error('Failed to save profile:', error);
         alert('Failed to save profile.');
       }
     });
