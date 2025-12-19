@@ -1,17 +1,26 @@
 /**
  * XRP Music - Profile Page
- * User profile with releases, collection, and settings
+ * User profile with releases, collection, genres, and settings
  */
 
 const ProfilePage = {
   releases: [],
   activeTab: 'posted',
-  isEditing: false,
-  tempProfile: null,
   
-  /**
-   * Render profile page
-   */
+  // Genre definitions (must match modals.js)
+  genres: [
+    { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
+    { id: 'rap', name: 'Rap', color: '#ef4444' },
+    { id: 'electronic', name: 'Electronic', color: '#3b82f6' },
+    { id: 'rnb', name: 'R&B', color: '#a855f7' },
+    { id: 'pop', name: 'Pop', color: '#ec4899' },
+    { id: 'rock', name: 'Rock', color: '#84cc16' },
+    { id: 'country', name: 'Country', color: '#f59e0b' },
+    { id: 'jazz', name: 'Jazz', color: '#06b6d4' },
+    { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
+    { id: 'other', name: 'Other', color: '#6b7280' },
+  ],
+  
   async render() {
     if (!AppState.user?.address) {
       this.renderNotLoggedIn();
@@ -27,8 +36,6 @@ const ProfilePage = {
         setProfile(profile);
       }
       
-      this.isEditing = false;
-      this.tempProfile = null;
       this.renderContent();
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -45,12 +52,36 @@ const ProfilePage = {
         </svg>
         <h3>Connect Your Wallet</h3>
         <p>Connect your Xaman wallet to view your profile.</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showAuth()">
-          Connect Wallet
-        </button>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showAuth()">Connect Wallet</button>
       </div>
     `;
     UI.renderPage(html);
+  },
+  
+  getGenreInfo(id) {
+    return this.genres.find(g => g.id === id) || null;
+  },
+  
+  renderGenreBadges(profile) {
+    const badges = [];
+    
+    if (profile.genrePrimary) {
+      const genre = this.getGenreInfo(profile.genrePrimary);
+      if (genre) {
+        badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
+      }
+    }
+    
+    if (profile.genreSecondary) {
+      const genre = this.getGenreInfo(profile.genreSecondary);
+      if (genre) {
+        badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
+      }
+    }
+    
+    if (badges.length === 0) return '';
+    
+    return `<div class="profile-genres">${badges.join('')}</div>`;
   },
   
   renderContent() {
@@ -76,6 +107,7 @@ const ProfilePage = {
           
           <div class="profile-info">
             <h1 class="profile-name">${displayName}</h1>
+            ${this.renderGenreBadges(profile)}
             <p class="profile-address">${Helpers.truncateAddress(address, 8, 6)}</p>
             ${profile.bio ? `<p class="profile-bio">${profile.bio}</p>` : ''}
             
@@ -182,7 +214,29 @@ const ProfilePage = {
         .profile-name {
           font-size: 28px;
           font-weight: 700;
-          margin-bottom: 4px;
+          margin-bottom: 8px;
+        }
+        .profile-genres {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 8px;
+          flex-wrap: wrap;
+        }
+        @media (max-width: 640px) {
+          .profile-genres {
+            justify-content: center;
+          }
+        }
+        .profile-genre-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 12px;
+          background: color-mix(in srgb, var(--genre-color) 20%, transparent);
+          border: 1px solid var(--genre-color);
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--genre-color);
         }
         .profile-address {
           color: var(--text-muted);
@@ -193,10 +247,16 @@ const ProfilePage = {
           color: var(--text-secondary);
           font-size: 14px;
           margin-bottom: 12px;
+          line-height: 1.5;
         }
         .profile-links {
           display: flex;
           gap: 12px;
+        }
+        @media (max-width: 640px) {
+          .profile-links {
+            justify-content: center;
+          }
         }
         .profile-link {
           color: var(--text-muted);
@@ -260,9 +320,7 @@ const ProfilePage = {
           </svg>
           <h3>No Releases Yet</h3>
           <p>Create your first release and start selling your music as NFTs!</p>
-          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">
-            Create Release
-          </button>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">Create Release</button>
         </div>
       `;
     }
@@ -282,9 +340,7 @@ const ProfilePage = {
         </svg>
         <h3>No Collected NFTs</h3>
         <p>NFTs you purchase will appear here.</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Router.navigate('marketplace')">
-          Browse Marketplace
-        </button>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Router.navigate('marketplace')">Browse Marketplace</button>
       </div>
     `;
   },
@@ -298,13 +354,7 @@ const ProfilePage = {
         <div class="release-card-cover">
           ${release.coverUrl 
             ? `<img src="${release.coverUrl}" alt="${release.title}">`
-            : `<div class="placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"></path>
-                  <circle cx="6" cy="18" r="3"></circle>
-                  <circle cx="18" cy="16" r="3"></circle>
-                </svg>
-              </div>`
+            : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
           <span class="release-availability">${available} left</span>
@@ -331,16 +381,13 @@ const ProfilePage = {
         </svg>
         <h3>Failed to Load</h3>
         <p>There was an error loading your profile.</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="ProfilePage.render()">
-          Retry
-        </button>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="ProfilePage.render()">Retry</button>
       </div>
     `;
     UI.renderPage(html);
   },
   
   bindEvents() {
-    // Tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.activeTab = btn.dataset.tab;
@@ -348,19 +395,15 @@ const ProfilePage = {
       });
     });
     
-    // Edit profile button
     document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
       Modals.showEditProfile();
     });
     
-    // Release cards
     document.querySelectorAll('.release-card').forEach(card => {
       card.addEventListener('click', () => {
         const releaseId = card.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
-        if (release) {
-          Modals.showRelease(release);
-        }
+        if (release) Modals.showRelease(release);
       });
     });
   },
