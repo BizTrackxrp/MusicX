@@ -1,20 +1,34 @@
 /**
  * XRP Music - Stream Page
- * Main discovery page with releases and tracks
+ * Main discovery page with releases, tracks, sorting, and artists
  */
 
 const StreamPage = {
   releases: [],
+  artists: [],
+  currentSort: 'alphabetical',
+  selectedGenre: null,
   
-  /**
-   * Render stream page
-   */
+  genres: [
+    { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
+    { id: 'rap', name: 'Rap', color: '#ef4444' },
+    { id: 'electronic', name: 'Electronic', color: '#3b82f6' },
+    { id: 'rnb', name: 'R&B', color: '#a855f7' },
+    { id: 'pop', name: 'Pop', color: '#ec4899' },
+    { id: 'rock', name: 'Rock', color: '#84cc16' },
+    { id: 'country', name: 'Country', color: '#f59e0b' },
+    { id: 'jazz', name: 'Jazz', color: '#06b6d4' },
+    { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
+    { id: 'other', name: 'Other', color: '#6b7280' },
+  ],
+  
   async render() {
     UI.showLoading();
     
     try {
       this.releases = await API.getReleases();
       setReleases(this.releases);
+      this.extractArtists();
       
       if (this.releases.length === 0) {
         this.renderEmpty();
@@ -28,11 +42,31 @@ const StreamPage = {
     }
   },
   
-  /**
-   * Render main content
-   */
+  extractArtists() {
+    const artistMap = new Map();
+    
+    this.releases.forEach(release => {
+      if (!artistMap.has(release.artistAddress)) {
+        artistMap.set(release.artistAddress, {
+          address: release.artistAddress,
+          name: release.artistName || Helpers.truncateAddress(release.artistAddress),
+          avatar: release.artistAvatar || null,
+          releaseCount: 1,
+          trackCount: release.tracks?.length || 0,
+        });
+      } else {
+        const artist = artistMap.get(release.artistAddress);
+        artist.releaseCount++;
+        artist.trackCount += release.tracks?.length || 0;
+      }
+    });
+    
+    this.artists = Array.from(artistMap.values());
+  },
+  
   renderContent() {
     const allTracks = this.getAllTracks();
+    const sortedTracks = this.sortTracks(allTracks);
     const stats = this.getStats();
     
     const html = `
@@ -45,12 +79,51 @@ const StreamPage = {
           </div>
         </section>
         
-        <!-- All Tracks -->
+        <!-- All Tracks with Sorting -->
         ${allTracks.length > 0 ? `
           <section style="margin-bottom: 32px;">
-            <h2 class="section-title">All Tracks</h2>
+            <div class="section-header">
+              <h2 class="section-title" style="margin-bottom: 0;">All Tracks</h2>
+              <div class="sort-controls">
+                <span class="sort-label">Sort by:</span>
+                <div class="sort-buttons">
+                  <button class="sort-btn ${this.currentSort === 'alphabetical' ? 'active' : ''}" data-sort="alphabetical">A-Z</button>
+                  <button class="sort-btn ${this.currentSort === 'mostPlayed' ? 'active' : ''}" data-sort="mostPlayed">Popular</button>
+                  <button class="sort-btn ${this.currentSort === 'genre' ? 'active' : ''}" data-sort="genre">Genre</button>
+                </div>
+              </div>
+            </div>
+            
+            ${this.currentSort === 'genre' ? `
+              <div class="genre-filter">
+                ${this.genres.map(genre => `
+                  <button class="genre-box ${this.selectedGenre === genre.id ? 'active' : ''}" 
+                          data-genre="${genre.id}"
+                          style="--genre-color: ${genre.color}">
+                    <span class="genre-name">${genre.name}</span>
+                  </button>
+                `).join('')}
+              </div>
+            ` : ''}
+            
             <div class="track-list">
-              ${allTracks.map((track, index) => this.renderTrackItem(track, index)).join('')}
+              ${sortedTracks.length > 0 
+                ? sortedTracks.map((track, index) => this.renderTrackItem(track, index)).join('')
+                : '<div style="padding: 32px; text-align: center; color: var(--text-muted);">No tracks found for this genre yet</div>'
+              }
+            </div>
+          </section>
+        ` : ''}
+        
+        <!-- All Artists -->
+        ${this.artists.length > 0 ? `
+          <section style="margin-bottom: 32px;">
+            <div class="section-header">
+              <h2 class="section-title" style="margin-bottom: 0;">All Artists</h2>
+              <span class="artist-count">${this.artists.length} artist${this.artists.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="artists-grid">
+              ${this.artists.map(artist => this.renderArtistCard(artist)).join('')}
             </div>
           </section>
         ` : ''}
@@ -77,15 +150,204 @@ const StreamPage = {
           </div>
         </section>
       </div>
+      
+      <style>
+        .section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+        .sort-controls {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .sort-label {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .sort-buttons {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 4px;
+        }
+        .sort-btn {
+          padding: 8px 16px;
+          border: none;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .sort-btn:hover {
+          color: var(--text-primary);
+        }
+        .sort-btn.active {
+          background: var(--accent);
+          color: white;
+        }
+        .genre-filter {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+          gap: 10px;
+          margin-bottom: 20px;
+          padding: 16px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+        }
+        @media (min-width: 640px) {
+          .genre-filter {
+            grid-template-columns: repeat(5, 1fr);
+          }
+        }
+        .genre-box {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 12px 8px;
+          border: 2px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          background: var(--bg-hover);
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .genre-box:hover {
+          border-color: var(--genre-color);
+          transform: translateY(-2px);
+        }
+        .genre-box.active {
+          border-color: var(--genre-color);
+          background: color-mix(in srgb, var(--genre-color) 20%, var(--bg-hover));
+        }
+        .genre-name {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .genre-box.active .genre-name {
+          color: var(--genre-color);
+        }
+        .artist-count {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .artists-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+          gap: 16px;
+        }
+        @media (min-width: 640px) {
+          .artists-grid {
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+          }
+        }
+        .artist-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px 16px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .artist-card:hover {
+          transform: translateY(-4px);
+          border-color: var(--border-light);
+          box-shadow: var(--shadow-lg);
+        }
+        .artist-avatar {
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          background: var(--accent-gradient);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 24px;
+          font-weight: 700;
+          color: white;
+          margin-bottom: 12px;
+          overflow: hidden;
+        }
+        .artist-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .artist-name {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          text-align: center;
+          margin-bottom: 4px;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .artist-stats {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+      </style>
     `;
     
     UI.renderPage(html);
     this.bindEvents();
   },
   
-  /**
-   * Render empty state
-   */
+  sortTracks(tracks) {
+    let sorted = [...tracks];
+    
+    switch (this.currentSort) {
+      case 'alphabetical':
+        sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
+        break;
+      case 'mostPlayed':
+        sorted.sort((a, b) => (b.release.soldEditions || 0) - (a.release.soldEditions || 0));
+        break;
+      case 'genre':
+        if (this.selectedGenre) {
+          sorted = sorted.filter(track => {
+            const artistGenres = track.release.artistGenres || [];
+            return artistGenres.includes(this.selectedGenre);
+          });
+        }
+        sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
+        break;
+    }
+    
+    return sorted;
+  },
+  
+  renderArtistCard(artist) {
+    return `
+      <div class="artist-card" data-artist-address="${artist.address}">
+        <div class="artist-avatar">
+          ${artist.avatar 
+            ? `<img src="${artist.avatar}" alt="${artist.name}">`
+            : artist.name[0].toUpperCase()
+          }
+        </div>
+        <div class="artist-name">${artist.name}</div>
+        <div class="artist-stats">${artist.releaseCount} release${artist.releaseCount !== 1 ? 's' : ''}</div>
+      </div>
+    `;
+  },
+  
   renderEmpty() {
     const html = `
       <div class="empty-state" style="min-height: 60vh;">
@@ -96,22 +358,11 @@ const StreamPage = {
         </svg>
         <h3>Welcome to XRP Music</h3>
         <p>The decentralized music platform on the XRP Ledger</p>
-        <div style="margin-top: 24px; padding: 16px; background: var(--bg-hover); border-radius: 12px;">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-bottom: 8px;">
-            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-            <line x1="1" y1="10" x2="23" y2="10"></line>
-          </svg>
-          <p style="color: var(--text-muted);">Connect your Xaman wallet to get started</p>
-        </div>
       </div>
     `;
-    
     UI.renderPage(html);
   },
   
-  /**
-   * Render error state
-   */
   renderError() {
     const html = `
       <div class="empty-state" style="min-height: 60vh;">
@@ -122,18 +373,12 @@ const StreamPage = {
         </svg>
         <h3>Failed to Load</h3>
         <p>There was an error loading releases. Please try again.</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="StreamPage.render()">
-          Retry
-        </button>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="StreamPage.render()">Retry</button>
       </div>
     `;
-    
     UI.renderPage(html);
   },
   
-  /**
-   * Render release card
-   */
   renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
@@ -144,29 +389,17 @@ const StreamPage = {
         <div class="release-card-cover" style="${isSoldOut ? 'opacity: 0.5;' : ''}">
           ${release.coverUrl 
             ? `<img src="${release.coverUrl}" alt="${release.title}">`
-            : `<div class="placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"></path>
-                  <circle cx="6" cy="18" r="3"></circle>
-                  <circle cx="18" cy="16" r="3"></circle>
-                </svg>
-              </div>`
+            : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
           <span class="release-availability">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
-          ${isSoldOut ? `
-            <div class="release-sold-out">
-              <span>SOLD OUT</span>
-            </div>
-          ` : `
+          ${!isSoldOut ? `
             <div class="release-play-overlay">
               <button class="release-play-btn" data-release-id="${release.id}">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
               </button>
             </div>
-          `}
+          ` : ''}
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${release.title}</div>
@@ -180,28 +413,18 @@ const StreamPage = {
     `;
   },
   
-  /**
-   * Render track item
-   */
   renderTrackItem(track, index) {
     const isPlaying = AppState.player.currentTrack?.trackId === track.id || 
                       AppState.player.currentTrack?.id === parseInt(track.id);
     const available = track.release.totalEditions - track.release.soldEditions;
-    const isSoldOut = available <= 0;
     
     return `
-      <div class="track-item ${isPlaying ? 'playing' : ''} ${isSoldOut ? 'sold-out' : ''}" 
-           data-track-index="${index}"
-           style="${isSoldOut ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
-        <div class="track-cover" style="position: relative;">
+      <div class="track-item ${isPlaying ? 'playing' : ''}" data-track-index="${index}">
+        <div class="track-cover">
           <img src="${track.release.coverUrl || '/placeholder.png'}" alt="${track.displayTitle}">
           ${isPlaying && AppState.player.isPlaying ? `
             <div class="track-playing-indicator">
-              <div class="track-playing-bars">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
+              <div class="track-playing-bars"><span></span><span></span><span></span></div>
             </div>
           ` : ''}
         </div>
@@ -210,25 +433,16 @@ const StreamPage = {
           <div class="track-artist">${track.release.artistName || Helpers.truncateAddress(track.release.artistAddress)}</div>
         </div>
         <div class="track-meta">
-          ${isSoldOut ? `
-            <span style="color: var(--error); font-weight: 500;">Sold</span>
-          ` : `
-            <div>
-              <div class="track-price">${track.release.songPrice} XRP</div>
-              <div class="track-availability ${available < 10 ? 'low' : ''}">${available} left</div>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          `}
+          <div>
+            <div class="track-price">${track.release.songPrice} XRP</div>
+            <div class="track-availability ${available < 10 ? 'low' : ''}">${available} left</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </div>
       </div>
     `;
   },
   
-  /**
-   * Get all tracks from releases
-   */
   getAllTracks() {
     return this.releases.flatMap(release => 
       (release.tracks || []).map((track, idx) => ({
@@ -240,9 +454,6 @@ const StreamPage = {
     );
   },
   
-  /**
-   * Get stats
-   */
   getStats() {
     const uniqueArtists = new Set(this.releases.map(r => r.artistAddress));
     const totalTracks = this.releases.reduce((sum, r) => sum + (r.tracks?.length || 0), 0);
@@ -256,21 +467,35 @@ const StreamPage = {
     };
   },
   
-  /**
-   * Bind events
-   */
   bindEvents() {
-    // Release cards - click to open modal
+    // Sort buttons
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newSort = btn.dataset.sort;
+        if (newSort !== this.currentSort) {
+          this.currentSort = newSort;
+          this.selectedGenre = null;
+          this.renderContent();
+        }
+      });
+    });
+    
+    // Genre boxes
+    document.querySelectorAll('.genre-box').forEach(box => {
+      box.addEventListener('click', () => {
+        const genre = box.dataset.genre;
+        this.selectedGenre = this.selectedGenre === genre ? null : genre;
+        this.renderContent();
+      });
+    });
+    
+    // Release cards
     document.querySelectorAll('.release-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        // Don't trigger if clicking play button
         if (e.target.closest('.release-play-btn')) return;
-        
         const releaseId = card.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
-        if (release) {
-          Modals.showRelease(release);
-        }
+        if (release) Modals.showRelease(release);
       });
     });
     
@@ -280,46 +505,31 @@ const StreamPage = {
         e.stopPropagation();
         const releaseId = btn.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
-        if (release && release.tracks?.length > 0) {
-          this.playRelease(release);
-        }
+        if (release?.tracks?.length > 0) this.playRelease(release);
       });
     });
     
     // Track items
-    document.querySelectorAll('.track-item:not(.sold-out)').forEach(item => {
+    document.querySelectorAll('.track-item').forEach(item => {
       item.addEventListener('click', () => {
         const index = parseInt(item.dataset.trackIndex, 10);
-        const allTracks = this.getAllTracks();
+        const allTracks = this.sortTracks(this.getAllTracks());
         const track = allTracks[index];
-        
-        if (track) {
-          this.playTrack(track, allTracks, index);
-        }
+        if (track) this.playTrack(track, allTracks, index);
+      });
+    });
+    
+    // Artist cards
+    document.querySelectorAll('.artist-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const address = card.dataset.artistAddress;
+        if (address) Router.navigate('artist', { address });
       });
     });
   },
   
-  /**
-   * Play a release (first track)
-   */
   playRelease(release) {
     if (!release.tracks?.length) return;
-    
-    const track = release.tracks[0];
-    const playTrack = {
-      id: parseInt(track.id) || 0,
-      trackId: track.id,
-      title: release.type === 'single' ? release.title : track.title,
-      artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-      cover: release.coverUrl,
-      ipfsHash: track.audioCid,
-      audioUrl: track.audioUrl,
-      releaseId: release.id,
-      duration: track.duration,
-    };
-    
-    // Create queue from all tracks in this release
     const queue = release.tracks.map((t, idx) => ({
       id: parseInt(t.id) || idx,
       trackId: t.id,
@@ -327,31 +537,13 @@ const StreamPage = {
       artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
       cover: release.coverUrl,
       ipfsHash: t.audioCid,
-      audioUrl: t.audioUrl,
       releaseId: release.id,
       duration: t.duration,
     }));
-    
-    Player.playTrack(playTrack, queue, 0);
+    Player.playTrack(queue[0], queue, 0);
   },
   
-  /**
-   * Play a track from the all tracks list
-   */
   playTrack(trackData, allTracks, index) {
-    const playTrack = {
-      id: parseInt(trackData.id) || 0,
-      trackId: trackData.id,
-      title: trackData.displayTitle,
-      artist: trackData.release.artistName || Helpers.truncateAddress(trackData.release.artistAddress),
-      cover: trackData.release.coverUrl,
-      ipfsHash: trackData.audioCid,
-      audioUrl: trackData.audioUrl,
-      releaseId: trackData.release.id,
-      duration: trackData.duration,
-    };
-    
-    // Create queue from all tracks
     const queue = allTracks.map(t => ({
       id: parseInt(t.id) || 0,
       trackId: t.id,
@@ -359,11 +551,9 @@ const StreamPage = {
       artist: t.release.artistName || Helpers.truncateAddress(t.release.artistAddress),
       cover: t.release.coverUrl,
       ipfsHash: t.audioCid,
-      audioUrl: t.audioUrl,
       releaseId: t.release.id,
       duration: t.duration,
     }));
-    
-    Player.playTrack(playTrack, queue, index);
+    Player.playTrack(queue[index], queue, index);
   },
 };
