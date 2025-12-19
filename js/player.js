@@ -103,6 +103,19 @@ const Player = {
     const expLikeBtn = document.getElementById('expanded-like-btn');
     if (likeBtn) likeBtn.addEventListener('click', () => this.toggleLike());
     if (expLikeBtn) expLikeBtn.addEventListener('click', () => this.toggleLike());
+    
+    // Click on track info to open Now Playing modal
+    const playerTrack = document.getElementById('player-track-info');
+    if (playerTrack) {
+      playerTrack.addEventListener('click', (e) => {
+        // Don't trigger if clicking on the expand button
+        if (e.target.closest('.player-expand-btn')) return;
+        if (AppState.player.currentTrack) {
+          Modals.showNowPlaying();
+        }
+      });
+      playerTrack.style.cursor = 'pointer';
+    }
   },
   
   /**
