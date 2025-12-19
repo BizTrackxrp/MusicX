@@ -1054,7 +1054,530 @@ const Modals = {
   showCreate() {
     if (!AppState.user?.address) { this.showAuth(); return; }
     this.activeModal = 'create';
-    alert('Create feature coming soon!');
+    
+    const html = `
+      <div class="modal-overlay">
+        <div class="modal create-modal">
+          <div class="modal-header">
+            <div class="modal-title">Create Release</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <form id="create-release-form">
+              <!-- Step 1: Basic Info -->
+              <div class="create-step" id="create-step-1">
+                <h3 class="create-step-title">Release Details</h3>
+                
+                <div class="form-group">
+                  <label class="form-label">Release Type</label>
+                  <div class="release-type-grid">
+                    <button type="button" class="release-type-btn selected" data-type="single">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                      <span>Single</span>
+                    </button>
+                    <button type="button" class="release-type-btn" data-type="ep">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                      </svg>
+                      <span>EP</span>
+                    </button>
+                    <button type="button" class="release-type-btn" data-type="album">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="2"></rect>
+                        <rect x="6" y="6" width="12" height="12" rx="1"></rect>
+                      </svg>
+                      <span>Album</span>
+                    </button>
+                  </div>
+                  <input type="hidden" name="type" id="release-type" value="single">
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Title *</label>
+                  <input type="text" class="form-input" name="title" id="release-title" placeholder="Release title" required>
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Description</label>
+                  <textarea class="form-input form-textarea" name="description" id="release-description" placeholder="Tell listeners about this release"></textarea>
+                </div>
+                
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Price (XRP) *</label>
+                    <input type="number" class="form-input" name="price" id="release-price" placeholder="0.5" step="0.01" min="0" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Editions *</label>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="10000" value="100" required>
+                  </div>
+                </div>
+                
+                <button type="button" class="btn btn-primary btn-full" id="create-next-1">Next: Upload Files</button>
+              </div>
+              
+              <!-- Step 2: Upload Files -->
+              <div class="create-step hidden" id="create-step-2">
+                <h3 class="create-step-title">Upload Files</h3>
+                
+                <div class="form-group">
+                  <label class="form-label">Cover Art *</label>
+                  <div class="upload-zone" id="cover-upload-zone">
+                    <input type="file" id="cover-input" accept="image/*" hidden>
+                    <div class="upload-placeholder" id="cover-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      <span>Click to upload cover art</span>
+                      <span class="upload-hint">JPG, PNG, or GIF (max 10MB)</span>
+                    </div>
+                    <div class="upload-preview hidden" id="cover-preview">
+                      <img id="cover-preview-img" src="" alt="Cover preview">
+                      <button type="button" class="upload-remove" id="cover-remove">×</button>
+                    </div>
+                  </div>
+                  <input type="hidden" name="coverCid" id="cover-cid">
+                  <input type="hidden" name="coverUrl" id="cover-url">
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Audio File(s) *</label>
+                  <div class="upload-zone audio-zone" id="audio-upload-zone">
+                    <input type="file" id="audio-input" accept="audio/*" hidden>
+                    <div class="upload-placeholder" id="audio-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                      </svg>
+                      <span>Click to upload audio</span>
+                      <span class="upload-hint">MP3, WAV, or FLAC (max 50MB)</span>
+                    </div>
+                  </div>
+                  <div class="track-list-upload" id="track-list-upload"></div>
+                </div>
+                
+                <div class="create-nav">
+                  <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
+                  <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
+                </div>
+              </div>
+              
+              <!-- Step 3: Review & Mint -->
+              <div class="create-step hidden" id="create-step-3">
+                <h3 class="create-step-title">Review & Mint</h3>
+                
+                <div class="review-card">
+                  <div class="review-cover" id="review-cover"></div>
+                  <div class="review-info">
+                    <div class="review-title" id="review-title"></div>
+                    <div class="review-artist">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</div>
+                    <div class="review-meta">
+                      <span id="review-type"></span>
+                      <span id="review-tracks"></span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="review-details">
+                  <div class="review-row">
+                    <span>Price</span>
+                    <span id="review-price"></span>
+                  </div>
+                  <div class="review-row">
+                    <span>Editions</span>
+                    <span id="review-editions"></span>
+                  </div>
+                  <div class="review-row">
+                    <span>Network Fee</span>
+                    <span>~0.2 XRP (reserve)</span>
+                  </div>
+                </div>
+                
+                <div class="mint-status hidden" id="mint-status">
+                  <div class="mint-status-icon">
+                    <div class="spinner"></div>
+                  </div>
+                  <div class="mint-status-text" id="mint-status-text">Preparing...</div>
+                </div>
+                
+                <div class="create-nav" id="create-nav-3">
+                  <button type="button" class="btn btn-secondary" id="create-back-3">Back</button>
+                  <button type="submit" class="btn btn-primary btn-mint">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                      <path d="M2 17l10 5 10-5"></path>
+                      <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    Mint NFT
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .create-modal { max-width: 540px; }
+        .create-step-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; }
+        .create-step.hidden { display: none; }
+        .release-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
+        .release-type-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; background: var(--bg-hover); border: 2px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
+        .release-type-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+        .release-type-btn.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+        .release-type-btn span { font-size: 13px; font-weight: 500; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .upload-zone { border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 24px; text-align: center; cursor: pointer; transition: all 150ms; }
+        .upload-zone:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
+        .upload-zone.dragover { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+        .upload-zone.has-file { border-style: solid; border-color: var(--success); }
+        .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
+        .upload-placeholder svg { opacity: 0.5; }
+        .upload-hint { font-size: 12px; }
+        .upload-preview { position: relative; }
+        .upload-preview img { width: 100%; max-width: 200px; border-radius: var(--radius-md); }
+        .upload-preview.hidden { display: none; }
+        .upload-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
+        .track-list-upload { margin-top: 12px; }
+        .track-upload-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-hover); border-radius: var(--radius-md); margin-bottom: 8px; }
+        .track-upload-item .track-num { width: 24px; height: 24px; background: var(--accent); border-radius: 50%; color: white; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+        .track-upload-item .track-name { flex: 1; font-size: 14px; }
+        .track-upload-item .track-duration { font-size: 13px; color: var(--text-muted); }
+        .track-upload-item .track-status { font-size: 12px; }
+        .track-upload-item .track-status.uploading { color: var(--warning); }
+        .track-upload-item .track-status.done { color: var(--success); }
+        .track-upload-item .track-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; }
+        .track-upload-item .track-remove:hover { color: var(--error); }
+        .create-nav { display: flex; gap: 12px; margin-top: 24px; }
+        .create-nav .btn { flex: 1; }
+        .btn-full { width: 100%; margin-top: 24px; }
+        .review-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 20px; }
+        .review-cover { width: 100px; height: 100px; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); }
+        .review-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .review-info { flex: 1; }
+        .review-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .review-artist { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .review-meta { font-size: 13px; color: var(--text-muted); }
+        .review-meta span { margin-right: 12px; }
+        .review-details { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
+        .review-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+        .review-row span:first-child { color: var(--text-secondary); }
+        .review-row span:last-child { color: var(--text-primary); font-weight: 500; }
+        .mint-status { text-align: center; padding: 24px; margin-bottom: 20px; }
+        .mint-status.hidden { display: none; }
+        .mint-status-icon { margin-bottom: 12px; }
+        .mint-status-icon .spinner { width: 40px; height: 40px; margin: 0 auto; }
+        .mint-status-text { font-size: 14px; color: var(--text-secondary); }
+        .btn-mint { display: flex; align-items: center; justify-content: center; gap: 8px; }
+      </style>
+    `;
+    
+    this.show(html);
+    this.bindCreateEvents();
+  },
+  
+  bindCreateEvents() {
+    const form = document.getElementById('create-release-form');
+    const tracks = [];
+    let coverFile = null;
+    
+    // Release type selection
+    document.querySelectorAll('.release-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.release-type-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        document.getElementById('release-type').value = btn.dataset.type;
+        
+        // Update audio input for multiple files if album/EP
+        const audioInput = document.getElementById('audio-input');
+        if (btn.dataset.type !== 'single') {
+          audioInput.setAttribute('multiple', 'multiple');
+        } else {
+          audioInput.removeAttribute('multiple');
+        }
+      });
+    });
+    
+    // Step navigation
+    document.getElementById('create-next-1')?.addEventListener('click', () => {
+      const title = document.getElementById('release-title').value.trim();
+      const price = document.getElementById('release-price').value;
+      if (!title) { alert('Please enter a title'); return; }
+      if (!price || price <= 0) { alert('Please enter a valid price'); return; }
+      document.getElementById('create-step-1').classList.add('hidden');
+      document.getElementById('create-step-2').classList.remove('hidden');
+    });
+    
+    document.getElementById('create-back-2')?.addEventListener('click', () => {
+      document.getElementById('create-step-2').classList.add('hidden');
+      document.getElementById('create-step-1').classList.remove('hidden');
+    });
+    
+    document.getElementById('create-next-2')?.addEventListener('click', () => {
+      if (!coverFile) { alert('Please upload cover art'); return; }
+      if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
+      
+      // Update review
+      document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
+      document.getElementById('review-title').textContent = document.getElementById('release-title').value;
+      document.getElementById('review-type').textContent = document.getElementById('release-type').value.toUpperCase();
+      document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
+      document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP`;
+      document.getElementById('review-editions').textContent = document.getElementById('release-editions').value;
+      
+      document.getElementById('create-step-2').classList.add('hidden');
+      document.getElementById('create-step-3').classList.remove('hidden');
+    });
+    
+    document.getElementById('create-back-3')?.addEventListener('click', () => {
+      document.getElementById('create-step-3').classList.add('hidden');
+      document.getElementById('create-step-2').classList.remove('hidden');
+    });
+    
+    // Cover upload
+    const coverZone = document.getElementById('cover-upload-zone');
+    const coverInput = document.getElementById('cover-input');
+    
+    coverZone?.addEventListener('click', () => coverInput?.click());
+    coverZone?.addEventListener('dragover', (e) => { e.preventDefault(); coverZone.classList.add('dragover'); });
+    coverZone?.addEventListener('dragleave', () => coverZone.classList.remove('dragover'));
+    coverZone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      coverZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) handleCoverFile(e.dataTransfer.files[0]);
+    });
+    
+    coverInput?.addEventListener('change', () => {
+      if (coverInput.files[0]) handleCoverFile(coverInput.files[0]);
+    });
+    
+    document.getElementById('cover-remove')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      coverFile = null;
+      document.getElementById('cover-placeholder').classList.remove('hidden');
+      document.getElementById('cover-preview').classList.add('hidden');
+      coverZone.classList.remove('has-file');
+    });
+    
+    function handleCoverFile(file) {
+      if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return; }
+      if (file.size > 10 * 1024 * 1024) { alert('File too large (max 10MB)'); return; }
+      
+      coverFile = file;
+      const preview = document.getElementById('cover-preview-img');
+      preview.src = URL.createObjectURL(file);
+      document.getElementById('cover-placeholder').classList.add('hidden');
+      document.getElementById('cover-preview').classList.remove('hidden');
+      coverZone.classList.add('has-file');
+    }
+    
+    // Audio upload
+    const audioZone = document.getElementById('audio-upload-zone');
+    const audioInput = document.getElementById('audio-input');
+    
+    audioZone?.addEventListener('click', () => audioInput?.click());
+    audioZone?.addEventListener('dragover', (e) => { e.preventDefault(); audioZone.classList.add('dragover'); });
+    audioZone?.addEventListener('dragleave', () => audioZone.classList.remove('dragover'));
+    audioZone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      audioZone.classList.remove('dragover');
+      Array.from(e.dataTransfer.files).forEach(handleAudioFile);
+    });
+    
+    audioInput?.addEventListener('change', () => {
+      Array.from(audioInput.files).forEach(handleAudioFile);
+    });
+    
+    function handleAudioFile(file) {
+      if (!file.type.startsWith('audio/')) { alert('Please upload an audio file'); return; }
+      if (file.size > 50 * 1024 * 1024) { alert('File too large (max 50MB)'); return; }
+      
+      const trackNum = tracks.length + 1;
+      const track = {
+        file,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        duration: 0,
+        status: 'pending',
+      };
+      tracks.push(track);
+      
+      // Get duration
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(file);
+      audio.addEventListener('loadedmetadata', () => {
+        track.duration = audio.duration;
+        updateTrackList();
+      });
+      
+      updateTrackList();
+    }
+    
+    function updateTrackList() {
+      const container = document.getElementById('track-list-upload');
+      container.innerHTML = tracks.map((track, idx) => `
+        <div class="track-upload-item" data-idx="${idx}">
+          <div class="track-num">${idx + 1}</div>
+          <div class="track-name">${track.title}</div>
+          <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
+          <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
+          <button type="button" class="track-remove" data-idx="${idx}">×</button>
+        </div>
+      `).join('');
+      
+      container.querySelectorAll('.track-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          tracks.splice(parseInt(btn.dataset.idx), 1);
+          updateTrackList();
+        });
+      });
+      
+      if (tracks.length > 0) {
+        audioZone.classList.add('has-file');
+      } else {
+        audioZone.classList.remove('has-file');
+      }
+    }
+    
+    // Form submit - Mint NFT
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const statusEl = document.getElementById('mint-status');
+      const statusText = document.getElementById('mint-status-text');
+      const navEl = document.getElementById('create-nav-3');
+      
+      statusEl.classList.remove('hidden');
+      navEl.style.display = 'none';
+      
+      try {
+        // Step 1: Upload cover to IPFS
+        statusText.textContent = 'Uploading cover art...';
+        const coverResult = await API.uploadFile(coverFile);
+        document.getElementById('cover-cid').value = coverResult.cid;
+        document.getElementById('cover-url').value = coverResult.url;
+        
+        // Step 2: Upload audio files to IPFS
+        const uploadedTracks = [];
+        for (let i = 0; i < tracks.length; i++) {
+          statusText.textContent = `Uploading track ${i + 1} of ${tracks.length}...`;
+          tracks[i].status = 'uploading';
+          updateTrackList();
+          
+          const audioResult = await API.uploadFile(tracks[i].file);
+          tracks[i].status = 'done';
+          tracks[i].audioCid = audioResult.cid;
+          tracks[i].audioUrl = audioResult.url;
+          uploadedTracks.push({
+            title: tracks[i].title,
+            trackNumber: i + 1,
+            duration: Math.round(tracks[i].duration),
+            audioCid: audioResult.cid,
+            audioUrl: audioResult.url,
+          });
+          updateTrackList();
+        }
+        
+        // Step 3: Create metadata JSON
+        statusText.textContent = 'Creating metadata...';
+        const releaseType = document.getElementById('release-type').value;
+        const metadata = {
+          name: document.getElementById('release-title').value,
+          description: document.getElementById('release-description').value,
+          image: `ipfs://${coverResult.cid}`,
+          animation_url: uploadedTracks.length === 1 ? `ipfs://${uploadedTracks[0].audioCid}` : undefined,
+          attributes: [
+            { trait_type: 'Type', value: releaseType },
+            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+            { trait_type: 'Tracks', value: uploadedTracks.length },
+          ],
+          properties: {
+            tracks: uploadedTracks.map(t => ({
+              title: t.title,
+              duration: t.duration,
+              audio: `ipfs://${t.audioCid}`,
+            })),
+          },
+        };
+        
+        const metadataResult = await API.uploadJSON(metadata, `${metadata.name}-metadata.json`);
+        
+        // Step 4: Mint NFT
+        statusText.textContent = 'Open Xaman to sign the mint transaction...';
+        const mintResult = await XamanWallet.mintNFT(metadataResult.ipfsUrl, {
+          transferFee: 500, // 5% royalty
+          flags: 8, // Transferable
+        });
+        
+        if (!mintResult.success) {
+          throw new Error(mintResult.error || 'Minting failed');
+        }
+        
+        // Step 5: Save to database
+        statusText.textContent = 'Saving release...';
+        const releaseData = {
+          artistAddress: AppState.user.address,
+          artistName: AppState.profile?.name || null,
+          title: document.getElementById('release-title').value,
+          description: document.getElementById('release-description').value,
+          type: releaseType,
+          coverUrl: coverResult.url,
+          coverCid: coverResult.cid,
+          songPrice: parseFloat(document.getElementById('release-price').value),
+          albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) : null,
+          totalEditions: parseInt(document.getElementById('release-editions').value),
+          nftTokenId: mintResult.txHash, // Store tx hash for now
+          tracks: uploadedTracks,
+        };
+        
+        await API.saveRelease(releaseData);
+        
+        // Success!
+        statusEl.innerHTML = `
+          <div class="mint-status-icon" style="color: var(--success);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          </div>
+          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">NFT Minted Successfully!</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Your release is now live on XRP Music</p>
+        `;
+        
+        setTimeout(() => {
+          this.close();
+          // Refresh releases
+          if (typeof StreamPage !== 'undefined') StreamPage.render();
+          if (typeof ProfilePage !== 'undefined') ProfilePage.render();
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Mint failed:', error);
+        statusEl.innerHTML = `
+          <div class="mint-status-icon" style="color: var(--error);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="mint-status-text" style="color: var(--error);">${error.message || 'Minting failed'}</div>
+        `;
+        navEl.style.display = 'flex';
+      }
+    });
   },
   
   showEditProfile() {
