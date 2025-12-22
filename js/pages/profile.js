@@ -304,6 +304,86 @@ const ProfilePage = {
         .profile-tab-content {
           padding: 0 24px;
         }
+        
+        /* Listing Status Styles */
+        .listing-status-badge {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .listing-status-badge.red {
+          background: rgba(239, 68, 68, 0.9);
+          color: white;
+        }
+        .listing-status-badge.green {
+          background: rgba(34, 197, 94, 0.9);
+          color: white;
+        }
+        .listing-status-badge.gold {
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+          color: white;
+        }
+        
+        /* Card overlay states */
+        .release-card.not-listed .release-card-cover::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: rgba(239, 68, 68, 0.15);
+          border-radius: inherit;
+          pointer-events: none;
+        }
+        .release-card.sold-out .release-card-cover::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1));
+          border-radius: inherit;
+          pointer-events: none;
+        }
+        
+        /* Listing overlay for "List Now" button */
+        .listing-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0, 0, 0, 0.7);
+          border-radius: inherit;
+          opacity: 0;
+          transition: opacity 200ms;
+        }
+        .release-card.not-listed:hover .listing-overlay {
+          opacity: 1;
+        }
+        .list-now-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 16px;
+          background: var(--accent);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 150ms, background 150ms;
+        }
+        .list-now-btn:hover {
+          background: var(--accent-hover);
+          transform: scale(1.05);
+        }
       </style>
     `;
     
@@ -350,9 +430,48 @@ const ProfilePage = {
   renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
+    const isOwner = AppState.user?.address === release.artistAddress;
+    
+    // Determine listing status
+    let statusClass = '';
+    let statusBadge = '';
+    let statusOverlay = '';
+    
+    if (isOwner) {
+      if (available === 0) {
+        // Sold out - gold
+        statusClass = 'sold-out';
+        statusBadge = `<span class="listing-status-badge gold">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          Sold Out
+        </span>`;
+      } else if (release.sellOfferIndex) {
+        // Listed for sale - green
+        statusClass = 'listed';
+        statusBadge = `<span class="listing-status-badge green">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          For Sale
+        </span>`;
+      } else {
+        // Not listed - red (needs action)
+        statusClass = 'not-listed';
+        statusBadge = `<span class="listing-status-badge red">List for Sale</span>`;
+        statusOverlay = `
+          <div class="listing-overlay" data-release-id="${release.id}">
+            <button class="btn btn-sm list-now-btn" data-release='${JSON.stringify(release).replace(/'/g, "\\'")}'>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              List Now
+            </button>
+          </div>
+        `;
+      }
+    }
     
     return `
-      <div class="release-card" data-release-id="${release.id}">
+      <div class="release-card ${statusClass}" data-release-id="${release.id}">
         <div class="release-card-cover">
           ${release.coverUrl 
             ? `<img src="${release.coverUrl}" alt="${release.title}">`
@@ -360,6 +479,8 @@ const ProfilePage = {
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
           <span class="release-availability">${available} left</span>
+          ${statusBadge}
+          ${statusOverlay}
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${release.title}</div>
@@ -401,12 +522,72 @@ const ProfilePage = {
       Modals.showEditProfile();
     });
     
+    // Release card click (open modal)
     document.querySelectorAll('.release-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        // Don't open modal if clicking "List Now" button
+        if (e.target.closest('.list-now-btn') || e.target.closest('.listing-overlay')) {
+          return;
+        }
         const releaseId = card.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
         if (release) Modals.showRelease(release);
       });
     });
+    
+    // List Now button click
+    document.querySelectorAll('.list-now-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const release = JSON.parse(btn.dataset.release);
+        await this.listForSale(release);
+      });
+    });
+  },
+  
+  /**
+   * List a release for sale
+   */
+  async listForSale(release) {
+    try {
+      // Get platform address
+      const response = await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ releaseId: release.id }),
+      });
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+      
+      const { platformAddress } = data.payload;
+      const priceInDrops = Math.floor(parseFloat(release.songPrice || release.albumPrice || 1) * 1000000);
+      
+      // Create sell offer via Xaman
+      const offerResult = await XamanWallet.createSellOffer(
+        release.nftTokenId,
+        priceInDrops,
+        platformAddress
+      );
+      
+      if (!offerResult.success) throw new Error('Failed to create sell offer');
+      
+      // Save the offer index
+      await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          releaseId: release.id, 
+          offerIndex: offerResult.offerIndex 
+        }),
+      });
+      
+      // Refresh the page to show updated status
+      this.render();
+      
+    } catch (error) {
+      console.error('List for sale failed:', error);
+      alert('Failed to list for sale: ' + error.message);
+    }
   },
 };
