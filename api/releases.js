@@ -139,9 +139,13 @@ async function createRelease(req, res, sql) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   
+  // Generate unique ID (since id column is varchar, not serial)
+  const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   // Insert release (using columns that exist in your schema)
   const [release] = await sql`
     INSERT INTO releases (
+      id,
       artist_address,
       artist_name,
       title,
@@ -152,10 +156,12 @@ async function createRelease(req, res, sql) {
       metadata_cid,
       song_price,
       album_price,
+      total_editions,
       sold_editions,
       tx_hash,
       created_at
     ) VALUES (
+      ${releaseId},
       ${artistAddress},
       ${artistName || null},
       ${title},
@@ -166,6 +172,7 @@ async function createRelease(req, res, sql) {
       ${metadataCid || null},
       ${songPrice || 0},
       ${albumPrice || null},
+      ${totalEditions || 100},
       0,
       ${txHash || null},
       NOW()
