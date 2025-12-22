@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       }
       
       const profiles = await sql`
-        SELECT * FROM profiles WHERE address = ${address}
+        SELECT * FROM profiles WHERE wallet_address = ${address}
       `;
       
       if (profiles.length === 0) {
@@ -56,15 +56,11 @@ export default async function handler(req, res) {
       // Upsert profile with genres
       const [profile] = await sql`
         INSERT INTO profiles (
-          address,
+          wallet_address,
           name,
           bio,
           avatar_url,
-          avatar_cid,
           banner_url,
-          banner_cid,
-          website,
-          twitter,
           genre_primary,
           genre_secondary,
           updated_at
@@ -73,24 +69,16 @@ export default async function handler(req, res) {
           ${name || null},
           ${bio || null},
           ${avatarUrl || null},
-          ${avatarCid || null},
           ${bannerUrl || null},
-          ${bannerCid || null},
-          ${website || null},
-          ${twitter || null},
           ${genrePrimary || null},
           ${genreSecondary || null},
           NOW()
         )
-        ON CONFLICT (address) DO UPDATE SET
+        ON CONFLICT (wallet_address) DO UPDATE SET
           name = COALESCE(EXCLUDED.name, profiles.name),
           bio = COALESCE(EXCLUDED.bio, profiles.bio),
           avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url),
-          avatar_cid = COALESCE(EXCLUDED.avatar_cid, profiles.avatar_cid),
           banner_url = COALESCE(EXCLUDED.banner_url, profiles.banner_url),
-          banner_cid = COALESCE(EXCLUDED.banner_cid, profiles.banner_cid),
-          website = COALESCE(EXCLUDED.website, profiles.website),
-          twitter = COALESCE(EXCLUDED.twitter, profiles.twitter),
           genre_primary = COALESCE(EXCLUDED.genre_primary, profiles.genre_primary),
           genre_secondary = COALESCE(EXCLUDED.genre_secondary, profiles.genre_secondary),
           updated_at = NOW()
@@ -109,15 +97,16 @@ export default async function handler(req, res) {
 
 function formatProfile(row) {
   return {
-    address: row.address,
+    address: row.wallet_address,
     name: row.name,
     bio: row.bio,
     avatarUrl: row.avatar_url,
-    avatarCid: row.avatar_cid,
     bannerUrl: row.banner_url,
-    bannerCid: row.banner_cid,
-    website: row.website,
-    twitter: row.twitter,
+    pageTheme: row.page_theme,
+    accentColor: row.accent_color,
+    gradientStart: row.gradient_start,
+    gradientEnd: row.gradient_end,
+    gradientAngle: row.gradient_angle,
     genrePrimary: row.genre_primary,
     genreSecondary: row.genre_secondary,
     createdAt: row.created_at,
