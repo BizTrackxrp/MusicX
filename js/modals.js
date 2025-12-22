@@ -847,7 +847,10 @@ const Modals = {
   },
   
   /**
-   * Process the actual purchase via Xaman
+   * Process the actual purchase via broker
+   * 1. Buyer pays platform wallet
+   * 2. Platform brokers the NFT transfer
+   * 3. Platform pays artist 98%
    */
   async processPurchase(release) {
     const statusEl = document.getElementById('purchase-status');
@@ -859,43 +862,92 @@ const Modals = {
     if (actionsEl) actionsEl.style.display = 'none';
     
     try {
-      // Create payment request via Xaman
-      const result = await XamanWallet.sendPayment(
-        release.artistAddress,
+      // Check if release is listed for sale (has sell offer)
+      if (!release.sellOfferIndex) {
+        throw new Error('This release is not listed for sale yet');
+      }
+      
+      // Step 1: Buyer pays platform wallet
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="purchase-status-text">Sending payment...</div>
+        <div class="purchase-status-sub">Approve the transaction in Xaman</div>
+      `;
+      
+      // Get platform address
+      const configResponse = await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ releaseId: release.id }),
+      });
+      const configData = await configResponse.json();
+      const platformAddress = configData.payload?.platformAddress;
+      
+      if (!platformAddress) {
+        throw new Error('Platform not configured');
+      }
+      
+      const paymentResult = await XamanWallet.sendPayment(
+        platformAddress,
         price,
         `XRP Music: ${release.title}`
       );
       
-      if (result.success) {
-        // Update status to success
-        if (statusEl) {
-          statusEl.innerHTML = `
-            <div class="purchase-status-icon success">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-            </div>
-            <div class="purchase-status-text">Purchase Complete!</div>
-            <div class="purchase-status-sub">Your NFT has been added to your collection</div>
-          `;
-        }
-        
-        // TODO: Record purchase in database
-        // await API.recordPurchase(release.id, AppState.user.address, result.txHash);
-        
-        // Show success for a moment then close
-        setTimeout(() => {
-          this.close();
-          // Refresh releases to update availability
-          if (typeof StreamPage !== 'undefined') {
-            StreamPage.render();
-          }
-        }, 2000);
-        
-      } else {
-        throw new Error(result.error || 'Payment failed');
+      if (!paymentResult.success) {
+        throw new Error(paymentResult.error || 'Payment failed');
       }
+      
+      // Step 2: Call broker to complete the sale
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="purchase-status-text">Completing purchase...</div>
+        <div class="purchase-status-sub">Transferring NFT to your wallet</div>
+      `;
+      
+      const brokerResponse = await fetch('/api/broker-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: release.id,
+          buyerAddress: AppState.user.address,
+          sellOfferIndex: release.sellOfferIndex,
+          paymentTxHash: paymentResult.txHash,
+        }),
+      });
+      
+      const brokerResult = await brokerResponse.json();
+      
+      if (!brokerResult.success) {
+        throw new Error(brokerResult.error || 'Transfer failed');
+      }
+      
+      // Success!
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon success">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="purchase-status-text">Purchase Complete!</div>
+        <div class="purchase-status-sub">Your NFT has been added to your collection</div>
+      `;
+      
+      // Show success for a moment then close
+      setTimeout(() => {
+        this.close();
+        // Refresh releases to update availability
+        if (typeof StreamPage !== 'undefined') {
+          StreamPage.render();
+        }
+        if (typeof ProfilePage !== 'undefined') {
+          ProfilePage.render();
+        }
+      }, 2000);
       
     } catch (error) {
       console.error('Purchase failed:', error);
@@ -920,7 +972,7 @@ const Modals = {
         actionsEl.style.display = 'flex';
         actionsEl.innerHTML = `
           <button class="btn btn-secondary close-modal-btn" onclick="Modals.close()">Close</button>
-          <button class="btn btn-primary" onclick="Modals.showPurchase(${JSON.stringify(release).replace(/"/g, '&quot;')})">Try Again</button>
+          <button class="btn btn-primary" onclick="Modals.processPurchase(${JSON.stringify(release).replace(/"/g, '&quot;')})">Try Again</button>
         `;
       }
     }
@@ -1568,13 +1620,14 @@ const Modals = {
           songPrice: parseFloat(document.getElementById('release-price').value),
           albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) : null,
           totalEditions: parseInt(document.getElementById('release-editions').value),
-          nftTokenId: mintResult.txHash, // Store tx hash for now
+          nftTokenId: mintResult.nftTokenId || mintResult.txHash,
+          txHash: mintResult.txHash,
           tracks: uploadedTracks,
         };
         
-        await API.saveRelease(releaseData);
+        const saveResult = await API.saveRelease(releaseData);
         
-        // Success!
+        // Success - now prompt to list for sale
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--success);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1583,15 +1636,29 @@ const Modals = {
             </svg>
           </div>
           <div class="mint-status-text" style="color: var(--success); font-weight: 600;">NFT Minted Successfully!</div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Your release is now live on XRP Music</p>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">One more step to put it up for sale!</p>
+          <button class="btn btn-primary" id="list-for-sale-btn" style="margin-top: 16px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            List for Sale
+          </button>
+          <button class="btn btn-ghost" id="skip-listing-btn" style="margin-top: 8px;">
+            Do it later
+          </button>
         `;
         
-        setTimeout(() => {
+        // Handle list for sale
+        document.getElementById('list-for-sale-btn')?.addEventListener('click', async () => {
+          await this.startListForSale(saveResult.releaseId, mintResult.nftTokenId, releaseData);
+        });
+        
+        // Handle skip
+        document.getElementById('skip-listing-btn')?.addEventListener('click', () => {
           this.close();
-          // Refresh releases
-          if (typeof StreamPage !== 'undefined') StreamPage.render();
-          if (typeof ProfilePage !== 'undefined') ProfilePage.render();
-        }, 2000);
+          Router.navigate('profile');
+        });
         
       } catch (error) {
         console.error('Mint failed:', error);
@@ -1610,6 +1677,87 @@ const Modals = {
     });
   },
   
+  /**
+   * Start the list-for-sale flow
+   * Creates NFTokenCreateOffer with platform as destination
+   */
+  async startListForSale(releaseId, nftTokenId, releaseData) {
+    const statusEl = document.querySelector('.mint-status');
+    if (!statusEl) return;
+    
+    statusEl.innerHTML = `
+      <div class="spinner" style="margin: 0 auto 16px;"></div>
+      <div class="mint-status-text">Creating sell offer...</div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Please approve in Xaman</p>
+    `;
+    
+    try {
+      // Get platform address from API
+      const listResponse = await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ releaseId, nftTokenId }),
+      });
+      
+      const listData = await listResponse.json();
+      if (!listData.success) throw new Error(listData.error);
+      
+      const { platformAddress } = listData.payload;
+      const priceInDrops = Math.floor(parseFloat(releaseData.songPrice || releaseData.albumPrice || 1) * 1000000);
+      
+      // Create NFTokenCreateOffer via Xaman
+      const offerResult = await XamanWallet.createSellOffer(nftTokenId, priceInDrops, platformAddress);
+      
+      if (!offerResult.success) throw new Error('Failed to create sell offer');
+      
+      // Save the offer index
+      await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          releaseId, 
+          offerIndex: offerResult.offerIndex 
+        }),
+      });
+      
+      // Success!
+      statusEl.innerHTML = `
+        <div class="mint-status-icon" style="color: var(--success);">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="mint-status-text" style="color: var(--success); font-weight: 600;">Listed for Sale!</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Your release is now available for purchase</p>
+      `;
+      
+      setTimeout(() => {
+        this.close();
+        Router.navigate('profile');
+      }, 2000);
+      
+    } catch (error) {
+      console.error('List for sale failed:', error);
+      statusEl.innerHTML = `
+        <div class="mint-status-icon" style="color: var(--error);">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <div class="mint-status-text" style="color: var(--error);">Listing failed</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">You can list later from your profile</p>
+        <button class="btn btn-ghost" id="close-listing-error" style="margin-top: 16px;">Go to Profile</button>
+      `;
+      document.getElementById('close-listing-error')?.addEventListener('click', () => {
+        this.close();
+        Router.navigate('profile');
+      });
+    }
+  },
+
   showEditProfile() {
     if (!AppState.user?.address) return;
     this.activeModal = 'edit-profile';
