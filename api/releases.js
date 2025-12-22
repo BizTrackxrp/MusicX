@@ -184,8 +184,10 @@ async function createRelease(req, res, sql) {
   if (tracks && tracks.length > 0) {
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
+      const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await sql`
         INSERT INTO tracks (
+          id,
           release_id,
           title,
           track_order,
@@ -193,6 +195,7 @@ async function createRelease(req, res, sql) {
           audio_cid,
           audio_url
         ) VALUES (
+          ${trackId},
           ${release.id},
           ${track.title || title},
           ${track.trackNumber || i + 1},
