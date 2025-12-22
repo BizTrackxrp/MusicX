@@ -360,4 +360,55 @@ const XamanWallet = {
     // Wait for result
     return this.waitForPayload(payload.uuid);
   },
+  
+  /**
+   * Create NFT sell offer with platform as destination (for brokered sales)
+   * @param {string} nftTokenId - The NFT token ID
+   * @param {number} amountDrops - Price in drops
+   * @param {string} destination - Platform wallet address (broker)
+   */
+  async createSellOffer(nftTokenId, amountDrops, destination) {
+    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!AppState.user?.address) throw new Error('Wallet not connected');
+    
+    console.log('Creating sell offer:', { nftTokenId, amountDrops, destination });
+    
+    const payload = await this.sdk.payload?.create({
+      txjson: {
+        TransactionType: 'NFTokenCreateOffer',
+        NFTokenID: nftTokenId,
+        Amount: amountDrops.toString(),
+        Flags: 1, // tfSellNFToken
+        Destination: destination, // Platform can broker this offer
+      },
+      custom_meta: {
+        instruction: 'Sign to list your music NFT for sale',
+      },
+    });
+    
+    if (!payload) {
+      throw new Error('Failed to create sell offer payload');
+    }
+    
+    console.log('Sell offer payload:', payload);
+    
+    // Open Xaman for signing
+    if (payload.next?.always) {
+      window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
+    
+    // Wait for result
+    const result = await this.waitForPayload(payload.uuid);
+    
+    // Extract offer index from the result if available
+    if (result.success && result.txHash) {
+      // The offer index will be in the transaction result
+      // For now, we'll store the tx hash and look up the offer later
+      result.offerIndex = result.txHash; // Placeholder - actual offer index comes from tx meta
+    }
+    
+    return result;
+  },
 };
