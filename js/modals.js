@@ -1625,9 +1625,9 @@ const Modals = {
           tracks: uploadedTracks,
         };
         
-        const saveResult = await API.saveRelease(releaseData);
+        await API.saveRelease(releaseData);
         
-        // Success - now prompt to list for sale
+        // Success - navigate to profile to see red "List for Sale" badge
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--success);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1636,29 +1636,13 @@ const Modals = {
             </svg>
           </div>
           <div class="mint-status-text" style="color: var(--success); font-weight: 600;">NFT Minted Successfully!</div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">One more step to put it up for sale!</p>
-          <button class="btn btn-primary" id="list-for-sale-btn" style="margin-top: 16px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
-            List for Sale
-          </button>
-          <button class="btn btn-ghost" id="skip-listing-btn" style="margin-top: 8px;">
-            Do it later
-          </button>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Now list it for sale from your profile</p>
         `;
         
-        // Handle list for sale
-        document.getElementById('list-for-sale-btn')?.addEventListener('click', async () => {
-          await this.startListForSale(saveResult.releaseId, mintResult.nftTokenId, releaseData);
-        });
-        
-        // Handle skip
-        document.getElementById('skip-listing-btn')?.addEventListener('click', () => {
+        setTimeout(() => {
           this.close();
           Router.navigate('profile');
-        });
+        }, 2000);
         
       } catch (error) {
         console.error('Mint failed:', error);
