@@ -230,13 +230,15 @@ const ProfilePage = {
         .profile-genre-badge {
           display: inline-flex;
           align-items: center;
-          padding: 4px 12px;
-          background: color-mix(in srgb, var(--genre-color) 20%, transparent);
-          border: 1px solid var(--genre-color);
-          border-radius: 20px;
-          font-size: 12px;
+          padding: 5px 14px;
+          background: color-mix(in srgb, var(--genre-color) 15%, transparent);
+          border: 1.5px solid var(--genre-color);
+          border-radius: 16px;
+          font-size: 11px;
           font-weight: 600;
           color: var(--genre-color);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
         .profile-address {
           color: var(--text-muted);
