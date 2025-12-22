@@ -223,8 +223,11 @@ function formatRelease(row) {
     metadataCid: row.metadata_cid,
     songPrice: parseFloat(row.song_price) || 0,
     albumPrice: row.album_price ? parseFloat(row.album_price) : null,
-    totalEditions: 100, // Default since column doesn't exist
+    totalEditions: row.total_editions || 100,
     soldEditions: row.sold_editions || 0,
+    nftTokenId: row.nft_token_id,
+    sellOfferIndex: row.sell_offer_index,
+    listedAt: row.listed_at,
     txHash: row.tx_hash,
     createdAt: row.created_at,
     tracks: row.tracks || [],
