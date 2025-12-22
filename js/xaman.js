@@ -178,41 +178,59 @@ const XamanWallet = {
    * Mint NFT
    */
   async mintNFT(metadataUri, options = {}) {
-    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!this.sdk) {
+      console.error('mintNFT: SDK not initialized');
+      throw new Error('SDK not initialized');
+    }
     
     const { transferFee = 200, taxon = 0, flags = 8 } = options;
     
     // Convert URI to hex
     const uriHex = this.stringToHex(metadataUri);
     
-    console.log('Creating NFT mint payload...');
+    console.log('Creating NFT mint payload...', { metadataUri, uriHex, transferFee, taxon, flags });
     
-    const payload = await this.sdk.payload?.create({
-      txjson: {
-        TransactionType: 'NFTokenMint',
-        NFTokenTaxon: taxon,
-        Flags: flags,
-        TransferFee: transferFee,
-        URI: uriHex,
-      },
-      custom_meta: {
-        instruction: 'Sign to mint your music NFT on the XRP Ledger',
-      },
-    });
-    
-    if (!payload) {
-      throw new Error('Failed to create mint payload');
+    try {
+      const payload = await this.sdk.payload?.create({
+        txjson: {
+          TransactionType: 'NFTokenMint',
+          NFTokenTaxon: taxon,
+          Flags: flags,
+          TransferFee: transferFee,
+          URI: uriHex,
+        },
+        custom_meta: {
+          instruction: 'Sign to mint your music NFT on the XRP Ledger',
+        },
+      });
+      
+      console.log('Payload response:', payload);
+      
+      if (!payload) {
+        console.error('mintNFT: No payload returned');
+        throw new Error('Failed to create mint payload');
+      }
+      
+      // Open Xaman for signing
+      if (payload.next?.always) {
+        console.log('Opening Xaman URL:', payload.next.always);
+        window.open(payload.next.always, '_blank');
+      } else if (payload.refs?.qr_png) {
+        // Fallback: show QR code or redirect
+        console.log('QR available:', payload.refs.qr_png);
+        window.open(payload.next?.always || payload.refs.websocket_status, '_blank');
+      } else {
+        console.error('mintNFT: No sign URL in payload', payload);
+        throw new Error('No sign URL returned from Xaman');
+      }
+      
+      // Wait for result
+      return this.waitForPayload(payload.uuid);
+      
+    } catch (error) {
+      console.error('mintNFT error:', error);
+      throw error;
     }
-    
-    // Open Xaman for signing
-    if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
-    } else {
-      throw new Error('No sign URL returned from Xaman');
-    }
-    
-    // Wait for result
-    return this.waitForPayload(payload.uuid);
   },
   
   /**
