@@ -46,11 +46,11 @@ async function getReleases(req, res, sql) {
             json_build_object(
               'id', t.id,
               'title', t.title,
-              'trackNumber', t.track_number,
+              'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
               'audioUrl', t.audio_url
-            ) ORDER BY t.track_number
+            ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
         ) as tracks
@@ -76,11 +76,11 @@ async function getReleases(req, res, sql) {
             json_build_object(
               'id', t.id,
               'title', t.title,
-              'trackNumber', t.track_number,
+              'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
               'audioUrl', t.audio_url
-            ) ORDER BY t.track_number
+            ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
         ) as tracks
@@ -99,11 +99,11 @@ async function getReleases(req, res, sql) {
             json_build_object(
               'id', t.id,
               'title', t.title,
-              'trackNumber', t.track_number,
+              'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
               'audioUrl', t.audio_url
-            ) ORDER BY t.track_number
+            ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
         ) as tracks
@@ -126,18 +126,20 @@ async function createRelease(req, res, sql) {
     type,
     coverUrl,
     coverCid,
+    metadataCid,
     songPrice,
     albumPrice,
     totalEditions,
     tracks,
     nftTokenId,
+    txHash,
   } = req.body;
   
   if (!artistAddress || !title || !type) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   
-  // Insert release
+  // Insert release (using columns that exist in your schema)
   const [release] = await sql`
     INSERT INTO releases (
       artist_address,
@@ -147,11 +149,11 @@ async function createRelease(req, res, sql) {
       type,
       cover_url,
       cover_cid,
+      metadata_cid,
       song_price,
       album_price,
-      total_editions,
       sold_editions,
-      nft_token_id,
+      tx_hash,
       created_at
     ) VALUES (
       ${artistAddress},
@@ -161,11 +163,11 @@ async function createRelease(req, res, sql) {
       ${type},
       ${coverUrl || null},
       ${coverCid || null},
+      ${metadataCid || null},
       ${songPrice || 0},
       ${albumPrice || null},
-      ${totalEditions || 100},
       0,
-      ${nftTokenId || null},
+      ${txHash || null},
       NOW()
     )
     RETURNING *
@@ -173,19 +175,20 @@ async function createRelease(req, res, sql) {
   
   // Insert tracks
   if (tracks && tracks.length > 0) {
-    for (const track of tracks) {
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
       await sql`
         INSERT INTO tracks (
           release_id,
           title,
-          track_number,
+          track_order,
           duration,
           audio_cid,
           audio_url
         ) VALUES (
           ${release.id},
           ${track.title || title},
-          ${track.trackNumber || 1},
+          ${track.trackNumber || i + 1},
           ${track.duration || null},
           ${track.audioCid || null},
           ${track.audioUrl || null}
@@ -207,11 +210,12 @@ function formatRelease(row) {
     type: row.type,
     coverUrl: row.cover_url,
     coverCid: row.cover_cid,
+    metadataCid: row.metadata_cid,
     songPrice: parseFloat(row.song_price) || 0,
     albumPrice: row.album_price ? parseFloat(row.album_price) : null,
-    totalEditions: row.total_editions,
-    soldEditions: row.sold_editions,
-    nftTokenId: row.nft_token_id,
+    totalEditions: 100, // Default since column doesn't exist
+    soldEditions: row.sold_editions || 0,
+    txHash: row.tx_hash,
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
