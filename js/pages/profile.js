@@ -535,59 +535,13 @@ const ProfilePage = {
       });
     });
     
-    // List Now button click
+    // List Now button click - open modal
     document.querySelectorAll('.list-now-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const release = JSON.parse(btn.dataset.release);
-        await this.listForSale(release);
+        Modals.showListForSale(release);
       });
     });
-  },
-  
-  /**
-   * List a release for sale
-   */
-  async listForSale(release) {
-    try {
-      // Get platform address
-      const response = await fetch('/api/list-for-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ releaseId: release.id }),
-      });
-      
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error);
-      
-      const { platformAddress } = data.payload;
-      const priceInDrops = Math.floor(parseFloat(release.songPrice || release.albumPrice || 1) * 1000000);
-      
-      // Create sell offer via Xaman
-      const offerResult = await XamanWallet.createSellOffer(
-        release.nftTokenId,
-        priceInDrops,
-        platformAddress
-      );
-      
-      if (!offerResult.success) throw new Error('Failed to create sell offer');
-      
-      // Save the offer index
-      await fetch('/api/list-for-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          releaseId: release.id, 
-          offerIndex: offerResult.offerIndex 
-        }),
-      });
-      
-      // Refresh the page to show updated status
-      this.render();
-      
-    } catch (error) {
-      console.error('List for sale failed:', error);
-      alert('Failed to list for sale: ' + error.message);
-    }
   },
 };
