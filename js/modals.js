@@ -631,11 +631,17 @@ const Modals = {
 
   /**
    * Show List for Sale Modal
+   * Artist confirms details and transfers NFT to platform for batch minting
    */
   showListForSale(release) {
     this.activeModal = 'list-for-sale';
     
     const price = release.albumPrice || release.songPrice;
+    const quantity = release.totalEditions || 100;
+    const royaltyPercent = release.royaltyPercent || 5; // Default 5% resale royalty
+    const platformFee = 2;
+    const artistEarnings = (price * 0.98).toFixed(2);
+    const totalPotential = (price * 0.98 * quantity).toFixed(2);
     
     const html = `
       <div class="modal-overlay">
@@ -663,49 +669,66 @@ const Modals = {
               </div>
             </div>
             
-            <!-- Sale Details -->
-            <div class="list-sale-details">
-              <div class="list-sale-row">
-                <span>Price per edition</span>
-                <span class="list-sale-value">${price} XRP</span>
-              </div>
-              <div class="list-sale-row">
-                <span>Available editions</span>
-                <span class="list-sale-value">${release.totalEditions - release.soldEditions} of ${release.totalEditions}</span>
-              </div>
-              <div class="list-sale-row">
-                <span>Platform fee</span>
-                <span class="list-sale-value">2%</span>
-              </div>
-              <div class="list-sale-row list-sale-earnings">
-                <span>You earn per sale</span>
-                <span class="list-sale-value">${(price * 0.98).toFixed(2)} XRP</span>
+            <!-- Confirm Details -->
+            <div class="list-sale-section">
+              <div class="list-sale-section-title">Confirm Sale Details</div>
+              
+              <div class="list-sale-details">
+                <div class="list-sale-row">
+                  <span>Price per copy</span>
+                  <span class="list-sale-value">${price} XRP</span>
+                </div>
+                <div class="list-sale-row">
+                  <span>Number of copies</span>
+                  <span class="list-sale-value">${quantity} editions</span>
+                </div>
+                <div class="list-sale-row">
+                  <span>Resale royalty</span>
+                  <span class="list-sale-value">${royaltyPercent}%</span>
+                </div>
+                <div class="list-sale-row">
+                  <span>Platform fee</span>
+                  <span class="list-sale-value">${platformFee}%</span>
+                </div>
               </div>
             </div>
             
-            <!-- NFT Selection -->
-            <div class="nft-selection" id="nft-selection">
-              <div class="nft-selection-loading">
-                <div class="spinner"></div>
-                <span>Finding your NFT...</span>
+            <!-- Earnings Summary -->
+            <div class="list-sale-earnings-box">
+              <div class="earnings-row">
+                <span>You earn per sale</span>
+                <span class="earnings-value">${artistEarnings} XRP</span>
               </div>
+              <div class="earnings-row highlight">
+                <span>Total if all sell</span>
+                <span class="earnings-value">${totalPotential} XRP</span>
+              </div>
+            </div>
+            
+            <!-- What happens -->
+            <div class="list-sale-info">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>You'll sign <strong>one transaction</strong> to transfer your NFT to XRP Music. We'll mint ${quantity} copies and handle all sales automatically.</span>
             </div>
             
             <!-- Status -->
             <div class="list-sale-status" id="list-sale-status" style="display: none;">
               <div class="spinner"></div>
-              <span>Creating sell offer...</span>
+              <span id="list-sale-status-text">Preparing...</span>
             </div>
             
             <!-- Actions -->
-            <div class="list-sale-actions" id="list-sale-actions" style="display: none;">
+            <div class="list-sale-actions" id="list-sale-actions">
               <button class="btn btn-secondary close-modal-btn">Cancel</button>
               <button class="btn btn-primary" id="confirm-list-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="1" x2="12" y2="23"></line>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
-                List for Sale
+                Confirm & Sign
               </button>
             </div>
           </div>
@@ -714,126 +737,96 @@ const Modals = {
       
       <style>
         .list-sale-modal {
-          max-width: 440px;
+          max-width: 480px;
+        }
+        .list-sale-section {
+          margin-bottom: 20px;
+        }
+        .list-sale-section-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 12px;
         }
         .list-sale-details {
           background: var(--bg-hover);
           border-radius: var(--radius-lg);
-          padding: 16px;
-          margin-bottom: 20px;
+          padding: 4px 16px;
         }
         .list-sale-row {
           display: flex;
           justify-content: space-between;
-          padding: 8px 0;
+          padding: 12px 0;
           font-size: 14px;
           color: var(--text-secondary);
-        }
-        .list-sale-row:not(:last-child) {
           border-bottom: 1px solid var(--border-color);
+        }
+        .list-sale-row:last-child {
+          border-bottom: none;
         }
         .list-sale-value {
           font-weight: 600;
           color: var(--text-primary);
         }
-        .list-sale-earnings {
-          background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
-          margin: 8px -16px -16px;
-          padding: 12px 16px;
-          border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-        }
-        .list-sale-earnings .list-sale-value {
-          color: var(--success);
-        }
-        .nft-selection {
+        .list-sale-earnings-box {
+          background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.02));
+          border: 1px solid rgba(34, 197, 94, 0.3);
+          border-radius: var(--radius-lg);
+          padding: 16px;
           margin-bottom: 20px;
         }
-        .nft-selection-loading {
+        .earnings-row {
           display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          padding: 24px;
-          color: var(--text-muted);
+          justify-content: space-between;
           font-size: 14px;
+          color: var(--text-secondary);
         }
-        .nft-selection-error {
-          padding: 16px;
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.3);
-          border-radius: var(--radius-md);
-          color: var(--error);
-          font-size: 13px;
-          text-align: center;
+        .earnings-row:not(:last-child) {
+          margin-bottom: 8px;
         }
-        .nft-item {
+        .earnings-row.highlight {
+          padding-top: 12px;
+          margin-top: 12px;
+          border-top: 1px solid rgba(34, 197, 94, 0.2);
+          font-size: 16px;
+        }
+        .earnings-value {
+          font-weight: 700;
+          color: var(--success);
+        }
+        .earnings-row.highlight .earnings-value {
+          font-size: 18px;
+        }
+        .list-sale-info {
           display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px;
+          gap: 10px;
+          padding: 12px 14px;
           background: var(--bg-hover);
-          border: 2px solid var(--border-color);
           border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all 150ms;
+          font-size: 13px;
+          color: var(--text-secondary);
+          line-height: 1.5;
+          margin-bottom: 20px;
         }
-        .nft-item:hover {
-          border-color: var(--accent);
-        }
-        .nft-item.selected {
-          border-color: var(--accent);
-          background: rgba(139, 92, 246, 0.1);
-        }
-        .nft-item-icon {
-          width: 40px;
-          height: 40px;
-          background: var(--accent);
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-        .nft-item-info {
-          flex: 1;
-        }
-        .nft-item-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-        .nft-item-id {
-          font-size: 11px;
-          color: var(--text-muted);
-          font-family: monospace;
-        }
-        .nft-item-check {
-          width: 20px;
-          height: 20px;
-          border: 2px solid var(--border-color);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .nft-item.selected .nft-item-check {
-          background: var(--accent);
-          border-color: var(--accent);
-          color: white;
+        .list-sale-info svg {
+          flex-shrink: 0;
+          color: var(--accent);
+          margin-top: 2px;
         }
         .list-sale-status {
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 12px;
-          padding: 24px;
+          padding: 32px;
           color: var(--text-secondary);
           font-size: 14px;
         }
         .list-sale-actions {
           display: flex;
           gap: 12px;
-          padding-top: 8px;
         }
         .list-sale-actions .btn {
           flex: 1;
@@ -843,136 +836,6 @@ const Modals = {
     
     this.show(html);
     
-    // Fetch NFTs from user's wallet
-    this.loadUserNFTs(release);
-  },
-  
-  /**
-   * Load NFTs from user's wallet and match with release
-   */
-  async loadUserNFTs(release) {
-    const selectionEl = document.getElementById('nft-selection');
-    const actionsEl = document.getElementById('list-sale-actions');
-    
-    try {
-      // Fetch NFTs from XRPL
-      const response = await fetch(`https://xrplcluster.com`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          method: 'account_nfts',
-          params: [{
-            account: AppState.user.address,
-            limit: 100
-          }]
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.result?.account_nfts?.length > 0) {
-        const nfts = data.result.account_nfts;
-        
-        // Try to find NFT that matches this release (by URI containing metadata CID)
-        let matchedNft = null;
-        
-        for (const nft of nfts) {
-          // Decode URI from hex
-          if (nft.URI) {
-            const uri = this.hexToString(nft.URI);
-            // Check if URI contains our metadata CID or title
-            if (release.metadataCid && uri.includes(release.metadataCid)) {
-              matchedNft = nft;
-              break;
-            }
-          }
-        }
-        
-        // If no match by metadata, show all NFTs for manual selection
-        if (matchedNft) {
-          this.selectedNftTokenId = matchedNft.NFTokenID;
-          selectionEl.innerHTML = `
-            <div class="nft-item selected">
-              <div class="nft-item-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"></path>
-                  <circle cx="6" cy="18" r="3"></circle>
-                  <circle cx="18" cy="16" r="3"></circle>
-                </svg>
-              </div>
-              <div class="nft-item-info">
-                <div class="nft-item-title">${release.title}</div>
-                <div class="nft-item-id">${matchedNft.NFTokenID.slice(0, 20)}...${matchedNft.NFTokenID.slice(-8)}</div>
-              </div>
-              <div class="nft-item-check">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-              </div>
-            </div>
-          `;
-          actionsEl.style.display = 'flex';
-        } else if (nfts.length > 0) {
-          // Show all NFTs for selection
-          this.selectedNftTokenId = nfts[0].NFTokenID;
-          selectionEl.innerHTML = `
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Select the NFT for "${release.title}":</p>
-            ${nfts.map((nft, i) => `
-              <div class="nft-item ${i === 0 ? 'selected' : ''}" data-nft-id="${nft.NFTokenID}">
-                <div class="nft-item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 18V5l12-2v13"></path>
-                    <circle cx="6" cy="18" r="3"></circle>
-                    <circle cx="18" cy="16" r="3"></circle>
-                  </svg>
-                </div>
-                <div class="nft-item-info">
-                  <div class="nft-item-title">NFT #${i + 1}</div>
-                  <div class="nft-item-id">${nft.NFTokenID.slice(0, 20)}...${nft.NFTokenID.slice(-8)}</div>
-                </div>
-                <div class="nft-item-check">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </div>
-              </div>
-            `).join('')}
-          `;
-          
-          // Bind NFT selection
-          selectionEl.querySelectorAll('.nft-item').forEach(item => {
-            item.addEventListener('click', () => {
-              selectionEl.querySelectorAll('.nft-item').forEach(i => i.classList.remove('selected'));
-              item.classList.add('selected');
-              this.selectedNftTokenId = item.dataset.nftId;
-            });
-          });
-          
-          actionsEl.style.display = 'flex';
-        } else {
-          selectionEl.innerHTML = `
-            <div class="nft-selection-error">
-              No NFTs found in your wallet. Make sure you minted this release first.
-            </div>
-          `;
-        }
-      } else {
-        selectionEl.innerHTML = `
-          <div class="nft-selection-error">
-            No NFTs found in your wallet. Make sure you minted this release first.
-          </div>
-        `;
-      }
-      
-    } catch (error) {
-      console.error('Failed to load NFTs:', error);
-      selectionEl.innerHTML = `
-        <div class="nft-selection-error">
-          Failed to load NFTs: ${error.message}
-        </div>
-      `;
-    }
-    
     // Bind confirm button
     document.getElementById('confirm-list-btn')?.addEventListener('click', () => {
       this.processListForSale(release);
@@ -980,67 +843,113 @@ const Modals = {
   },
   
   /**
-   * Process the list for sale transaction
+   * Load NFTs from user's wallet and match with release
    */
-  async processListForSale(release) {
-    const statusEl = document.getElementById('list-sale-status');
-    const actionsEl = document.getElementById('list-sale-actions');
-    const selectionEl = document.getElementById('nft-selection');
-    
-    if (!this.selectedNftTokenId) {
-      alert('Please select an NFT');
-      return;
-    }
-    
-    // Show loading
-    selectionEl.style.display = 'none';
-    actionsEl.style.display = 'none';
-    statusEl.style.display = 'flex';
-    
+  async loadUserNFTs(release) {
+    // This function kept for compatibility but simplified
     try {
-      // Get platform address
-      const response = await fetch('/api/list-for-sale', {
+      const response = await fetch(`https://xrplcluster.com`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ releaseId: release.id, nftTokenId: this.selectedNftTokenId }),
+        body: JSON.stringify({
+          method: 'account_nfts',
+          params: [{ account: AppState.user.address, limit: 100 }]
+        })
       });
       
       const data = await response.json();
-      if (!data.success) throw new Error(data.error);
+      return data.result?.account_nfts || [];
+    } catch (error) {
+      console.error('Failed to load NFTs:', error);
+      return [];
+    }
+  },
+  
+  /**
+   * Process the list for sale - transfer NFT to platform
+   */
+  async processListForSale(release) {
+    const statusEl = document.getElementById('list-sale-status');
+    const statusTextEl = document.getElementById('list-sale-status-text');
+    const actionsEl = document.getElementById('list-sale-actions');
+    
+    // Show loading
+    actionsEl.style.display = 'none';
+    statusEl.style.display = 'flex';
+    statusTextEl.textContent = 'Finding your NFT...';
+    
+    try {
+      // Step 1: Find the NFT in user's wallet
+      const nfts = await this.loadUserNFTs(release);
       
-      const { platformAddress } = data.payload;
-      const price = release.albumPrice || release.songPrice;
-      const priceInDrops = Math.floor(parseFloat(price) * 1000000);
+      let nftTokenId = release.nftTokenId;
       
-      statusEl.innerHTML = `
-        <div class="spinner"></div>
-        <span>Sign in Xaman to list for sale...</span>
-      `;
+      // Try to match by metadata CID if we don't have the token ID
+      if (!nftTokenId && nfts.length > 0) {
+        for (const nft of nfts) {
+          if (nft.URI) {
+            const uri = this.hexToString(nft.URI);
+            if (release.metadataCid && uri.includes(release.metadataCid)) {
+              nftTokenId = nft.NFTokenID;
+              break;
+            }
+          }
+        }
+        
+        // If still no match, use most recent NFT
+        if (!nftTokenId) {
+          nftTokenId = nfts[nfts.length - 1]?.NFTokenID;
+        }
+      }
       
-      // Create sell offer via Xaman
-      const offerResult = await XamanWallet.createSellOffer(
-        this.selectedNftTokenId,
-        priceInDrops,
-        platformAddress
-      );
+      if (!nftTokenId) {
+        throw new Error('Could not find NFT in your wallet');
+      }
       
-      if (!offerResult.success) throw new Error('Transaction cancelled or failed');
+      // Step 2: Get platform address
+      statusTextEl.textContent = 'Preparing transfer...';
       
-      statusEl.innerHTML = `
-        <div class="spinner"></div>
-        <span>Saving listing...</span>
-      `;
+      const configResponse = await fetch('/api/list-for-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ releaseId: release.id, nftTokenId }),
+      });
       
-      // Save the offer index and NFT token ID
-      await fetch('/api/list-for-sale', {
+      const configData = await configResponse.json();
+      if (!configData.success) throw new Error(configData.error || 'Failed to get platform config');
+      
+      const { platformAddress } = configData.payload;
+      
+      if (!platformAddress) {
+        throw new Error('Platform wallet not configured');
+      }
+      
+      // Step 3: Create sell offer with platform as destination (transfer)
+      // Using Amount: "0" and Destination makes it a transfer offer
+      statusTextEl.textContent = 'Sign in Xaman to transfer NFT...';
+      
+      const offerResult = await XamanWallet.createTransferOffer(nftTokenId, platformAddress);
+      
+      if (!offerResult.success) {
+        throw new Error('Transaction cancelled');
+      }
+      
+      // Step 4: Save to database and trigger backend minting
+      statusTextEl.textContent = 'Finalizing listing...';
+      
+      const listResponse = await fetch('/api/list-for-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           releaseId: release.id, 
-          nftTokenId: this.selectedNftTokenId,
-          offerIndex: offerResult.offerIndex || offerResult.txHash
+          nftTokenId: nftTokenId,
+          offerIndex: offerResult.offerIndex || offerResult.txHash,
+          transferToPlaftorm: true
         }),
       });
+      
+      const listData = await listResponse.json();
+      if (!listData.success) throw new Error(listData.error || 'Failed to save listing');
       
       // Success!
       statusEl.innerHTML = `
@@ -1050,17 +959,18 @@ const Modals = {
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
         </div>
-        <span style="color: var(--success); font-weight: 600;">Listed for Sale!</span>
-        <span style="font-size: 13px; color: var(--text-muted);">Your release is now available for purchase</span>
+        <span style="color: var(--success); font-weight: 600; font-size: 16px;">Listed for Sale!</span>
+        <span style="font-size: 13px; color: var(--text-muted); text-align: center;">Your release is now available.<br>We'll handle the rest automatically.</span>
       `;
       
       setTimeout(() => {
         this.close();
         if (typeof ProfilePage !== 'undefined') ProfilePage.render();
-      }, 2000);
+      }, 2500);
       
     } catch (error) {
       console.error('List for sale failed:', error);
+      
       statusEl.innerHTML = `
         <div style="color: var(--error);">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1069,15 +979,15 @@ const Modals = {
             <line x1="9" y1="9" x2="15" y2="15"></line>
           </svg>
         </div>
-        <span style="color: var(--error);">Listing Failed</span>
+        <span style="color: var(--error); font-weight: 600;">Listing Failed</span>
         <span style="font-size: 13px; color: var(--text-muted);">${error.message}</span>
       `;
       
-      actionsEl.style.display = 'flex';
       actionsEl.innerHTML = `
-        <button class="btn btn-secondary close-modal-btn" onclick="Modals.close()">Close</button>
+        <button class="btn btn-secondary" onclick="Modals.close()">Close</button>
         <button class="btn btn-primary" onclick="Modals.processListForSale(${JSON.stringify(release).replace(/"/g, '&quot;')})">Try Again</button>
       `;
+      actionsEl.style.display = 'flex';
     }
   },
   
@@ -1090,6 +1000,369 @@ const Modals = {
       str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
     }
     return str;
+  },
+
+  /**
+   * Show List ALL for Sale Modal - batch listing
+   */
+  showListAllForSale(releases) {
+    this.activeModal = 'list-all-for-sale';
+    this.pendingListings = releases;
+    this.currentListingIndex = 0;
+    this.listedCount = 0;
+    this.userNFTs = [];
+    
+    const totalEarnings = releases.reduce((sum, r) => {
+      const price = r.albumPrice || r.songPrice || 0;
+      return sum + (price * 0.98);
+    }, 0);
+    
+    const html = `
+      <div class="modal-overlay">
+        <div class="modal list-all-modal">
+          <div class="modal-header">
+            <div class="modal-title">List All for Sale</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <!-- Summary -->
+            <div class="list-all-summary">
+              <div class="list-all-stat">
+                <span class="list-all-stat-value">${releases.length}</span>
+                <span class="list-all-stat-label">Releases to list</span>
+              </div>
+              <div class="list-all-stat">
+                <span class="list-all-stat-value">${releases.length}</span>
+                <span class="list-all-stat-label">Signatures needed</span>
+              </div>
+              <div class="list-all-stat highlight">
+                <span class="list-all-stat-value">${totalEarnings.toFixed(2)} XRP</span>
+                <span class="list-all-stat-label">Potential earnings</span>
+              </div>
+            </div>
+            
+            <!-- Release List -->
+            <div class="list-all-releases" id="list-all-releases">
+              ${releases.map((release, i) => `
+                <div class="list-all-item" data-index="${i}" data-release-id="${release.id}">
+                  <div class="list-all-item-cover">
+                    ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
+                  </div>
+                  <div class="list-all-item-info">
+                    <div class="list-all-item-title">${release.title}</div>
+                    <div class="list-all-item-price">${release.albumPrice || release.songPrice} XRP</div>
+                  </div>
+                  <div class="list-all-item-status" id="status-${i}">
+                    <span class="status-pending">Pending</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            
+            <!-- Progress -->
+            <div class="list-all-progress" id="list-all-progress" style="display: none;">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+              </div>
+              <div class="progress-text" id="progress-text">Starting...</div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="list-all-actions" id="list-all-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary" id="start-list-all-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Start Listing (${releases.length} signatures)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .list-all-modal {
+          max-width: 500px;
+        }
+        .list-all-summary {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+        .list-all-stat {
+          flex: 1;
+          text-align: center;
+          padding: 16px 12px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-md);
+        }
+        .list-all-stat.highlight {
+          background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
+          border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .list-all-stat-value {
+          display: block;
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .list-all-stat.highlight .list-all-stat-value {
+          color: var(--success);
+        }
+        .list-all-stat-label {
+          font-size: 11px;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .list-all-releases {
+          max-height: 250px;
+          overflow-y: auto;
+          margin-bottom: 20px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+        }
+        .list-all-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .list-all-item:last-child {
+          border-bottom: none;
+        }
+        .list-all-item.active {
+          background: rgba(139, 92, 246, 0.1);
+        }
+        .list-all-item.done {
+          background: rgba(34, 197, 94, 0.05);
+        }
+        .list-all-item.error {
+          background: rgba(239, 68, 68, 0.05);
+        }
+        .list-all-item-cover {
+          width: 40px;
+          height: 40px;
+          border-radius: 6px;
+          overflow: hidden;
+          background: var(--bg-card);
+          flex-shrink: 0;
+        }
+        .list-all-item-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .list-all-item-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .list-all-item-title {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .list-all-item-price {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .list-all-item-status {
+          font-size: 12px;
+          font-weight: 500;
+        }
+        .status-pending { color: var(--text-muted); }
+        .status-active { color: var(--accent); }
+        .status-done { color: var(--success); }
+        .status-error { color: var(--error); }
+        .list-all-progress {
+          margin-bottom: 20px;
+        }
+        .progress-bar {
+          height: 8px;
+          background: var(--bg-hover);
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 8px;
+        }
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--accent), var(--success));
+          border-radius: 4px;
+          transition: width 300ms ease;
+        }
+        .progress-text {
+          font-size: 13px;
+          color: var(--text-secondary);
+          text-align: center;
+        }
+        .list-all-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .list-all-actions .btn {
+          flex: 1;
+        }
+      </style>
+    `;
+    
+    this.show(html);
+    
+    // Load NFTs first
+    this.loadNFTsForBatchListing();
+    
+    // Bind start button
+    document.getElementById('start-list-all-btn')?.addEventListener('click', () => {
+      this.processBatchListing();
+    });
+  },
+  
+  /**
+   * Load NFTs for batch listing
+   */
+  async loadNFTsForBatchListing() {
+    try {
+      const response = await fetch(`https://xrplcluster.com`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: 'account_nfts',
+          params: [{ account: AppState.user.address, limit: 100 }]
+        })
+      });
+      
+      const data = await response.json();
+      this.userNFTs = data.result?.account_nfts || [];
+      console.log(`Loaded ${this.userNFTs.length} NFTs for batch listing`);
+    } catch (error) {
+      console.error('Failed to load NFTs:', error);
+    }
+  },
+  
+  /**
+   * Process batch listing - one by one
+   */
+  async processBatchListing() {
+    const actionsEl = document.getElementById('list-all-actions');
+    const progressEl = document.getElementById('list-all-progress');
+    
+    // Hide actions, show progress
+    actionsEl.style.display = 'none';
+    progressEl.style.display = 'block';
+    
+    // Get platform address once
+    const configResponse = await fetch('/api/list-for-sale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ releaseId: this.pendingListings[0].id }),
+    });
+    const configData = await configResponse.json();
+    const platformAddress = configData.payload?.platformAddress;
+    
+    if (!platformAddress) {
+      alert('Platform not configured');
+      return;
+    }
+    
+    // Process each release
+    for (let i = 0; i < this.pendingListings.length; i++) {
+      const release = this.pendingListings[i];
+      const statusEl = document.getElementById(`status-${i}`);
+      const itemEl = document.querySelector(`.list-all-item[data-index="${i}"]`);
+      
+      // Update UI
+      itemEl.classList.add('active');
+      statusEl.innerHTML = `<span class="status-active">Sign in Xaman...</span>`;
+      document.getElementById('progress-text').textContent = `Listing ${i + 1} of ${this.pendingListings.length}: ${release.title}`;
+      document.getElementById('progress-fill').style.width = `${((i) / this.pendingListings.length) * 100}%`;
+      
+      try {
+        // Find matching NFT
+        let nftTokenId = release.nftTokenId;
+        
+        if (!nftTokenId && this.userNFTs.length > 0) {
+          // Try to match by metadata CID
+          for (const nft of this.userNFTs) {
+            if (nft.URI) {
+              const uri = this.hexToString(nft.URI);
+              if (release.metadataCid && uri.includes(release.metadataCid)) {
+                nftTokenId = nft.NFTokenID;
+                break;
+              }
+            }
+          }
+          
+          // If still no match, use first available NFT (user will need to verify)
+          if (!nftTokenId && this.userNFTs.length > 0) {
+            nftTokenId = this.userNFTs[0].NFTokenID;
+            // Remove this NFT from the list so it's not reused
+            this.userNFTs.shift();
+          }
+        }
+        
+        if (!nftTokenId) {
+          throw new Error('No NFT found');
+        }
+        
+        const price = release.albumPrice || release.songPrice;
+        const priceInDrops = Math.floor(parseFloat(price) * 1000000);
+        
+        // Create sell offer
+        const offerResult = await XamanWallet.createSellOffer(nftTokenId, priceInDrops, platformAddress);
+        
+        if (!offerResult.success) {
+          throw new Error('Cancelled');
+        }
+        
+        // Save to database
+        await fetch('/api/list-for-sale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            releaseId: release.id, 
+            nftTokenId: nftTokenId,
+            offerIndex: offerResult.offerIndex || offerResult.txHash
+          }),
+        });
+        
+        // Success!
+        itemEl.classList.remove('active');
+        itemEl.classList.add('done');
+        statusEl.innerHTML = `<span class="status-done">✓ Listed</span>`;
+        this.listedCount++;
+        
+      } catch (error) {
+        console.error(`Failed to list ${release.title}:`, error);
+        itemEl.classList.remove('active');
+        itemEl.classList.add('error');
+        statusEl.innerHTML = `<span class="status-error">✗ ${error.message}</span>`;
+      }
+      
+      // Update progress
+      document.getElementById('progress-fill').style.width = `${((i + 1) / this.pendingListings.length) * 100}%`;
+    }
+    
+    // Done!
+    document.getElementById('progress-text').textContent = `Done! Listed ${this.listedCount} of ${this.pendingListings.length} releases`;
+    
+    // Show close button
+    actionsEl.innerHTML = `
+      <button class="btn btn-primary" onclick="Modals.close(); ProfilePage.render();">
+        Done - View Profile
+      </button>
+    `;
+    actionsEl.style.display = 'flex';
   },
 
   /**
@@ -1310,10 +1583,11 @@ const Modals = {
   },
   
   /**
-   * Process the actual purchase via broker
+   * Process the actual purchase
    * 1. Buyer pays platform wallet
-   * 2. Platform brokers the NFT transfer
-   * 3. Platform pays artist 98%
+   * 2. Platform creates sell offer for buyer
+   * 3. Buyer accepts the offer (gets NFT)
+   * 4. Platform pays artist 98%
    */
   async processPurchase(release) {
     const statusEl = document.getElementById('purchase-status');
@@ -1325,11 +1599,6 @@ const Modals = {
     if (actionsEl) actionsEl.style.display = 'none';
     
     try {
-      // Check if release is listed for sale (has sell offer)
-      if (!release.sellOfferIndex) {
-        throw new Error('This release is not listed for sale yet');
-      }
-      
       // Step 1: Buyer pays platform wallet
       statusEl.innerHTML = `
         <div class="purchase-status-icon">
@@ -1340,13 +1609,13 @@ const Modals = {
       `;
       
       // Get platform address
-      const configResponse = await fetch('/api/list-for-sale', {
+      const configResponse = await fetch('/api/batch-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ releaseId: release.id }),
+        body: JSON.stringify({ action: 'getConfig' }),
       });
       const configData = await configResponse.json();
-      const platformAddress = configData.payload?.platformAddress;
+      const platformAddress = configData.platformAddress;
       
       if (!platformAddress) {
         throw new Error('Platform not configured');
@@ -1362,30 +1631,44 @@ const Modals = {
         throw new Error(paymentResult.error || 'Payment failed');
       }
       
-      // Step 2: Call broker to complete the sale
+      // Step 2: Call API to prepare NFT transfer
       statusEl.innerHTML = `
         <div class="purchase-status-icon">
           <div class="spinner"></div>
         </div>
-        <div class="purchase-status-text">Completing purchase...</div>
-        <div class="purchase-status-sub">Transferring NFT to your wallet</div>
+        <div class="purchase-status-text">Preparing your NFT...</div>
+        <div class="purchase-status-sub">Platform is processing the transfer</div>
       `;
       
-      const brokerResponse = await fetch('/api/broker-sale', {
+      const purchaseResponse = await fetch('/api/broker-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           releaseId: release.id,
           buyerAddress: AppState.user.address,
-          sellOfferIndex: release.sellOfferIndex,
           paymentTxHash: paymentResult.txHash,
         }),
       });
       
-      const brokerResult = await brokerResponse.json();
+      const purchaseResult = await purchaseResponse.json();
       
-      if (!brokerResult.success) {
-        throw new Error(brokerResult.error || 'Transfer failed');
+      if (!purchaseResult.success) {
+        throw new Error(purchaseResult.error || 'Transfer failed');
+      }
+      
+      // Step 3: Buyer accepts the sell offer to receive NFT
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="purchase-status-text">Accept NFT transfer...</div>
+        <div class="purchase-status-sub">Sign in Xaman to receive your NFT</div>
+      `;
+      
+      const acceptResult = await XamanWallet.acceptSellOffer(purchaseResult.offerIndex);
+      
+      if (!acceptResult.success) {
+        throw new Error('Failed to accept NFT transfer');
       }
       
       // Success!
@@ -2059,19 +2342,22 @@ const Modals = {
         
         const metadataResult = await API.uploadJSON(metadata, `${metadata.name}-metadata.json`);
         
-        // Step 4: Mint NFT
-        statusText.textContent = 'Open Xaman to sign the mint transaction...';
+        // Step 4: Mint NFTs (authorizes platform, then backend mints copies)
+        const editions = parseInt(document.getElementById('release-editions').value) || 1;
+        statusText.textContent = `Authorize minting of ${editions} copies in Xaman...`;
+        
         const mintResult = await XamanWallet.mintNFT(metadataResult.ipfsUrl, {
+          quantity: editions,
           transferFee: 500, // 5% royalty
-          flags: 8, // Transferable
         });
         
         if (!mintResult.success) {
           throw new Error(mintResult.error || 'Minting failed');
         }
         
+        statusText.textContent = `Minted ${mintResult.totalMinted} NFTs! Saving release...`;
+        
         // Step 5: Save to database
-        statusText.textContent = 'Saving release...';
         const releaseData = {
           artistAddress: AppState.user.address,
           artistName: AppState.profile?.name || null,
@@ -2080,17 +2366,19 @@ const Modals = {
           type: releaseType,
           coverUrl: coverResult.url,
           coverCid: coverResult.cid,
+          metadataCid: metadataResult.cid,
           songPrice: parseFloat(document.getElementById('release-price').value),
           albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) : null,
-          totalEditions: parseInt(document.getElementById('release-editions').value),
-          nftTokenId: mintResult.nftTokenId || mintResult.txHash,
+          totalEditions: mintResult.totalMinted || parseInt(document.getElementById('release-editions').value),
+          nftTokenIds: mintResult.nftTokenIds,
           txHash: mintResult.txHash,
           tracks: uploadedTracks,
+          sellOfferIndex: 'platform-owned', // Mark as ready to sell
         };
         
         await API.saveRelease(releaseData);
         
-        // Success - navigate to profile to see red "List for Sale" badge
+        // Success - NFTs minted and ready to sell!
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--success);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2098,8 +2386,8 @@ const Modals = {
               <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
           </div>
-          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">NFT Minted Successfully!</div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Now list it for sale from your profile</p>
+          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">${mintResult.totalMinted || editions} NFTs Minted!</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Your release is now live and for sale!</p>
         `;
         
         setTimeout(() => {
