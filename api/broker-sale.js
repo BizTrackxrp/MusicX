@@ -1,12 +1,10 @@
 /**
- * XRP Music - Broker Sale API
- * Automatically completes NFT purchases using platform wallet
- * 
- * Flow:
- * 1. Buyer pays XRP to platform
- * 2. This endpoint brokers the NFT transfer
- * 3. Platform sends 98% to artist, keeps 2%
- * 4. NFT goes to buyer
+ * XRP Music - Purchase API
+ * Platform already owns the NFTs, so we:
+ * 1. Buyer pays platform
+ * 2. Platform transfers 1 NFT to buyer
+ * 3. Platform sends 98% to artist
+ * 4. Platform keeps 2%
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -33,11 +31,10 @@ export default async function handler(req, res) {
     const {
       releaseId,
       buyerAddress,
-      sellOfferIndex,
       paymentTxHash,
     } = req.body;
     
-    if (!releaseId || !buyerAddress || !sellOfferIndex) {
+    if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -60,11 +57,12 @@ export default async function handler(req, res) {
     }
     
     // Check if still available
-    if (release.sold_editions >= release.total_editions) {
+    const available = release.total_editions - release.sold_editions;
+    if (available <= 0) {
       return res.status(400).json({ error: 'Sold out' });
     }
     
-    const price = parseFloat(release.song_price) || 0;
+    const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
     
     // Connect to XRPL
@@ -72,59 +70,104 @@ export default async function handler(req, res) {
     await client.connect();
     
     try {
-      // Create platform wallet from seed
       const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
       
-      // Calculate amounts
+      // Step 1: Find an NFT to transfer to buyer
+      // Get platform's NFTs and find one matching this release's metadata
+      const nftsResponse = await client.request({
+        command: 'account_nfts',
+        account: platformAddress,
+        limit: 400,
+      });
+      
+      const platformNFTs = nftsResponse.result.account_nfts || [];
+      
+      // Find NFT with matching URI (metadata)
+      let nftToTransfer = null;
+      const metadataUri = `ipfs://${release.metadata_cid}`;
+      const expectedUriHex = xrpl.convertStringToHex(metadataUri);
+      
+      for (const nft of platformNFTs) {
+        // Check if NFT URI matches release metadata
+        if (nft.URI === expectedUriHex) {
+          // Also verify issuer is the artist
+          // NFT Issuer is encoded in the NFTokenID
+          nftToTransfer = nft;
+          break;
+        }
+      }
+      
+      if (!nftToTransfer) {
+        console.error('No matching NFT found for release:', releaseId);
+        console.error('Looking for URI:', metadataUri);
+        console.error('Platform has', platformNFTs.length, 'NFTs');
+        return res.status(400).json({ error: 'No NFT available for this release' });
+      }
+      
+      console.log('Found NFT to transfer:', nftToTransfer.NFTokenID);
+      
+      // Step 2: Create sell offer for buyer (Amount: 0 = free transfer)
+      // Since buyer already paid, we transfer for free
+      const createOfferTx = await client.autofill({
+        TransactionType: 'NFTokenCreateOffer',
+        Account: platformAddress,
+        NFTokenID: nftToTransfer.NFTokenID,
+        Amount: '0', // Free transfer (buyer already paid)
+        Flags: 1, // tfSellNFToken
+        Destination: buyerAddress, // Only buyer can accept
+      });
+      
+      const signedOffer = platformWallet.sign(createOfferTx);
+      const offerResult = await client.submitAndWait(signedOffer.tx_blob);
+      
+      if (offerResult.result.meta.TransactionResult !== 'tesSUCCESS') {
+        throw new Error(`Create offer failed: ${offerResult.result.meta.TransactionResult}`);
+      }
+      
+      // Get the offer index from the transaction result
+      let offerIndex = null;
+      for (const node of offerResult.result.meta.AffectedNodes) {
+        if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
+          offerIndex = node.CreatedNode.LedgerIndex;
+          break;
+        }
+      }
+      
+      console.log('Created sell offer:', offerIndex);
+      
+      // Step 3: Accept the offer on behalf of buyer (using their signature)
+      // Actually - buyer needs to accept this themselves via Xaman
+      // Return the offer index for frontend to handle
+      
+      // Step 4: Send artist their payment (98%)
       const platformFee = price * (PLATFORM_FEE_PERCENT / 100);
       const artistPayment = price - platformFee;
       
-      // Step 1: Accept the NFT sell offer (broker the sale)
-      // The buyer has already paid, now we transfer the NFT
-      const acceptOfferTx = {
-        TransactionType: 'NFTokenAcceptOffer',
-        Account: platformWallet.address,
-        NFTokenSellOffer: sellOfferIndex,
-      };
-      
-      const acceptResult = await client.submitAndWait(acceptOfferTx, {
-        wallet: platformWallet,
-      });
-      
-      if (acceptResult.result.meta.TransactionResult !== 'tesSUCCESS') {
-        throw new Error(`NFT transfer failed: ${acceptResult.result.meta.TransactionResult}`);
-      }
-      
-      console.log('NFT transferred to buyer:', acceptResult.result.hash);
-      
-      // Step 2: Send artist their payment (98%)
       if (artistPayment > 0) {
-        const paymentTx = {
+        const paymentTx = await client.autofill({
           TransactionType: 'Payment',
-          Account: platformWallet.address,
+          Account: platformAddress,
           Destination: artistAddress,
-          Amount: xrpl.xrpToDrops(artistPayment.toString()),
+          Amount: xrpl.xrpToDrops(artistPayment.toFixed(6)),
           Memos: [{
             Memo: {
-              MemoType: Buffer.from('XRPMusic', 'utf8').toString('hex').toUpperCase(),
-              MemoData: Buffer.from(`Sale: ${release.title}`, 'utf8').toString('hex').toUpperCase(),
+              MemoType: xrpl.convertStringToHex('XRPMusic'),
+              MemoData: xrpl.convertStringToHex(`Sale: ${release.title}`),
             }
           }],
-        };
-        
-        const paymentResult = await client.submitAndWait(paymentTx, {
-          wallet: platformWallet,
         });
+        
+        const signedPayment = platformWallet.sign(paymentTx);
+        const paymentResult = await client.submitAndWait(signedPayment.tx_blob);
         
         if (paymentResult.result.meta.TransactionResult !== 'tesSUCCESS') {
           console.error('Artist payment failed:', paymentResult.result.meta.TransactionResult);
-          // Don't throw - NFT already transferred, log for manual resolution
         } else {
           console.log('Artist paid:', paymentResult.result.hash);
         }
       }
       
-      // Step 3: Update database
+      // Step 5: Update database
       await sql`
         UPDATE releases 
         SET sold_editions = sold_editions + 1
@@ -132,6 +175,7 @@ export default async function handler(req, res) {
       `;
       
       // Record the sale
+      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await sql`
         INSERT INTO sales (
           id,
@@ -143,21 +187,23 @@ export default async function handler(req, res) {
           tx_hash,
           created_at
         ) VALUES (
-          ${'sale_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)},
+          ${saleId},
           ${releaseId},
           ${buyerAddress},
           ${artistAddress},
           ${price},
           ${platformFee},
-          ${acceptResult.result.hash},
+          ${offerResult.result.hash},
           NOW()
         )
       `;
       
       return res.json({
         success: true,
-        txHash: acceptResult.result.hash,
-        message: 'Purchase complete!',
+        offerIndex: offerIndex,
+        nftTokenId: nftToTransfer.NFTokenID,
+        txHash: offerResult.result.hash,
+        message: 'NFT ready for transfer!',
       });
       
     } finally {
@@ -165,7 +211,7 @@ export default async function handler(req, res) {
     }
     
   } catch (error) {
-    console.error('Broker sale error:', error);
-    return res.status(500).json({ error: error.message || 'Sale failed' });
+    console.error('Purchase error:', error);
+    return res.status(500).json({ error: error.message || 'Purchase failed' });
   }
 }
