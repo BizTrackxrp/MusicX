@@ -63,6 +63,9 @@ const ProfilePage = {
   },
   
   renderGenreBadges(profile) {
+    // Only show genres if user is an artist
+    if (!profile.isArtist) return '';
+    
     const badges = [];
     
     if (profile.genrePrimary) {
@@ -407,7 +410,59 @@ const ProfilePage = {
       `;
     }
     
+    // Count unlisted releases
+    const unlistedCount = this.releases.filter(r => !r.sellOfferIndex && (r.totalEditions - r.soldEditions) > 0).length;
+    
     return `
+      ${unlistedCount > 0 ? `
+        <div class="list-all-banner">
+          <div class="list-all-info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span><strong>${unlistedCount}</strong> release${unlistedCount > 1 ? 's' : ''} not listed for sale</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="list-all-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            List All for Sale
+          </button>
+        </div>
+        <style>
+          .list-all-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: var(--radius-lg);
+            margin-bottom: 24px;
+          }
+          .list-all-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-secondary);
+            font-size: 14px;
+          }
+          .list-all-info svg {
+            color: var(--error);
+            flex-shrink: 0;
+          }
+          @media (max-width: 500px) {
+            .list-all-banner {
+              flex-direction: column;
+              text-align: center;
+            }
+          }
+        </style>
+      ` : ''}
       <div class="release-grid">
         ${this.releases.map(release => this.renderReleaseCard(release)).join('')}
       </div>
@@ -520,6 +575,12 @@ const ProfilePage = {
     
     document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
       Modals.showEditProfile();
+    });
+    
+    // List All button
+    document.getElementById('list-all-btn')?.addEventListener('click', () => {
+      const unlistedReleases = this.releases.filter(r => !r.sellOfferIndex && (r.totalEditions - r.soldEditions) > 0);
+      Modals.showListAllForSale(unlistedReleases);
     });
     
     // Release card click (open modal)
