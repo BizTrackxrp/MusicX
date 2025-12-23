@@ -221,10 +221,10 @@ const MarketplacePage = {
           <line x1="3" y1="6" x2="21" y2="6"></line>
           <path d="M16 10a4 4 0 0 1-8 0"></path>
         </svg>
-        <h3>No Releases Yet</h3>
+        <h3>No Releases For Sale</h3>
         <p>${this.activeTab === 'all' 
-          ? 'Be the first to mint music on XRP Music!' 
-          : `No ${this.activeTab} available yet.`}</p>
+          ? 'No music is currently listed for sale. Check back soon!' 
+          : `No ${this.activeTab} listed for sale yet.`}</p>
       </div>
     `;
   },
@@ -255,10 +255,13 @@ const MarketplacePage = {
    * Get filtered releases
    */
   getFilteredReleases() {
-    if (this.activeTab === 'all') return this.releases;
-    if (this.activeTab === 'singles') return this.releases.filter(r => r.type === 'single');
-    if (this.activeTab === 'albums') return this.releases.filter(r => r.type === 'album');
-    return this.releases;
+    // Only show releases that are listed for sale (have sellOfferIndex)
+    const listedReleases = this.releases.filter(r => r.sellOfferIndex);
+    
+    if (this.activeTab === 'all') return listedReleases;
+    if (this.activeTab === 'singles') return listedReleases.filter(r => r.type === 'single');
+    if (this.activeTab === 'albums') return listedReleases.filter(r => r.type === 'album');
+    return listedReleases;
   },
   
   /**
