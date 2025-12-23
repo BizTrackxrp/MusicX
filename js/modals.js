@@ -2497,9 +2497,10 @@ const Modals = {
     if (!AppState.user?.address) return;
     this.activeModal = 'edit-profile';
     const profile = AppState.profile || {};
+    
     const html = `
       <div class="modal-overlay">
-        <div class="modal" style="max-width: 500px;">
+        <div class="modal edit-profile-modal">
           <div class="modal-header">
             <div class="modal-title">Edit Profile</div>
             <button class="modal-close">
@@ -2511,48 +2512,252 @@ const Modals = {
           </div>
           <div class="modal-body">
             <form id="edit-profile-form">
+              <!-- Profile Picture & Banner -->
+              <div class="profile-images-section">
+                <div class="banner-upload" id="banner-upload">
+                  ${profile.bannerUrl 
+                    ? `<img src="${profile.bannerUrl}" alt="Banner" class="banner-preview">`
+                    : `<div class="banner-placeholder">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                          <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                        <span>Upload Banner</span>
+                      </div>`
+                  }
+                  <input type="file" id="banner-input" accept="image/*" hidden>
+                  <button type="button" class="banner-edit-btn" onclick="document.getElementById('banner-input').click()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+                <div class="avatar-upload" id="avatar-upload">
+                  ${profile.avatarUrl 
+                    ? `<img src="${profile.avatarUrl}" alt="Avatar" class="avatar-preview">`
+                    : `<div class="avatar-placeholder">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                      </div>`
+                  }
+                  <input type="file" id="avatar-input" accept="image/*" hidden>
+                  <button type="button" class="avatar-edit-btn" onclick="document.getElementById('avatar-input').click()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <input type="hidden" name="avatarUrl" id="avatar-url" value="${profile.avatarUrl || ''}">
+              <input type="hidden" name="bannerUrl" id="banner-url" value="${profile.bannerUrl || ''}">
+              
+              <!-- Basic Info -->
               <div class="form-group">
                 <label class="form-label">Display Name</label>
-                <input type="text" class="form-input" name="name" value="${profile.name || ''}" placeholder="Your artist name">
+                <input type="text" class="form-input" name="name" value="${profile.name || ''}" placeholder="Your name">
               </div>
+              
               <div class="form-group">
                 <label class="form-label">Bio</label>
-                <textarea class="form-input form-textarea" name="bio" placeholder="Tell us about yourself">${profile.bio || ''}</textarea>
+                <textarea class="form-input form-textarea" name="bio" placeholder="Tell us about yourself" rows="3">${profile.bio || ''}</textarea>
               </div>
+              
+              <!-- Are you an artist? -->
               <div class="form-group">
-                <label class="form-label">Choose up to 2 genres that fit your style</label>
+                <label class="toggle-label">
+                  <span>Are you an artist?</span>
+                  <div class="toggle-switch">
+                    <input type="checkbox" name="isArtist" id="is-artist-toggle" ${profile.isArtist ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                  </div>
+                </label>
+              </div>
+              
+              <!-- Genre Selection (only shown if artist) -->
+              <div class="form-group artist-only" id="genre-section" style="display: ${profile.isArtist ? 'block' : 'none'};">
+                <label class="form-label">Choose up to 2 genres</label>
                 <div class="genre-select-grid" id="genre-select">
                   ${this.genres.map(genre => `
-                    <button type="button" class="genre-select-btn ${profile.genrePrimary === genre.id || profile.genreSecondary === genre.id ? 'selected' : ''}" 
+                    <button type="button" class="genre-chip ${profile.genrePrimary === genre.id || profile.genreSecondary === genre.id ? 'selected' : ''}" 
                             data-genre="${genre.id}" style="--genre-color: ${genre.color}">${genre.name}</button>
                   `).join('')}
                 </div>
                 <input type="hidden" name="genrePrimary" id="genre-primary" value="${profile.genrePrimary || ''}">
                 <input type="hidden" name="genreSecondary" id="genre-secondary" value="${profile.genreSecondary || ''}">
               </div>
+              
+              <!-- Social Links -->
               <div class="form-group">
                 <label class="form-label">Website</label>
                 <input type="url" class="form-input" name="website" value="${profile.website || ''}" placeholder="https://yoursite.com">
               </div>
+              
               <div class="form-group">
-                <label class="form-label">Twitter Handle</label>
-                <input type="text" class="form-input" name="twitter" value="${profile.twitter || ''}" placeholder="@username">
+                <label class="form-label">Twitter</label>
+                <div class="input-with-prefix">
+                  <span class="input-prefix">@</span>
+                  <input type="text" class="form-input" name="twitter" value="${profile.twitter || ''}" placeholder="username">
+                </div>
               </div>
-              <div style="display: flex; gap: 12px; margin-top: 24px;">
-                <button type="button" class="btn btn-secondary close-modal-btn" style="flex: 1;">Cancel</button>
-                <button type="submit" class="btn btn-primary" style="flex: 1;">Save</button>
+              
+              <div class="form-actions">
+                <button type="button" class="btn btn-secondary close-modal-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Profile</button>
               </div>
             </form>
           </div>
         </div>
       </div>
+      
       <style>
-        .genre-select-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
-        .genre-select-btn { padding: 10px 12px; border: 2px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-hover); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms; }
-        .genre-select-btn:hover { border-color: var(--genre-color); color: var(--text-primary); }
-        .genre-select-btn.selected { border-color: var(--genre-color); background: color-mix(in srgb, var(--genre-color) 20%, var(--bg-hover)); color: var(--genre-color); }
+        .edit-profile-modal { max-width: 500px; }
+        .profile-images-section { position: relative; margin-bottom: 60px; }
+        .banner-upload {
+          width: 100%;
+          height: 120px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+          position: relative;
+          cursor: pointer;
+        }
+        .banner-preview { width: 100%; height: 100%; object-fit: cover; }
+        .banner-placeholder {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: var(--text-muted);
+          gap: 8px;
+          font-size: 13px;
+        }
+        .banner-edit-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: rgba(0,0,0,0.6);
+          border: none;
+          color: white;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .avatar-upload {
+          position: absolute;
+          bottom: -40px;
+          left: 20px;
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: var(--bg-card);
+          border: 4px solid var(--bg-primary);
+          overflow: hidden;
+          cursor: pointer;
+        }
+        .avatar-preview { width: 100%; height: 100%; object-fit: cover; }
+        .avatar-placeholder {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          background: var(--bg-hover);
+          color: var(--text-muted);
+        }
+        .avatar-edit-btn {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: var(--accent);
+          border: 2px solid var(--bg-primary);
+          color: white;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .toggle-label {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-md);
+          cursor: pointer;
+        }
+        .toggle-switch { position: relative; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+          position: absolute;
+          inset: 0;
+          background: var(--border-color);
+          border-radius: 24px;
+          transition: 200ms;
+        }
+        .toggle-slider::before {
+          content: '';
+          position: absolute;
+          width: 18px;
+          height: 18px;
+          left: 3px;
+          bottom: 3px;
+          background: white;
+          border-radius: 50%;
+          transition: 200ms;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+        .genre-select-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .genre-chip {
+          padding: 6px 14px;
+          border: 1px solid var(--border-color);
+          border-radius: 20px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .genre-chip:hover { border-color: var(--genre-color); color: var(--genre-color); }
+        .genre-chip.selected {
+          border-color: var(--genre-color);
+          background: color-mix(in srgb, var(--genre-color) 15%, transparent);
+          color: var(--genre-color);
+        }
+        .input-with-prefix {
+          display: flex;
+          align-items: center;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+        }
+        .input-with-prefix .input-prefix {
+          padding: 0 12px;
+          color: var(--text-muted);
+          font-size: 14px;
+        }
+        .input-with-prefix .form-input {
+          border: none;
+          background: transparent;
+          padding-left: 0;
+        }
+        .form-actions { display: flex; gap: 12px; margin-top: 24px; }
+        .form-actions .btn { flex: 1; }
       </style>
     `;
+    
     this.show(html);
     this.bindEditProfileEvents();
   },
@@ -2563,7 +2768,13 @@ const Modals = {
     if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
     if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
     
-    document.querySelectorAll('.genre-select-btn').forEach(btn => {
+    // Artist toggle - show/hide genres
+    document.getElementById('is-artist-toggle')?.addEventListener('change', (e) => {
+      document.getElementById('genre-section').style.display = e.target.checked ? 'block' : 'none';
+    });
+    
+    // Genre selection
+    document.querySelectorAll('.genre-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const genre = btn.dataset.genre;
         const idx = selectedGenres.indexOf(genre);
@@ -2575,7 +2786,7 @@ const Modals = {
           btn.classList.add('selected');
         } else {
           const oldGenre = selectedGenres.shift();
-          document.querySelector(`.genre-select-btn[data-genre="${oldGenre}"]`)?.classList.remove('selected');
+          document.querySelector(`.genre-chip[data-genre="${oldGenre}"]`)?.classList.remove('selected');
           selectedGenres.push(genre);
           btn.classList.add('selected');
         }
@@ -2584,27 +2795,85 @@ const Modals = {
       });
     });
     
+    // Avatar upload
+    document.getElementById('avatar-input')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const avatarUpload = document.getElementById('avatar-upload');
+      avatarUpload.innerHTML = '<div class="avatar-placeholder"><div class="spinner" style="width:24px;height:24px;"></div></div>';
+      
+      try {
+        const result = await API.uploadFile(file);
+        document.getElementById('avatar-url').value = result.url;
+        avatarUpload.innerHTML = `<img src="${result.url}" alt="Avatar" class="avatar-preview">
+          <button type="button" class="avatar-edit-btn" onclick="document.getElementById('avatar-input').click()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>`;
+      } catch (err) {
+        console.error('Avatar upload failed:', err);
+        avatarUpload.innerHTML = '<div class="avatar-placeholder"><span style="color:var(--error);">Failed</span></div>';
+      }
+    });
+    
+    // Banner upload
+    document.getElementById('banner-input')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const bannerUpload = document.getElementById('banner-upload');
+      bannerUpload.innerHTML = '<div class="banner-placeholder"><div class="spinner"></div><span>Uploading...</span></div>';
+      
+      try {
+        const result = await API.uploadFile(file);
+        document.getElementById('banner-url').value = result.url;
+        bannerUpload.innerHTML = `<img src="${result.url}" alt="Banner" class="banner-preview">
+          <button type="button" class="banner-edit-btn" onclick="document.getElementById('banner-input').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>`;
+      } catch (err) {
+        console.error('Banner upload failed:', err);
+        bannerUpload.innerHTML = '<div class="banner-placeholder"><span style="color:var(--error);">Upload failed</span></div>';
+      }
+    });
+    
+    // Form submit
     document.getElementById('edit-profile-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
+      const isArtist = document.getElementById('is-artist-toggle')?.checked || false;
+      
       const updates = {
         address: AppState.user.address,
         name: formData.get('name')?.trim() || null,
         bio: formData.get('bio')?.trim() || null,
+        avatarUrl: formData.get('avatarUrl') || null,
+        bannerUrl: formData.get('bannerUrl') || null,
         website: formData.get('website')?.trim() || null,
         twitter: formData.get('twitter')?.replace('@', '').trim() || null,
-        genrePrimary: formData.get('genrePrimary') || null,
-        genreSecondary: formData.get('genreSecondary') || null,
+        isArtist: isArtist,
+        genrePrimary: isArtist ? (formData.get('genrePrimary') || null) : null,
+        genreSecondary: isArtist ? (formData.get('genreSecondary') || null) : null,
       };
+      
+      console.log('Saving profile updates:', updates);
+      
       try {
-        await API.saveProfile(updates);
+        const result = await API.saveProfile(updates);
+        console.log('Profile save result:', result);
         setProfile({ ...AppState.profile, ...updates });
         UI.updateUserCard();
         this.close();
         if (typeof ProfilePage !== 'undefined') ProfilePage.render();
       } catch (error) {
         console.error('Failed to save profile:', error);
-        alert('Failed to save profile.');
+        alert('Failed to save profile: ' + error.message);
       }
     });
   },
