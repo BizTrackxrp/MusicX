@@ -46,14 +46,17 @@ export default async function handler(req, res) {
         website, 
         twitter,
         genrePrimary,
-        genreSecondary 
+        genreSecondary,
+        isArtist
       } = req.body;
       
       if (!address) {
         return res.status(400).json({ error: 'Address required' });
       }
       
-      // Upsert profile with genres
+      console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist });
+      
+      // Upsert profile - update ALL fields that are provided
       const [profile] = await sql`
         INSERT INTO profiles (
           wallet_address,
@@ -61,8 +64,11 @@ export default async function handler(req, res) {
           bio,
           avatar_url,
           banner_url,
+          website,
+          twitter,
           genre_primary,
           genre_secondary,
+          is_artist,
           updated_at
         ) VALUES (
           ${address},
@@ -70,20 +76,28 @@ export default async function handler(req, res) {
           ${bio || null},
           ${avatarUrl || null},
           ${bannerUrl || null},
+          ${website || null},
+          ${twitter || null},
           ${genrePrimary || null},
           ${genreSecondary || null},
+          ${isArtist || false},
           NOW()
         )
         ON CONFLICT (wallet_address) DO UPDATE SET
-          name = COALESCE(EXCLUDED.name, profiles.name),
-          bio = COALESCE(EXCLUDED.bio, profiles.bio),
-          avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url),
-          banner_url = COALESCE(EXCLUDED.banner_url, profiles.banner_url),
-          genre_primary = COALESCE(EXCLUDED.genre_primary, profiles.genre_primary),
-          genre_secondary = COALESCE(EXCLUDED.genre_secondary, profiles.genre_secondary),
+          name = ${name || null},
+          bio = ${bio || null},
+          avatar_url = CASE WHEN ${avatarUrl || null} IS NOT NULL THEN ${avatarUrl} ELSE profiles.avatar_url END,
+          banner_url = CASE WHEN ${bannerUrl || null} IS NOT NULL THEN ${bannerUrl} ELSE profiles.banner_url END,
+          website = ${website || null},
+          twitter = ${twitter || null},
+          genre_primary = ${genrePrimary || null},
+          genre_secondary = ${genreSecondary || null},
+          is_artist = COALESCE(${isArtist}, profiles.is_artist, false),
           updated_at = NOW()
         RETURNING *
       `;
+      
+      console.log('Profile saved:', profile);
       
       return res.json({ success: true, profile: formatProfile(profile) });
     }
@@ -91,7 +105,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Profile API error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
 
@@ -102,6 +116,8 @@ function formatProfile(row) {
     bio: row.bio,
     avatarUrl: row.avatar_url,
     bannerUrl: row.banner_url,
+    website: row.website,
+    twitter: row.twitter,
     pageTheme: row.page_theme,
     accentColor: row.accent_color,
     gradientStart: row.gradient_start,
@@ -109,6 +125,7 @@ function formatProfile(row) {
     gradientAngle: row.gradient_angle,
     genrePrimary: row.genre_primary,
     genreSecondary: row.genre_secondary,
+    isArtist: row.is_artist,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
