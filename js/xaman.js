@@ -178,54 +178,98 @@ const XamanWallet = {
    * Mint NFT
    */
   async mintNFT(metadataUri, options = {}) {
+    // This now authorizes the platform to mint on artist's behalf
+    // Actual minting happens on backend
     if (!this.sdk) {
       console.error('mintNFT: SDK not initialized');
       throw new Error('SDK not initialized');
     }
     
-    const { transferFee = 200, taxon = 0, flags = 8 } = options;
+    if (!AppState.user?.address) {
+      throw new Error('Wallet not connected');
+    }
     
-    // Convert URI to hex
-    const uriHex = this.stringToHex(metadataUri);
+    const { quantity = 1, transferFee = 500, taxon = 0 } = options;
     
-    console.log('Creating NFT mint payload...', { metadataUri, uriHex, transferFee, taxon, flags });
+    // Get platform address from API
+    const configResponse = await fetch('/api/batch-mint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getConfig' }),
+    });
+    const configData = await configResponse.json();
+    const platformAddress = configData.platformAddress;
     
+    if (!platformAddress) {
+      throw new Error('Platform not configured');
+    }
+    
+    console.log('Authorizing platform as minter...', { platformAddress, quantity });
+    
+    // Create AccountSet transaction to authorize platform as minter
     try {
       const payload = await this.sdk.payload?.create({
         txjson: {
-          TransactionType: 'NFTokenMint',
-          NFTokenTaxon: taxon,
-          Flags: flags,
-          TransferFee: transferFee,
-          URI: uriHex,
+          TransactionType: 'AccountSet',
+          NFTokenMinter: platformAddress,
+          SetFlag: 10, // asfAuthorizedNFTokenMinter
         },
         custom_meta: {
-          instruction: 'Sign to mint your music NFT on the XRP Ledger',
+          instruction: `Authorize XRP Music to mint ${quantity} NFT copies for you`,
         },
       });
       
-      console.log('Payload response:', payload);
+      console.log('AccountSet payload:', payload);
       
       if (!payload) {
         console.error('mintNFT: No payload returned');
-        throw new Error('Failed to create mint payload');
+        throw new Error('Failed to create authorization payload');
       }
       
       // Open Xaman for signing
       if (payload.next?.always) {
         console.log('Opening Xaman URL:', payload.next.always);
         window.open(payload.next.always, '_blank');
-      } else if (payload.refs?.qr_png) {
-        // Fallback: show QR code or redirect
-        console.log('QR available:', payload.refs.qr_png);
-        window.open(payload.next?.always || payload.refs.websocket_status, '_blank');
       } else {
         console.error('mintNFT: No sign URL in payload', payload);
         throw new Error('No sign URL returned from Xaman');
       }
       
-      // Wait for result
-      return this.waitForPayload(payload.uuid);
+      // Wait for signature
+      const authResult = await this.waitForPayload(payload.uuid);
+      
+      if (!authResult.success) {
+        throw new Error('Authorization cancelled');
+      }
+      
+      console.log('Authorization successful:', authResult.txHash);
+      
+      // Now call backend to batch mint
+      const mintResponse = await fetch('/api/batch-mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mint',
+          artistAddress: AppState.user.address,
+          metadataUri: metadataUri,
+          quantity: quantity,
+          transferFee: transferFee,
+          taxon: taxon,
+        }),
+      });
+      
+      const mintData = await mintResponse.json();
+      
+      if (!mintData.success) {
+        throw new Error(mintData.error || 'Batch minting failed');
+      }
+      
+      return {
+        success: true,
+        txHash: authResult.txHash,
+        nftTokenIds: mintData.nftTokenIds,
+        totalMinted: mintData.totalMinted,
+      };
       
     } catch (error) {
       console.error('mintNFT error:', error);
@@ -410,5 +454,89 @@ const XamanWallet = {
     }
     
     return result;
+  },
+  
+  /**
+   * Create NFT transfer offer (Amount: 0) to transfer NFT to platform
+   * @param {string} nftTokenId - The NFT token ID
+   * @param {string} destination - Platform wallet address to receive NFT
+   */
+  async createTransferOffer(nftTokenId, destination) {
+    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!AppState.user?.address) throw new Error('Wallet not connected');
+    
+    console.log('Creating transfer offer:', { nftTokenId, destination });
+    
+    const payload = await this.sdk.payload?.create({
+      txjson: {
+        TransactionType: 'NFTokenCreateOffer',
+        NFTokenID: nftTokenId,
+        Amount: '0', // Free transfer
+        Flags: 1, // tfSellNFToken
+        Destination: destination, // Only platform can accept this offer
+      },
+      custom_meta: {
+        instruction: 'Sign to transfer your NFT to XRP Music for listing',
+      },
+    });
+    
+    if (!payload) {
+      throw new Error('Failed to create transfer payload');
+    }
+    
+    console.log('Transfer offer payload:', payload);
+    
+    // Open Xaman for signing
+    if (payload.next?.always) {
+      window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
+    
+    // Wait for result
+    const result = await this.waitForPayload(payload.uuid);
+    
+    if (result.success && result.txHash) {
+      result.offerIndex = result.txHash;
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Accept a sell offer to receive an NFT
+   * @param {string} offerIndex - The sell offer index to accept
+   */
+  async acceptSellOffer(offerIndex) {
+    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!AppState.user?.address) throw new Error('Wallet not connected');
+    
+    console.log('Accepting sell offer:', offerIndex);
+    
+    const payload = await this.sdk.payload?.create({
+      txjson: {
+        TransactionType: 'NFTokenAcceptOffer',
+        NFTokenSellOffer: offerIndex,
+      },
+      custom_meta: {
+        instruction: 'Sign to receive your music NFT',
+      },
+    });
+    
+    if (!payload) {
+      throw new Error('Failed to create accept offer payload');
+    }
+    
+    console.log('Accept offer payload:', payload);
+    
+    // Open Xaman for signing
+    if (payload.next?.always) {
+      window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
+    
+    // Wait for result
+    return this.waitForPayload(payload.uuid);
   },
 };
