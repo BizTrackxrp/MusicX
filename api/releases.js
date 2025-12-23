@@ -131,8 +131,9 @@ async function createRelease(req, res, sql) {
     albumPrice,
     totalEditions,
     tracks,
-    nftTokenId,
+    nftTokenIds,
     txHash,
+    sellOfferIndex,
   } = req.body;
   
   if (!artistAddress || !title || !type) {
@@ -159,6 +160,8 @@ async function createRelease(req, res, sql) {
       total_editions,
       sold_editions,
       tx_hash,
+      sell_offer_index,
+      listed_at,
       created_at
     ) VALUES (
       ${releaseId},
@@ -175,6 +178,8 @@ async function createRelease(req, res, sql) {
       ${totalEditions || 100},
       0,
       ${txHash || null},
+      ${sellOfferIndex || null},
+      ${sellOfferIndex ? new Date() : null},
       NOW()
     )
     RETURNING *
