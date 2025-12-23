@@ -56,6 +56,9 @@ export default async function handler(req, res) {
       
       console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist });
       
+      // Convert isArtist to proper boolean
+      const isArtistBool = isArtist === true || isArtist === 'true';
+      
       // Upsert profile - update ALL fields that are provided
       const [profile] = await sql`
         INSERT INTO profiles (
@@ -80,19 +83,19 @@ export default async function handler(req, res) {
           ${twitter || null},
           ${genrePrimary || null},
           ${genreSecondary || null},
-          ${isArtist || false},
+          ${isArtistBool},
           NOW()
         )
         ON CONFLICT (wallet_address) DO UPDATE SET
           name = ${name || null},
           bio = ${bio || null},
-          avatar_url = CASE WHEN ${avatarUrl || null} IS NOT NULL THEN ${avatarUrl} ELSE profiles.avatar_url END,
-          banner_url = CASE WHEN ${bannerUrl || null} IS NOT NULL THEN ${bannerUrl} ELSE profiles.banner_url END,
+          avatar_url = COALESCE(${avatarUrl || null}, profiles.avatar_url),
+          banner_url = COALESCE(${bannerUrl || null}, profiles.banner_url),
           website = ${website || null},
           twitter = ${twitter || null},
           genre_primary = ${genrePrimary || null},
           genre_secondary = ${genreSecondary || null},
-          is_artist = COALESCE(${isArtist}, profiles.is_artist, false),
+          is_artist = ${isArtistBool},
           updated_at = NOW()
         RETURNING *
       `;
