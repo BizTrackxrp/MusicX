@@ -1,6 +1,7 @@
 /**
  * XRP Music - State Management
- * Simple global state with localStorage persistence
+ * Simple global state with session persistence
+ * Session clears when browser closes
  */
 
 const AppState = {
@@ -45,40 +46,39 @@ const STORAGE_KEYS = {
 };
 
 /**
- * Initialize state from localStorage
+ * Initialize state from storage
+ * Theme & volume persist (localStorage)
+ * Session expires on browser close (sessionStorage)
  */
 function initState() {
-  // Load theme
+  // Load theme (persists)
   const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
   if (savedTheme === 'light' || savedTheme === 'dark') {
     AppState.theme = savedTheme;
   }
   
-  // Load page
+  // Load page (persists)
   const savedPage = localStorage.getItem(STORAGE_KEYS.page);
   if (savedPage && ['stream', 'marketplace', 'profile', 'liked', 'playlists'].includes(savedPage)) {
     AppState.currentPage = savedPage;
   }
   
-  // Load volume
+  // Load volume (persists)
   const savedVolume = localStorage.getItem(STORAGE_KEYS.volume);
   if (savedVolume !== null) {
     AppState.player.volume = parseInt(savedVolume, 10);
   }
   
-  // Load session (wallet address)
-  const savedSession = localStorage.getItem(STORAGE_KEYS.session);
+  // Load session from sessionStorage (clears on browser close)
+  const savedSession = sessionStorage.getItem(STORAGE_KEYS.session);
   if (savedSession) {
     try {
-      const { address, timestamp } = JSON.parse(savedSession);
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      if (Date.now() - timestamp < SEVEN_DAYS) {
+      const { address } = JSON.parse(savedSession);
+      if (address) {
         AppState.user = { address };
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.session);
       }
     } catch (e) {
-      localStorage.removeItem(STORAGE_KEYS.session);
+      sessionStorage.removeItem(STORAGE_KEYS.session);
     }
   }
 }
@@ -108,14 +108,12 @@ function saveVolume(volume) {
 }
 
 /**
- * Save wallet session
+ * Save wallet session to sessionStorage
+ * Session clears when browser is closed
  */
 function saveSession(address) {
   AppState.user = { address };
-  localStorage.setItem(STORAGE_KEYS.session, JSON.stringify({
-    address,
-    timestamp: Date.now(),
-  }));
+  sessionStorage.setItem(STORAGE_KEYS.session, JSON.stringify({ address }));
 }
 
 /**
@@ -126,7 +124,7 @@ function clearSession() {
   AppState.profile = null;
   AppState.playlists = [];
   AppState.likedTrackIds.clear();
-  localStorage.removeItem(STORAGE_KEYS.session);
+  sessionStorage.removeItem(STORAGE_KEYS.session);
 }
 
 /**
