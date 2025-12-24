@@ -4,8 +4,7 @@
   "private": true,
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0",
-    "xumm": "^1.8.0"
-     "xrpl": "^3.0.0"
-    
+    "xumm": "^1.8.0",
+    "xrpl": "^3.0.0"
   }
 }
