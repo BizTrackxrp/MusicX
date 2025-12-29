@@ -57,7 +57,7 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE r.id = ${id}
       GROUP BY r.id, p.avatar_url
     `;
@@ -89,7 +89,7 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE r.artist_address = ${artist}
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
@@ -114,7 +114,7 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
