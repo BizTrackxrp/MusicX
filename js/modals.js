@@ -1953,11 +1953,8 @@ const Modals = {
                 
                 <div class="form-group">
                   <label class="form-label">Resale Royalty %</label>
-                  <div class="royalty-selector">
-                    <input type="range" id="release-royalty" name="royalty" min="0" max="25" value="5" step="0.5">
-                    <span class="royalty-value" id="royalty-display">5%</span>
-                  </div>
-                  <p class="form-hint">You'll earn this % on every resale of your NFT</p>
+                  <p class="form-hint" style="margin-bottom: 8px;">You'll earn this % on every secondary sale of your NFT</p>
+                  <input type="number" class="form-input" id="release-royalty" name="royalty" value="5" min="0" max="50" step="0.5" style="max-width: 120px;">
                 </div>
                 
                 <div class="mint-fee-preview">
@@ -2086,10 +2083,6 @@ const Modals = {
         .release-type-btn.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
         .release-type-btn span { font-size: 13px; font-weight: 500; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .royalty-selector { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-        .royalty-selector input[type="range"] { flex: 1; height: 6px; -webkit-appearance: none; background: var(--border-color); border-radius: 3px; outline: none; }
-        .royalty-selector input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: var(--accent); border-radius: 50%; cursor: pointer; }
-        .royalty-value { min-width: 45px; padding: 6px 10px; background: var(--bg-hover); border-radius: var(--radius-md); font-size: 14px; font-weight: 600; color: var(--accent); text-align: center; }
         .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
         .mint-fee-preview { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--bg-hover); border-radius: var(--radius-md); margin-top: 16px; font-size: 14px; }
         .mint-fee-preview span:first-child { color: var(--text-secondary); }
@@ -2163,11 +2156,6 @@ const Modals = {
       const feeDisplay = document.getElementById('mint-fee-amount');
       if (feeDisplay) feeDisplay.textContent = `~${fee} XRP`;
     }
-    
-    // Royalty slider
-    document.getElementById('release-royalty')?.addEventListener('input', (e) => {
-      document.getElementById('royalty-display').textContent = `${e.target.value}%`;
-    });
     
     // Editions input - update mint fee
     document.getElementById('release-editions')?.addEventListener('input', updateMintFee);
