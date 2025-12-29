@@ -178,8 +178,10 @@ const XamanWallet = {
    * Mint NFT
    */
   async mintNFT(metadataUri, options = {}) {
-    // This now authorizes the platform to mint on artist's behalf
-    // Actual minting happens on backend
+    // Flow:
+    // 1. Artist pays mint fee to platform
+    // 2. Artist authorizes platform as minter
+    // 3. Backend batch mints NFTs
     if (!this.sdk) {
       console.error('mintNFT: SDK not initialized');
       throw new Error('SDK not initialized');
@@ -189,7 +191,11 @@ const XamanWallet = {
       throw new Error('Wallet not connected');
     }
     
-    const { quantity = 1, transferFee = 500, taxon = 0 } = options;
+    const { quantity = 1, transferFee = 500, taxon = 0, onProgress } = options;
+    
+    // Calculate mint fee: (editions × 0.000012) + 0.001 buffer
+    const mintFee = (quantity * 0.000012) + 0.001;
+    const mintFeeDrops = Math.ceil(mintFee * 1000000).toString(); // Convert to drops
     
     // Get platform address from API
     const configResponse = await fetch('/api/batch-mint', {
@@ -204,11 +210,60 @@ const XamanWallet = {
       throw new Error('Platform not configured');
     }
     
-    console.log('Authorizing platform as minter...', { platformAddress, quantity });
+    console.log('Starting mint process...', { platformAddress, quantity, mintFee });
     
-    // Create AccountSet transaction to authorize platform as minter
     try {
-      const payload = await this.sdk.payload?.create({
+      // STEP 1: Pay mint fee
+      if (onProgress) {
+        onProgress({
+          stage: 'paying',
+          message: `Paying mint fee (${mintFee.toFixed(6)} XRP)...`,
+          quantity: quantity,
+        });
+      }
+      
+      const paymentPayload = await this.sdk.payload?.create({
+        txjson: {
+          TransactionType: 'Payment',
+          Destination: platformAddress,
+          Amount: mintFeeDrops,
+        },
+        custom_meta: {
+          instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${quantity} NFT editions`,
+        },
+      });
+      
+      if (!paymentPayload) {
+        throw new Error('Failed to create payment payload');
+      }
+      
+      // Open Xaman for fee payment
+      if (paymentPayload.next?.always) {
+        console.log('Opening Xaman for fee payment:', paymentPayload.next.always);
+        window.open(paymentPayload.next.always, '_blank');
+      } else {
+        throw new Error('No sign URL returned from Xaman');
+      }
+      
+      // Wait for fee payment
+      const paymentResult = await this.waitForPayload(paymentPayload.uuid);
+      
+      if (!paymentResult.success) {
+        throw new Error('Mint fee payment cancelled');
+      }
+      
+      console.log('Mint fee paid:', paymentResult.txHash);
+      
+      // STEP 2: Authorize platform as minter
+      if (onProgress) {
+        onProgress({
+          stage: 'authorizing',
+          message: 'Authorize minting in Xaman...',
+          quantity: quantity,
+        });
+      }
+      
+      const authPayload = await this.sdk.payload?.create({
         txjson: {
           TransactionType: 'AccountSet',
           NFTokenMinter: platformAddress,
@@ -219,24 +274,20 @@ const XamanWallet = {
         },
       });
       
-      console.log('AccountSet payload:', payload);
-      
-      if (!payload) {
-        console.error('mintNFT: No payload returned');
+      if (!authPayload) {
         throw new Error('Failed to create authorization payload');
       }
       
-      // Open Xaman for signing
-      if (payload.next?.always) {
-        console.log('Opening Xaman URL:', payload.next.always);
-        window.open(payload.next.always, '_blank');
+      // Open Xaman for authorization
+      if (authPayload.next?.always) {
+        console.log('Opening Xaman for authorization:', authPayload.next.always);
+        window.open(authPayload.next.always, '_blank');
       } else {
-        console.error('mintNFT: No sign URL in payload', payload);
         throw new Error('No sign URL returned from Xaman');
       }
       
-      // Wait for signature
-      const authResult = await this.waitForPayload(payload.uuid);
+      // Wait for authorization
+      const authResult = await this.waitForPayload(authPayload.uuid);
       
       if (!authResult.success) {
         throw new Error('Authorization cancelled');
@@ -244,7 +295,15 @@ const XamanWallet = {
       
       console.log('Authorization successful:', authResult.txHash);
       
-      // Now call backend to batch mint
+      // STEP 3: Backend batch mints
+      if (onProgress) {
+        onProgress({
+          stage: 'minting',
+          message: `Minting ${quantity} NFTs... Please don't refresh!`,
+          quantity: quantity,
+        });
+      }
+      
       const mintResponse = await fetch('/api/batch-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -267,6 +326,7 @@ const XamanWallet = {
       return {
         success: true,
         txHash: authResult.txHash,
+        paymentTxHash: paymentResult.txHash,
         nftTokenIds: mintData.nftTokenIds,
         totalMinted: mintData.totalMinted,
       };
