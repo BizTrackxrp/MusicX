@@ -191,10 +191,14 @@ const XamanWallet = {
       throw new Error('Wallet not connected');
     }
     
-    const { quantity = 1, transferFee = 500, taxon = 0, onProgress } = options;
+    const { quantity = 1, transferFee = 500, taxon = 0, onProgress, tracks = null } = options;
     
-    // Calculate mint fee: (editions × 0.000012) + 0.001 buffer
-    const mintFee = (quantity * 0.000012) + 0.001;
+    // Calculate total NFTs: tracks × editions
+    const trackCount = tracks ? tracks.length : 1;
+    const totalNFTs = trackCount * quantity;
+    
+    // Calculate mint fee: (totalNFTs × 0.000012) + 0.001 buffer
+    const mintFee = (totalNFTs * 0.000012) + 0.001;
     const mintFeeDrops = Math.ceil(mintFee * 1000000).toString(); // Convert to drops
     
     // Get platform address from API
@@ -210,7 +214,7 @@ const XamanWallet = {
       throw new Error('Platform not configured');
     }
     
-    console.log('Starting mint process...', { platformAddress, quantity, mintFee });
+    console.log('Starting mint process...', { platformAddress, trackCount, quantity, totalNFTs, mintFee });
     
     try {
       // STEP 1: Pay mint fee
@@ -299,8 +303,8 @@ const XamanWallet = {
       if (onProgress) {
         onProgress({
           stage: 'minting',
-          message: `Minting ${quantity} NFTs... Please don't refresh!`,
-          quantity: quantity,
+          message: `Minting ${totalNFTs} NFTs... Please don't refresh!`,
+          quantity: totalNFTs,
         });
       }
       
@@ -311,6 +315,7 @@ const XamanWallet = {
           action: 'mint',
           artistAddress: AppState.user.address,
           metadataUri: metadataUri,
+          tracks: tracks, // Array of track URIs for albums
           quantity: quantity,
           transferFee: transferFee,
           taxon: taxon,
@@ -329,6 +334,7 @@ const XamanWallet = {
         paymentTxHash: paymentResult.txHash,
         nftTokenIds: mintData.nftTokenIds,
         totalMinted: mintData.totalMinted,
+        tracks: mintData.tracks,
       };
       
     } catch (error) {
