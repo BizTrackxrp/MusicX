@@ -1959,7 +1959,7 @@ const Modals = {
                 
                 <div class="mint-fee-preview">
                   <span>Mint Fee:</span>
-                  <span id="mint-fee-amount">~0.0022 XRP</span>
+                  <span id="mint-fee-amount">Calculated after upload</span>
                 </div>
                 
                 <button type="button" class="btn btn-primary btn-full" id="create-next-1">Next: Upload Files</button>
@@ -2153,15 +2153,18 @@ const Modals = {
     // Update mint fee display
     function updateMintFee() {
       const editions = parseInt(document.getElementById('release-editions').value) || 1;
-      const trackCount = tracks.length || 1;
-      const fee = calculateMintFee(editions, trackCount);
-      const totalNFTs = trackCount * editions;
+      const trackCount = tracks.length;
       const feeDisplay = document.getElementById('mint-fee-amount');
-      if (feeDisplay) {
-        feeDisplay.textContent = `~${fee} XRP`;
-        // Also show total NFTs being minted
-        const nftCountDisplay = document.getElementById('total-nfts-count');
-        if (nftCountDisplay) nftCountDisplay.textContent = `${totalNFTs} NFTs`;
+      
+      if (trackCount === 0) {
+        // No tracks yet - can't calculate
+        if (feeDisplay) feeDisplay.textContent = 'Calculated after upload';
+      } else {
+        const fee = calculateMintFee(editions, trackCount);
+        const totalNFTs = trackCount * editions;
+        if (feeDisplay) {
+          feeDisplay.textContent = `~${fee} XRP (${totalNFTs} NFTs)`;
+        }
       }
     }
     
