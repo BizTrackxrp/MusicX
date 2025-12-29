@@ -198,7 +198,9 @@ async function createRelease(req, res, sql) {
           track_order,
           duration,
           audio_cid,
-          audio_url
+          audio_url,
+          metadata_cid,
+          sold_editions
         ) VALUES (
           ${trackId},
           ${release.id},
@@ -206,7 +208,9 @@ async function createRelease(req, res, sql) {
           ${track.trackNumber || i + 1},
           ${track.duration || null},
           ${track.audioCid || null},
-          ${track.audioUrl || null}
+          ${track.audioUrl || null},
+          ${track.metadataCid || null},
+          0
         )
       `;
     }
