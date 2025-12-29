@@ -49,15 +49,25 @@ export default async function handler(req, res) {
     // Upload to Lighthouse
     const lighthouseApiKey = process.env.LIGHTHOUSE_API_KEY;
     if (!lighthouseApiKey) {
+      console.error('LIGHTHOUSE_API_KEY not found in environment');
       return res.status(500).json({ error: 'Lighthouse not configured' });
     }
+    
+    console.log('Uploading to Lighthouse...', { 
+      filename: filePart.filename, 
+      size: filePart.data.length,
+      keyLength: lighthouseApiKey.length 
+    });
     
     // Create form data for Lighthouse
     const formData = new FormData();
     const blob = new Blob([filePart.data], { type: filePart.contentType });
     formData.append('file', blob, filePart.filename);
     
-    const lighthouseResponse = await fetch('https://upload.lighthouse.storage/api/v0/add', {
+    // Try node-fetch upload endpoint with API key as query param
+    const uploadUrl = `https://node.lighthouse.storage/api/v0/add?wrap-with-directory=false`;
+    
+    const lighthouseResponse = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${lighthouseApiKey}`,
@@ -67,8 +77,11 @@ export default async function handler(req, res) {
     
     if (!lighthouseResponse.ok) {
       const error = await lighthouseResponse.text();
-      console.error('Lighthouse error:', error);
-      return res.status(500).json({ error: 'Failed to upload to IPFS' });
+      console.error('Lighthouse error:', lighthouseResponse.status, error);
+      return res.status(lighthouseResponse.status).json({ 
+        error: `IPFS upload failed: ${lighthouseResponse.status}`,
+        details: error 
+      });
     }
     
     const lighthouseData = await lighthouseResponse.json();
