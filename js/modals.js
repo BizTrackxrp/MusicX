@@ -2298,24 +2298,18 @@ const Modals = {
       container.innerHTML = tracks.map((track, idx) => `
         <div class="track-upload-item" data-idx="${idx}">
           <div class="track-num">${idx + 1}</div>
-          <input type="text" class="track-name-input" value="${track.title}" data-idx="${idx}" placeholder="Track name">
+          <input type="text" class="track-name-input" value="${track.title.replace(/"/g, '&quot;')}" data-idx="${idx}" placeholder="Track name">
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
           <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
       `).join('');
       
-      // Track name editing
+      // Track name editing - save on every keystroke
       container.querySelectorAll('.track-name-input').forEach(input => {
-        input.addEventListener('change', () => {
+        input.addEventListener('input', () => {
           const idx = parseInt(input.dataset.idx);
           tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
-        });
-        input.addEventListener('blur', () => {
-          const idx = parseInt(input.dataset.idx);
-          if (!input.value.trim()) {
-            input.value = tracks[idx].title;
-          }
         });
       });
       
