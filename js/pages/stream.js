@@ -26,7 +26,12 @@ const StreamPage = {
     UI.showLoading();
     
     try {
-      this.releases = await API.getReleases();
+      // Add timeout to prevent infinite loading
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 15000)
+      );
+      
+      this.releases = await Promise.race([API.getReleases(), timeout]);
       setReleases(this.releases);
       this.extractArtists();
       
