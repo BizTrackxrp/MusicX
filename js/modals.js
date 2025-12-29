@@ -2337,9 +2337,21 @@ const Modals = {
       statusEl.classList.remove('hidden');
       navEl.style.display = 'none';
       
+      // Helper to show status with patience message
+      const showStatus = (step, total, message, submessage) => {
+        statusEl.innerHTML = `
+          <div class="mint-status-icon">
+            <div class="spinner"></div>
+          </div>
+          <div class="mint-status-text">Step ${step}/${total}: ${message}</div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">${submessage}</p>
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">⏳ Please be patient and don't close this page</p>
+        `;
+      };
+      
       try {
         // Step 1: Upload cover to IPFS
-        statusText.textContent = 'Uploading cover art...';
+        showStatus(1, 5, 'Uploading cover art...', 'This may take a moment depending on file size');
         const coverResult = await API.uploadFile(coverFile);
         document.getElementById('cover-cid').value = coverResult.cid;
         document.getElementById('cover-url').value = coverResult.url;
@@ -2347,7 +2359,7 @@ const Modals = {
         // Step 2: Upload audio files to IPFS
         const uploadedTracks = [];
         for (let i = 0; i < tracks.length; i++) {
-          statusText.textContent = `Uploading track ${i + 1} of ${tracks.length}...`;
+          showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}...`, 'Audio files take longer to upload');
           tracks[i].status = 'uploading';
           updateTrackList();
           
@@ -2366,7 +2378,7 @@ const Modals = {
         }
         
         // Step 3: Create metadata JSON
-        statusText.textContent = 'Creating metadata...';
+        showStatus(3, 5, 'Creating metadata...', 'Almost ready for Xaman signatures');
         const releaseType = document.getElementById('release-type').value;
         const metadata = {
           name: document.getElementById('release-title').value,
@@ -2394,7 +2406,17 @@ const Modals = {
         const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
         const transferFee = Math.round(royaltyPercent * 100); // Convert % to basis points (5% = 500)
         
-        statusText.textContent = `Step 1/3: Pay mint fee in Xaman...`;
+        // Show Xaman prep message
+        statusEl.innerHTML = `
+          <div class="mint-status-icon">
+            <div class="spinner"></div>
+          </div>
+          <div class="mint-status-text" style="font-size: 15px; font-weight: 600;">Get ready to sign in Xaman!</div>
+          <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 You'll sign 2 transactions:</p>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">1. Pay mint fee to platform</p>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">2. Authorize NFT creation</p>
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Open Xaman and check your events</p>
+        `;
         
         const mintResult = await XamanWallet.mintNFT(metadataResult.ipfsUrl, {
           quantity: editions,
@@ -2405,25 +2427,27 @@ const Modals = {
                 <div class="mint-status-icon">
                   <div class="spinner"></div>
                 </div>
-                <div class="mint-status-text">Step 1/3: Pay mint fee in Xaman...</div>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Sign the payment in your Xaman wallet</p>
+                <div class="mint-status-text">Step 4/5: Sign payment in Xaman</div>
+                <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 1 of 2</p>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Pay mint fee to platform</p>
               `;
             } else if (progress.stage === 'authorizing') {
               statusEl.innerHTML = `
                 <div class="mint-status-icon">
                   <div class="spinner"></div>
                 </div>
-                <div class="mint-status-text">Step 2/3: Authorize minting in Xaman...</div>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Sign to allow XRP Music to mint your NFTs</p>
+                <div class="mint-status-text">Step 4/5: Sign authorization in Xaman</div>
+                <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 2 of 2</p>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Authorize XRP Music to mint your NFTs</p>
               `;
             } else if (progress.stage === 'minting') {
               statusEl.innerHTML = `
                 <div class="mint-status-icon">
                   <div class="spinner"></div>
                 </div>
-                <div class="mint-status-text">Step 3/3: Minting ${progress.quantity} NFTs...</div>
+                <div class="mint-status-text">Step 5/5: Minting ${progress.quantity} NFTs...</div>
                 <p style="font-size: 13px; color: #f59e0b; margin-top: 12px; font-weight: 600;">⚠️ Please do not refresh or close this page!</p>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">This may take a minute for larger editions</p>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Creating your editions on the XRP Ledger</p>
               `;
             }
           },
