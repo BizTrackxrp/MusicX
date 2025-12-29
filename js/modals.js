@@ -1947,8 +1947,22 @@ const Modals = {
                   </div>
                   <div class="form-group">
                     <label class="form-label">Editions *</label>
-                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="10000" value="100" required>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="200" value="100" required>
                   </div>
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Resale Royalty %</label>
+                  <div class="royalty-selector">
+                    <input type="range" id="release-royalty" name="royalty" min="0" max="25" value="5" step="0.5">
+                    <span class="royalty-value" id="royalty-display">5%</span>
+                  </div>
+                  <p class="form-hint">You'll earn this % on every resale of your NFT</p>
+                </div>
+                
+                <div class="mint-fee-preview">
+                  <span>Mint Fee:</span>
+                  <span id="mint-fee-amount">~0.0022 XRP</span>
                 </div>
                 
                 <button type="button" class="btn btn-primary btn-full" id="create-next-1">Next: Upload Files</button>
@@ -2029,8 +2043,12 @@ const Modals = {
                     <span id="review-editions"></span>
                   </div>
                   <div class="review-row">
-                    <span>Network Fee</span>
-                    <span>~0.2 XRP (reserve)</span>
+                    <span>Resale Royalty</span>
+                    <span id="review-royalty"></span>
+                  </div>
+                  <div class="review-row mint-fee-row">
+                    <span>Mint Fee (one-time)</span>
+                    <span id="review-mint-fee"></span>
                   </div>
                 </div>
                 
@@ -2068,6 +2086,15 @@ const Modals = {
         .release-type-btn.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
         .release-type-btn span { font-size: 13px; font-weight: 500; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .royalty-selector { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+        .royalty-selector input[type="range"] { flex: 1; height: 6px; -webkit-appearance: none; background: var(--border-color); border-radius: 3px; outline: none; }
+        .royalty-selector input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+        .royalty-value { min-width: 45px; padding: 6px 10px; background: var(--bg-hover); border-radius: var(--radius-md); font-size: 14px; font-weight: 600; color: var(--accent); text-align: center; }
+        .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+        .mint-fee-preview { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--bg-hover); border-radius: var(--radius-md); margin-top: 16px; font-size: 14px; }
+        .mint-fee-preview span:first-child { color: var(--text-secondary); }
+        .mint-fee-preview span:last-child { color: var(--text-primary); font-weight: 500; }
+        .mint-fee-row { border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 12px !important; }
         .upload-zone { border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 24px; text-align: center; cursor: pointer; transition: all 150ms; }
         .upload-zone:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
         .upload-zone.dragover { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
@@ -2122,6 +2149,32 @@ const Modals = {
     const tracks = [];
     let coverFile = null;
     
+    // Calculate mint fee
+    function calculateMintFee(editions) {
+      const networkFee = editions * 0.000012;
+      const buffer = 0.001;
+      return (networkFee + buffer).toFixed(6);
+    }
+    
+    // Update mint fee display
+    function updateMintFee() {
+      const editions = parseInt(document.getElementById('release-editions').value) || 1;
+      const fee = calculateMintFee(editions);
+      const feeDisplay = document.getElementById('mint-fee-amount');
+      if (feeDisplay) feeDisplay.textContent = `~${fee} XRP`;
+    }
+    
+    // Royalty slider
+    document.getElementById('release-royalty')?.addEventListener('input', (e) => {
+      document.getElementById('royalty-display').textContent = `${e.target.value}%`;
+    });
+    
+    // Editions input - update mint fee
+    document.getElementById('release-editions')?.addEventListener('input', updateMintFee);
+    
+    // Initialize mint fee
+    updateMintFee();
+    
     // Release type selection
     document.querySelectorAll('.release-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2158,13 +2211,19 @@ const Modals = {
       if (!coverFile) { alert('Please upload cover art'); return; }
       if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
       
+      const editions = parseInt(document.getElementById('release-editions').value) || 1;
+      const royalty = document.getElementById('release-royalty').value;
+      const mintFee = calculateMintFee(editions);
+      
       // Update review
       document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
       document.getElementById('review-type').textContent = document.getElementById('release-type').value.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
       document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP`;
-      document.getElementById('review-editions').textContent = document.getElementById('release-editions').value;
+      document.getElementById('review-editions').textContent = editions;
+      document.getElementById('review-royalty').textContent = `${royalty}%`;
+      document.getElementById('review-mint-fee').textContent = `${mintFee} XRP`;
       
       document.getElementById('create-step-2').classList.add('hidden');
       document.getElementById('create-step-3').classList.remove('hidden');
@@ -2342,13 +2401,44 @@ const Modals = {
         
         const metadataResult = await API.uploadJSON(metadata, `${metadata.name}-metadata.json`);
         
-        // Step 4: Mint NFTs (authorizes platform, then backend mints copies)
+        // Step 4: Mint NFTs (pay fee, authorize, then backend mints)
         const editions = parseInt(document.getElementById('release-editions').value) || 1;
-        statusText.textContent = `Authorize minting of ${editions} copies in Xaman...`;
+        const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
+        const transferFee = Math.round(royaltyPercent * 100); // Convert % to basis points (5% = 500)
+        
+        statusText.textContent = `Step 1/3: Pay mint fee in Xaman...`;
         
         const mintResult = await XamanWallet.mintNFT(metadataResult.ipfsUrl, {
           quantity: editions,
-          transferFee: 500, // 5% royalty
+          transferFee: transferFee,
+          onProgress: (progress) => {
+            if (progress.stage === 'paying') {
+              statusEl.innerHTML = `
+                <div class="mint-status-icon">
+                  <div class="spinner"></div>
+                </div>
+                <div class="mint-status-text">Step 1/3: Pay mint fee in Xaman...</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Sign the payment in your Xaman wallet</p>
+              `;
+            } else if (progress.stage === 'authorizing') {
+              statusEl.innerHTML = `
+                <div class="mint-status-icon">
+                  <div class="spinner"></div>
+                </div>
+                <div class="mint-status-text">Step 2/3: Authorize minting in Xaman...</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Sign to allow XRP Music to mint your NFTs</p>
+              `;
+            } else if (progress.stage === 'minting') {
+              statusEl.innerHTML = `
+                <div class="mint-status-icon">
+                  <div class="spinner"></div>
+                </div>
+                <div class="mint-status-text">Step 3/3: Minting ${progress.quantity} NFTs...</div>
+                <p style="font-size: 13px; color: #f59e0b; margin-top: 12px; font-weight: 600;">⚠️ Please do not refresh or close this page!</p>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">This may take a minute for larger editions</p>
+              `;
+            }
+          },
         });
         
         if (!mintResult.success) {
