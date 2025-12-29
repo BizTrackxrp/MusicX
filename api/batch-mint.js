@@ -2,9 +2,13 @@
  * XRP Music - Batch Mint API
  * Platform mints NFTs on behalf of artist (artist is Issuer, gets royalties)
  * 
+ * Supports:
+ * - Single tracks: mint X editions of 1 track
+ * - Albums: mint X editions of EACH track
+ * 
  * Flow:
  * 1. Artist authorizes platform via AccountSet (frontend)
- * 2. This endpoint mints X NFTs using platform wallet
+ * 2. This endpoint mints NFTs using platform wallet
  * 3. Artist set as Issuer - gets royalties on resale
  * 4. NFTs go to platform wallet - ready to sell
  */
@@ -50,18 +54,26 @@ async function handleMint(req, res) {
   try {
     const {
       artistAddress,
-      metadataUri,
+      metadataUri,      // Single track URI (backward compatible)
+      tracks,           // Array of track URIs for albums
       quantity,
-      transferFee = 500, // Default 5% royalty (500 = 0.5%, 5000 = 5%)
+      transferFee = 500,
       taxon = 0,
     } = req.body;
     
-    if (!artistAddress || !metadataUri || !quantity) {
+    if (!artistAddress || !quantity) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    if (quantity > 200) {
-      return res.status(400).json({ error: 'Maximum 200 NFTs per batch' });
+    // Handle both single track and multiple tracks
+    const trackUris = tracks || (metadataUri ? [metadataUri] : []);
+    if (trackUris.length === 0) {
+      return res.status(400).json({ error: 'No tracks provided' });
+    }
+    
+    const totalNFTs = trackUris.length * quantity;
+    if (totalNFTs > 500) {
+      return res.status(400).json({ error: 'Maximum 500 NFTs per batch (reduce editions or tracks)' });
     }
     
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
@@ -75,7 +87,7 @@ async function handleMint(req, res) {
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
     
-    console.log(`Starting batch mint: ${quantity} NFTs for artist ${artistAddress}`);
+    console.log(`Starting batch mint: ${trackUris.length} tracks × ${quantity} editions = ${totalNFTs} NFTs for artist ${artistAddress}`);
     
     try {
       const wallet = xrpl.Wallet.fromSeed(platformSeed);
@@ -93,92 +105,84 @@ async function handleMint(req, res) {
       
       console.log('Platform authorized. Starting mint...');
       
-      // Convert URI to hex
-      const uriHex = xrpl.convertStringToHex(metadataUri);
+      // Results storage
+      const mintedTracks = [];
+      let totalMinted = 0;
       
-      // Mint NFTs one by one (or use tickets for speed)
-      const mintedNFTs = [];
-      const nftTokenIds = [];
-      
-      for (let i = 0; i < quantity; i++) {
-        console.log(`Minting NFT ${i + 1}/${quantity}...`);
+      // Loop through each track
+      for (let t = 0; t < trackUris.length; t++) {
+        const trackUri = trackUris[t];
+        const uriHex = xrpl.convertStringToHex(trackUri);
+        const trackNFTs = [];
         
-        try {
-          const mintTx = await client.autofill({
-            TransactionType: 'NFTokenMint',
-            Account: platformAddress,
-            Issuer: artistAddress, // Artist gets royalties
-            URI: uriHex,
-            Flags: 8, // tfTransferable
-            TransferFee: transferFee,
-            NFTokenTaxon: taxon,
-          });
+        console.log(`Minting track ${t + 1}/${trackUris.length}: ${quantity} editions...`);
+        
+        // Mint X editions of this track
+        for (let i = 0; i < quantity; i++) {
+          console.log(`  Edition ${i + 1}/${quantity}...`);
           
-          const signed = wallet.sign(mintTx);
-          const result = await client.submitAndWait(signed.tx_blob);
-          
-          if (result.result.meta.TransactionResult === 'tesSUCCESS') {
-            // Extract NFT Token ID from affected nodes
-            let nftTokenId = null;
-            for (const node of result.result.meta.AffectedNodes) {
-              if (node.CreatedNode?.LedgerEntryType === 'NFTokenPage' ||
-                  node.ModifiedNode?.LedgerEntryType === 'NFTokenPage') {
-                // The NFT ID is in the modified/created NFTokenPage
-                // We need to find it from the transaction
-                nftTokenId = result.result.hash; // Use tx hash as reference for now
-                break;
-              }
+          try {
+            const mintTx = await client.autofill({
+              TransactionType: 'NFTokenMint',
+              Account: platformAddress,
+              Issuer: artistAddress,
+              URI: uriHex,
+              Flags: 8, // tfTransferable
+              TransferFee: transferFee,
+              NFTokenTaxon: t, // Use track index as taxon to group by track
+            });
+            
+            const signed = wallet.sign(mintTx);
+            const result = await client.submitAndWait(signed.tx_blob);
+            
+            if (result.result.meta.TransactionResult === 'tesSUCCESS') {
+              trackNFTs.push({
+                txHash: result.result.hash,
+                success: true,
+              });
+              totalMinted++;
+              console.log(`    ✓ Edition ${i + 1} minted: ${result.result.hash}`);
+            } else {
+              console.error(`    ✗ Edition ${i + 1} failed: ${result.result.meta.TransactionResult}`);
+              trackNFTs.push({
+                error: result.result.meta.TransactionResult,
+                success: false,
+              });
             }
             
-            mintedNFTs.push({
-              index: i,
-              txHash: result.result.hash,
-              success: true,
-            });
-            nftTokenIds.push(result.result.hash);
+            // Small delay to avoid rate limiting
+            if (i < quantity - 1 || t < trackUris.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
             
-            console.log(`NFT ${i + 1} minted: ${result.result.hash}`);
-          } else {
-            console.error(`NFT ${i + 1} failed: ${result.result.meta.TransactionResult}`);
-            mintedNFTs.push({
-              index: i,
-              error: result.result.meta.TransactionResult,
+          } catch (mintError) {
+            console.error(`    ✗ Failed to mint edition ${i + 1}:`, mintError.message);
+            trackNFTs.push({
+              error: mintError.message,
               success: false,
             });
           }
-          
-          // Small delay to avoid rate limiting
-          if (i < quantity - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          
-        } catch (mintError) {
-          console.error(`Failed to mint NFT ${i + 1}:`, mintError.message);
-          mintedNFTs.push({
-            index: i,
-            error: mintError.message,
-            success: false,
-          });
         }
+        
+        mintedTracks.push({
+          trackIndex: t,
+          trackUri: trackUri,
+          editions: trackNFTs.filter(n => n.success).length,
+          nfts: trackNFTs,
+        });
       }
       
-      const successCount = mintedNFTs.filter(n => n.success).length;
-      console.log(`Batch mint complete: ${successCount}/${quantity} successful`);
-      
-      // Revoke minter authorization (cleanup)
-      try {
-        // Note: Only the artist can revoke - we skip this for now
-        // They can revoke manually if needed
-      } catch (revokeError) {
-        console.log('Could not revoke minter (expected - only artist can do this)');
-      }
+      console.log(`Batch mint complete: ${totalMinted}/${totalNFTs} successful`);
       
       return res.json({
         success: true,
-        totalRequested: quantity,
-        totalMinted: successCount,
-        nftTokenIds: nftTokenIds,
-        details: mintedNFTs,
+        totalRequested: totalNFTs,
+        totalMinted: totalMinted,
+        trackCount: trackUris.length,
+        editionsPerTrack: quantity,
+        tracks: mintedTracks,
+        // Backward compatible
+        nftTokenIds: mintedTracks.flatMap(t => t.nfts.filter(n => n.success).map(n => n.txHash)),
       });
       
     } finally {
