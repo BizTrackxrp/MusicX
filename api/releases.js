@@ -41,6 +41,7 @@ async function getReleases(req, res, sql) {
     // Get single release with tracks
     releases = await sql`
       SELECT r.*, 
+        p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
             json_build_object(
@@ -56,8 +57,9 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
+      LEFT JOIN profiles p ON p.address = r.artist_address
       WHERE r.id = ${id}
-      GROUP BY r.id
+      GROUP BY r.id, p.avatar_url
     `;
     
     if (releases.length === 0) {
@@ -71,6 +73,7 @@ async function getReleases(req, res, sql) {
     // Get releases by artist
     releases = await sql`
       SELECT r.*, 
+        p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
             json_build_object(
@@ -86,14 +89,16 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
+      LEFT JOIN profiles p ON p.address = r.artist_address
       WHERE r.artist_address = ${artist}
-      GROUP BY r.id
+      GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
   } else {
     // Get all releases
     releases = await sql`
       SELECT r.*, 
+        p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
             json_build_object(
@@ -109,7 +114,8 @@ async function getReleases(req, res, sql) {
         ) as tracks
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
-      GROUP BY r.id
+      LEFT JOIN profiles p ON p.address = r.artist_address
+      GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
   }
@@ -224,6 +230,7 @@ function formatRelease(row) {
     id: row.id,
     artistAddress: row.artist_address,
     artistName: row.artist_name,
+    artistAvatar: row.artist_avatar || null,
     title: row.title,
     description: row.description,
     type: row.type,
