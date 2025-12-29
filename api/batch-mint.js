@@ -10,7 +10,7 @@
  */
 
 import { neon } from '@neondatabase/serverless';
-import xrpl from 'xrpl';
+import * as xrpl from 'xrpl';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
