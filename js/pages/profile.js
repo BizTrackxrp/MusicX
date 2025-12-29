@@ -30,8 +30,20 @@ const ProfilePage = {
     UI.showLoading();
     
     try {
-      this.releases = await API.getReleasesByArtist(AppState.user.address);
-      const profile = await API.getProfile(AppState.user.address);
+      // Add timeout to prevent infinite loading
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 15000)
+      );
+      
+      const [releases, profile] = await Promise.race([
+        Promise.all([
+          API.getReleasesByArtist(AppState.user.address),
+          API.getProfile(AppState.user.address)
+        ]),
+        timeout
+      ]);
+      
+      this.releases = releases;
       if (profile) {
         setProfile(profile);
       }
