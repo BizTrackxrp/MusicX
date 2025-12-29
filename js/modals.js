@@ -2103,6 +2103,9 @@ const Modals = {
         .track-upload-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-hover); border-radius: var(--radius-md); margin-bottom: 8px; }
         .track-upload-item .track-num { width: 24px; height: 24px; background: var(--accent); border-radius: 50%; color: white; font-size: 12px; display: flex; align-items: center; justify-content: center; }
         .track-upload-item .track-name { flex: 1; font-size: 14px; }
+        .track-upload-item .track-name-input { flex: 1; font-size: 14px; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; color: var(--text-primary); outline: none; }
+        .track-upload-item .track-name-input:hover { border-color: var(--border); }
+        .track-upload-item .track-name-input:focus { border-color: var(--accent); background: var(--bg-card); }
         .track-upload-item .track-duration { font-size: 13px; color: var(--text-muted); }
         .track-upload-item .track-status { font-size: 12px; }
         .track-upload-item .track-status.uploading { color: var(--warning); }
@@ -2317,12 +2320,26 @@ const Modals = {
       container.innerHTML = tracks.map((track, idx) => `
         <div class="track-upload-item" data-idx="${idx}">
           <div class="track-num">${idx + 1}</div>
-          <div class="track-name">${track.title}</div>
+          <input type="text" class="track-name-input" value="${track.title}" data-idx="${idx}" placeholder="Track name">
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
           <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
       `).join('');
+      
+      // Track name editing
+      container.querySelectorAll('.track-name-input').forEach(input => {
+        input.addEventListener('change', () => {
+          const idx = parseInt(input.dataset.idx);
+          tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
+        });
+        input.addEventListener('blur', () => {
+          const idx = parseInt(input.dataset.idx);
+          if (!input.value.trim()) {
+            input.value = tracks[idx].title;
+          }
+        });
+      });
       
       container.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
