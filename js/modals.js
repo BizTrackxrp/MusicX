@@ -2142,9 +2142,10 @@ const Modals = {
     const tracks = [];
     let coverFile = null;
     
-    // Calculate mint fee
-    function calculateMintFee(editions) {
-      const networkFee = editions * 0.000012;
+    // Calculate mint fee: tracks × editions × network fee + buffer
+    function calculateMintFee(editions, trackCount = 1) {
+      const totalNFTs = trackCount * editions;
+      const networkFee = totalNFTs * 0.000012;
       const buffer = 0.001;
       return (networkFee + buffer).toFixed(6);
     }
@@ -2152,9 +2153,16 @@ const Modals = {
     // Update mint fee display
     function updateMintFee() {
       const editions = parseInt(document.getElementById('release-editions').value) || 1;
-      const fee = calculateMintFee(editions);
+      const trackCount = tracks.length || 1;
+      const fee = calculateMintFee(editions, trackCount);
+      const totalNFTs = trackCount * editions;
       const feeDisplay = document.getElementById('mint-fee-amount');
-      if (feeDisplay) feeDisplay.textContent = `~${fee} XRP`;
+      if (feeDisplay) {
+        feeDisplay.textContent = `~${fee} XRP`;
+        // Also show total NFTs being minted
+        const nftCountDisplay = document.getElementById('total-nfts-count');
+        if (nftCountDisplay) nftCountDisplay.textContent = `${totalNFTs} NFTs`;
+      }
     }
     
     // Editions input - update mint fee
@@ -2201,15 +2209,16 @@ const Modals = {
       
       const editions = parseInt(document.getElementById('release-editions').value) || 1;
       const royalty = document.getElementById('release-royalty').value;
-      const mintFee = calculateMintFee(editions);
+      const totalNFTs = tracks.length * editions;
+      const mintFee = calculateMintFee(editions, tracks.length);
       
       // Update review
       document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
       document.getElementById('review-type').textContent = document.getElementById('release-type').value.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
-      document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP`;
-      document.getElementById('review-editions').textContent = editions;
+      document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP per track`;
+      document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
       document.getElementById('review-royalty').textContent = `${royalty}%`;
       document.getElementById('review-mint-fee').textContent = `${mintFee} XRP`;
       
@@ -2324,6 +2333,9 @@ const Modals = {
       } else {
         audioZone.classList.remove('has-file');
       }
+      
+      // Recalculate mint fee when tracks change
+      updateMintFee();
     }
     
     // Form submit - Mint NFT
@@ -2377,17 +2389,53 @@ const Modals = {
           updateTrackList();
         }
         
-        // Step 3: Create metadata JSON
+        // Step 3: Create metadata JSON(s)
         showStatus(3, 5, 'Creating metadata...', 'Almost ready for Xaman signatures');
         const releaseType = document.getElementById('release-type').value;
-        const metadata = {
-          name: document.getElementById('release-title').value,
-          description: document.getElementById('release-description').value,
+        const releaseTitle = document.getElementById('release-title').value;
+        const releaseDescription = document.getElementById('release-description').value;
+        const artistName = AppState.profile?.name || AppState.user.address;
+        
+        // Create individual metadata for EACH track (for NFT minting)
+        const trackMetadataUris = [];
+        for (let i = 0; i < uploadedTracks.length; i++) {
+          const track = uploadedTracks[i];
+          const trackMetadata = {
+            name: uploadedTracks.length === 1 ? releaseTitle : `${releaseTitle} - ${track.title}`,
+            description: releaseDescription,
+            image: `ipfs://${coverResult.cid}`,
+            animation_url: `ipfs://${track.audioCid}`,
+            attributes: [
+              { trait_type: 'Type', value: releaseType },
+              { trait_type: 'Artist', value: artistName },
+              { trait_type: 'Album', value: releaseTitle },
+              { trait_type: 'Track Number', value: i + 1 },
+              { trait_type: 'Total Tracks', value: uploadedTracks.length },
+            ],
+            properties: {
+              title: track.title,
+              duration: track.duration,
+              audio: `ipfs://${track.audioCid}`,
+              albumTitle: releaseTitle,
+              trackNumber: i + 1,
+            },
+          };
+          
+          showStatus(3, 5, `Creating metadata ${i + 1}/${uploadedTracks.length}...`, 'Preparing track data');
+          const result = await API.uploadJSON(trackMetadata, `${releaseTitle}-track${i + 1}-metadata.json`);
+          trackMetadataUris.push(result.ipfsUrl);
+          uploadedTracks[i].metadataCid = result.cid;
+          uploadedTracks[i].metadataUrl = result.ipfsUrl;
+        }
+        
+        // Also create album-level metadata for display purposes
+        const albumMetadata = {
+          name: releaseTitle,
+          description: releaseDescription,
           image: `ipfs://${coverResult.cid}`,
-          animation_url: uploadedTracks.length === 1 ? `ipfs://${uploadedTracks[0].audioCid}` : undefined,
           attributes: [
             { trait_type: 'Type', value: releaseType },
-            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+            { trait_type: 'Artist', value: artistName },
             { trait_type: 'Tracks', value: uploadedTracks.length },
           ],
           properties: {
@@ -2395,16 +2443,17 @@ const Modals = {
               title: t.title,
               duration: t.duration,
               audio: `ipfs://${t.audioCid}`,
+              metadataUri: t.metadataUrl,
             })),
           },
         };
-        
-        const metadataResult = await API.uploadJSON(metadata, `${metadata.name}-metadata.json`);
+        const albumMetadataResult = await API.uploadJSON(albumMetadata, `${releaseTitle}-album-metadata.json`);
         
         // Step 4: Mint NFTs (pay fee, authorize, then backend mints)
         const editions = parseInt(document.getElementById('release-editions').value) || 1;
         const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
         const transferFee = Math.round(royaltyPercent * 100); // Convert % to basis points (5% = 500)
+        const totalNFTs = uploadedTracks.length * editions;
         
         // Show Xaman prep message
         statusEl.innerHTML = `
@@ -2415,12 +2464,14 @@ const Modals = {
           <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 You'll sign 2 transactions:</p>
           <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">1. Pay mint fee to platform</p>
           <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">2. Authorize NFT creation</p>
-          <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Open Xaman and check your events</p>
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Minting ${totalNFTs} NFTs (${uploadedTracks.length} tracks × ${editions} editions)</p>
         `;
         
-        const mintResult = await XamanWallet.mintNFT(metadataResult.ipfsUrl, {
+        // Pass track URIs for multi-track albums, or single URI for singles
+        const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
           quantity: editions,
           transferFee: transferFee,
+          tracks: uploadedTracks.length > 1 ? trackMetadataUris : null,
           onProgress: (progress) => {
             if (progress.stage === 'paying') {
               statusEl.innerHTML = `
@@ -2457,24 +2508,29 @@ const Modals = {
           throw new Error(mintResult.error || 'Minting failed');
         }
         
-        statusText.textContent = `Minted ${mintResult.totalMinted} NFTs! Saving release...`;
+        showStatus(5, 5, 'Saving release...', 'Almost done!');
         
         // Step 5: Save to database
         const releaseData = {
           artistAddress: AppState.user.address,
           artistName: AppState.profile?.name || null,
-          title: document.getElementById('release-title').value,
-          description: document.getElementById('release-description').value,
+          title: releaseTitle,
+          description: releaseDescription,
           type: releaseType,
           coverUrl: coverResult.url,
           coverCid: coverResult.cid,
-          metadataCid: metadataResult.cid,
+          metadataCid: albumMetadataResult.cid,
           songPrice: parseFloat(document.getElementById('release-price').value),
-          albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) : null,
-          totalEditions: mintResult.totalMinted || parseInt(document.getElementById('release-editions').value),
+          albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) * uploadedTracks.length : null,
+          totalEditions: editions,
+          editionsPerTrack: editions,
           nftTokenIds: mintResult.nftTokenIds,
           txHash: mintResult.txHash,
-          tracks: uploadedTracks,
+          tracks: uploadedTracks.map((t, i) => ({
+            ...t,
+            soldEditions: 0,
+            availableEditions: editions,
+          })),
           sellOfferIndex: 'platform-owned', // Mark as ready to sell
         };
         
@@ -2488,8 +2544,9 @@ const Modals = {
               <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
           </div>
-          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">${mintResult.totalMinted || editions} NFTs Minted!</div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Your release is now live and for sale!</p>
+          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">${mintResult.totalMinted} NFTs Minted!</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} × ${editions} editions</p>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Your release is now live and for sale!</p>
         `;
         
         setTimeout(() => {
