@@ -505,14 +505,11 @@ const Router = {
 async function initApp() {
   console.log('🎵 Initializing XRP Music...');
   
-  // Initialize UI
+  // Initialize UI immediately - don't wait for anything
   UI.init();
   
   // Initialize player
   Player.init();
-  
-  // Initialize Xaman
-  await XamanWallet.init();
   
   // Handle browser back/forward
   window.addEventListener('popstate', (e) => {
@@ -524,7 +521,7 @@ async function initApp() {
     }
   });
   
-  // Parse initial URL and route
+  // Parse initial URL and route - show page immediately
   const { page, params } = Router.parseUrl();
   Router.params = params;
   savePage(page);
@@ -532,6 +529,11 @@ async function initApp() {
   Router.render(page);
   
   console.log('✅ XRP Music ready!');
+  
+  // Initialize Xaman in background - don't block the UI
+  XamanWallet.init().catch(err => {
+    console.error('Xaman init error:', err);
+  });
 }
 
 // Start app when DOM is ready
