@@ -51,11 +51,21 @@ const XamanWallet = {
         this.isConnecting = false;
       });
       
-      // Wait for SDK to be ready
-      await this.sdk.environment.ready;
+      // Wait for SDK to be ready (with timeout)
+      const readyTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
+      );
       
-      // Check for existing session
-      await this.checkSession();
+      try {
+        await Promise.race([this.sdk.environment.ready, readyTimeout]);
+      } catch (err) {
+        console.warn('SDK ready timeout, continuing anyway');
+      }
+      
+      // Check for existing session (don't block on this)
+      this.checkSession().catch(err => {
+        console.warn('Session check failed:', err);
+      });
       
       this.initialized = true;
     } catch (error) {
@@ -64,7 +74,7 @@ const XamanWallet = {
   },
   
   /**
-   * Load Xumm SDK from CDN
+   * Load Xumm SDK from CDN with timeout
    */
   loadSDK() {
     return new Promise((resolve, reject) => {
@@ -73,11 +83,22 @@ const XamanWallet = {
         return;
       }
       
+      // Timeout after 10 seconds
+      const timeout = setTimeout(() => {
+        reject(new Error('Xumm SDK load timeout'));
+      }, 10000);
+      
       const script = document.createElement('script');
       script.src = 'https://xumm.app/assets/cdn/xumm.min.js';
       script.async = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('Failed to load Xumm SDK'));
+      script.onload = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      script.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Failed to load Xumm SDK'));
+      };
       document.head.appendChild(script);
     });
   },
