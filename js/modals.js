@@ -1909,26 +1909,7 @@ const Modals = {
               <div class="create-step" id="create-step-1">
                 <h3 class="create-step-title">Release Details</h3>
                 
-                <div class="form-group">
-                  <label class="form-label">Release Type</label>
-                  <div class="release-type-grid">
-                    <button type="button" class="release-type-btn selected" data-type="single">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                      <span>Single</span>
-                    </button>
-                    <button type="button" class="release-type-btn" data-type="album">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="2" width="20" height="20" rx="2"></rect>
-                        <rect x="6" y="6" width="12" height="12" rx="1"></rect>
-                      </svg>
-                      <span>Album</span>
-                    </button>
-                  </div>
-                  <input type="hidden" name="type" id="release-type" value="single">
-                </div>
+                <input type="hidden" name="type" id="release-type" value="release">
                 
                 <div class="form-group">
                   <label class="form-label">Title *</label>
@@ -1993,8 +1974,9 @@ const Modals = {
                 
                 <div class="form-group">
                   <label class="form-label">Audio File(s) *</label>
+                  <p class="form-hint" style="margin-bottom: 8px;">Upload 1 song for a single, or multiple for an album</p>
                   <div class="upload-zone audio-zone" id="audio-upload-zone">
-                    <input type="file" id="audio-input" accept="audio/*" hidden>
+                    <input type="file" id="audio-input" accept="audio/*" multiple hidden>
                     <div class="upload-placeholder" id="audio-placeholder">
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M9 18V5l12-2v13"></path>
@@ -2133,6 +2115,15 @@ const Modals = {
         .mint-status-icon .spinner { width: 40px; height: 40px; margin: 0 auto; }
         .mint-status-text { font-size: 14px; color: var(--text-secondary); }
         .btn-mint { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .mint-success { text-align: center; }
+        .mint-success-cover { width: 120px; height: 120px; margin: 0 auto 16px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); position: relative; }
+        .mint-success-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .mint-success-icon { position: absolute; bottom: -8px; right: calc(50% - 76px); width: 32px; height: 32px; background: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+        .mint-success-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+        .mint-success-stats { font-size: 14px; color: var(--accent); margin-bottom: 8px; }
+        .mint-success-msg { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+        .mint-success-actions { display: flex; gap: 12px; justify-content: center; }
+        .mint-success-actions .btn { min-width: 120px; }
       </style>
     `;
     
@@ -2177,23 +2168,6 @@ const Modals = {
     // Initialize mint fee
     updateMintFee();
     
-    // Release type selection
-    document.querySelectorAll('.release-type-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.release-type-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        document.getElementById('release-type').value = btn.dataset.type;
-        
-        // Update audio input for multiple files if album/EP
-        const audioInput = document.getElementById('audio-input');
-        if (btn.dataset.type !== 'single') {
-          audioInput.setAttribute('multiple', 'multiple');
-        } else {
-          audioInput.removeAttribute('multiple');
-        }
-      });
-    });
-    
     // Step navigation
     document.getElementById('create-next-1')?.addEventListener('click', () => {
       const title = document.getElementById('release-title').value.trim();
@@ -2218,10 +2192,14 @@ const Modals = {
       const totalNFTs = tracks.length * editions;
       const mintFee = calculateMintFee(editions, tracks.length);
       
+      // Auto-detect type based on track count
+      const releaseType = tracks.length === 1 ? 'single' : 'album';
+      document.getElementById('release-type').value = releaseType;
+      
       // Update review
       document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
-      document.getElementById('review-type').textContent = document.getElementById('release-type').value.toUpperCase();
+      document.getElementById('review-type').textContent = releaseType.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
       document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP per track`;
       document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
@@ -2517,8 +2495,9 @@ const Modals = {
                   <div class="spinner"></div>
                 </div>
                 <div class="mint-status-text">Step 5/5: Minting ${progress.quantity} NFTs...</div>
-                <p style="font-size: 13px; color: #f59e0b; margin-top: 12px; font-weight: 600;">⚠️ Please do not refresh or close this page!</p>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Creating your editions on the XRP Ledger</p>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">Saving your music forever to the XRP Ledger ⛓️</p>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Thanks for your patience!</p>
+                <p style="font-size: 12px; color: #f59e0b; margin-top: 8px; font-weight: 500;">⚠️ Please don't close or refresh this page</p>
               `;
             }
           },
@@ -2558,21 +2537,33 @@ const Modals = {
         
         // Success - NFTs minted and ready to sell!
         statusEl.innerHTML = `
-          <div class="mint-status-icon" style="color: var(--success);">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
+          <div class="mint-success">
+            <div class="mint-success-cover">
+              <img src="${URL.createObjectURL(coverFile)}" alt="Cover">
+            </div>
+            <div class="mint-success-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+            </div>
+            <div class="mint-success-title">${releaseTitle}</div>
+            <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${mintResult.totalMinted} NFTs minted</div>
+            <p class="mint-success-msg">Your music is now live on the XRP Ledger!</p>
+            <div class="mint-success-actions">
+              <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                Share
+              </button>
+              <button type="button" class="btn btn-primary" id="mint-success-done">View Release</button>
+            </div>
           </div>
-          <div class="mint-status-text" style="color: var(--success); font-weight: 600;">${mintResult.totalMinted} NFTs Minted!</div>
-          <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} × ${editions} editions</p>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Your release is now live and for sale!</p>
         `;
         
-        setTimeout(() => {
+        document.getElementById('mint-success-done')?.addEventListener('click', () => {
           this.close();
           Router.navigate('profile');
-        }, 2000);
+        });
         
       } catch (error) {
         console.error('Mint failed:', error);
