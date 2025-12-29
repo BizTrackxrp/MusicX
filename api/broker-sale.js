@@ -8,7 +8,7 @@
  */
 
 import { neon } from '@neondatabase/serverless';
-import xrpl from 'xrpl';
+import * as xrpl from 'xrpl';
 
 const PLATFORM_FEE_PERCENT = 2;
 
