@@ -556,6 +556,15 @@ const ProfilePage = {
         });
       });
       
+      // Bind list for sale buttons
+      container.querySelectorAll('.nft-list-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nftData = JSON.parse(btn.dataset.nft);
+          Modals.showListNFTForSale(nftData);
+        });
+      });
+      
     } catch (error) {
       console.error('Failed to load NFTs:', error);
       container.innerHTML = `
@@ -574,8 +583,29 @@ const ProfilePage = {
   },
   
   renderCollectedNFT(nft) {
+    const isOneOfOne = nft.totalEditions === 1;
+    const editionText = isOneOfOne 
+      ? '1/1' 
+      : nft.editionNumber 
+        ? `#${nft.editionNumber} of ${nft.totalEditions}` 
+        : `of ${nft.totalEditions}`;
+    
+    // Special styling for 1/1s and early editions
+    let editionClass = '';
+    let editionIcon = '';
+    if (isOneOfOne) {
+      editionClass = 'edition-one-of-one';
+      editionIcon = '💎';
+    } else if (nft.editionNumber === 1) {
+      editionClass = 'edition-first';
+      editionIcon = '🥇';
+    } else if (nft.editionNumber && nft.editionNumber <= 10) {
+      editionClass = 'edition-early';
+      editionIcon = '⭐';
+    }
+    
     return `
-      <div class="collected-nft-card">
+      <div class="collected-nft-card" data-nft-id="${nft.nftTokenId}">
         <div class="collected-nft-cover">
           ${nft.coverUrl 
             ? `<img src="${nft.coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}">`
@@ -594,10 +624,20 @@ const ProfilePage = {
             </svg>
             Owned
           </div>
+          ${editionText ? `<div class="edition-badge ${editionClass}">${editionIcon} ${editionText}</div>` : ''}
         </div>
         <div class="collected-nft-info">
           <div class="collected-nft-title">${nft.trackTitle || nft.releaseTitle}</div>
           <div class="collected-nft-artist">${nft.artistName || 'Unknown Artist'}</div>
+          <div class="collected-nft-actions">
+            <button class="btn btn-sm btn-secondary nft-list-btn" data-nft='${JSON.stringify(nft).replace(/'/g, "\\'")}'>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              List for Sale
+            </button>
+          </div>
         </div>
       </div>
     `;
