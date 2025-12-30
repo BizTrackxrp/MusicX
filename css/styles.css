@@ -1996,3 +1996,15 @@ body:not(.light) .toggle-knob {
   background: rgba(59, 130, 246, 0.9);
   color: white;
 }
+
+.listing-price-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+}
