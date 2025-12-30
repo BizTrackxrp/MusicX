@@ -1195,7 +1195,6 @@ body:not(.light) .toggle-knob {
 .release-card-cover {
   position: relative;
   aspect-ratio: 1;
-  overflow: hidden;
 }
 
 .release-card-cover img {
@@ -1367,26 +1366,12 @@ body:not(.light) .toggle-knob {
   background: rgba(59, 130, 246, 0.1);
 }
 
-/* FIXED: Track cover image containment */
 .track-cover {
   width: 48px;
   height: 48px;
-  min-width: 48px;
-  min-height: 48px;
-  max-width: 48px;
-  max-height: 48px;
   border-radius: var(--radius-md);
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: var(--bg-hover);
-}
-
-.track-cover img {
-  width: 100%;
-  height: 100%;
   object-fit: cover;
-  display: block;
+  position: relative;
 }
 
 .track-playing-indicator {
@@ -1423,7 +1408,6 @@ body:not(.light) .toggle-knob {
 
 .track-info {
   min-width: 0;
-  overflow: hidden;
 }
 
 .track-title {
@@ -1452,7 +1436,6 @@ body:not(.light) .toggle-knob {
   align-items: center;
   gap: 8px;
   text-align: right;
-  flex-shrink: 0;
 }
 
 .track-price {
@@ -1870,4 +1853,109 @@ body:not(.light) .toggle-knob {
 
 .animate-slide-up {
   animation: slideUp var(--transition-slow) ease;
+}
+
+/* ============================================
+   Collected NFTs Grid
+   ============================================ */
+.collected-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.collected-nft-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.collected-nft-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.collected-nft-cover {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--bg-hover);
+}
+
+.collected-nft-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.collected-nft-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.collected-nft-card:hover .collected-nft-overlay {
+  opacity: 1;
+}
+
+.nft-play-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-fast);
+}
+
+.nft-play-btn:hover {
+  transform: scale(1.1);
+}
+
+.collected-nft-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(34, 197, 94, 0.9);
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+}
+
+.collected-nft-info {
+  padding: 12px;
+}
+
+.collected-nft-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.collected-nft-artist {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
