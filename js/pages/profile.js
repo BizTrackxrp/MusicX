@@ -521,6 +521,19 @@ const ProfilePage = {
     }
   },
   
+  async fetchForSaleCount() {
+    const countEl = document.getElementById('forsale-count');
+    if (!countEl || !AppState.user?.address) return;
+    
+    try {
+      const response = await fetch(`/api/listings?seller=${AppState.user.address}`);
+      const data = await response.json();
+      countEl.textContent = data.listings?.length || 0;
+    } catch (e) {
+      countEl.textContent = '?';
+    }
+  },
+  
   async loadCollectedNFTs() {
     const container = document.getElementById('collected-content');
     const countEl = document.getElementById('collected-count');
@@ -869,6 +882,7 @@ const ProfilePage = {
     
     // Fetch collected NFT count (even if on Posted tab)
     this.fetchCollectedCount();
+    this.fetchForSaleCount();
     
     // List All button
     document.getElementById('list-all-btn')?.addEventListener('click', () => {
