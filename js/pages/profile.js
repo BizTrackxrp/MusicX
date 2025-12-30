@@ -163,7 +163,7 @@ const ProfilePage = {
           </button>
           <button class="tab-btn ${this.activeTab === 'collected' ? 'active' : ''}" data-tab="collected">
             Collected
-            <span class="tab-count">0</span>
+            <span class="tab-count" id="collected-count">...</span>
           </button>
         </div>
         
@@ -494,13 +494,30 @@ const ProfilePage = {
     `;
   },
   
+  async fetchCollectedCount() {
+    const countEl = document.getElementById('collected-count');
+    if (!countEl || !AppState.user?.address) return;
+    
+    try {
+      const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
+      const data = await response.json();
+      countEl.textContent = data.nfts?.length || 0;
+    } catch (e) {
+      countEl.textContent = '?';
+    }
+  },
+  
   async loadCollectedNFTs() {
     const container = document.getElementById('collected-content');
+    const countEl = document.getElementById('collected-count');
     if (!container) return;
     
     try {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
+      
+      // Update the counter
+      if (countEl) countEl.textContent = data.nfts?.length || 0;
       
       if (!data.nfts || data.nfts.length === 0) {
         container.innerHTML = `
@@ -680,6 +697,9 @@ const ProfilePage = {
     document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
       Modals.showEditProfile();
     });
+    
+    // Fetch collected NFT count (even if on Posted tab)
+    this.fetchCollectedCount();
     
     // List All button
     document.getElementById('list-all-btn')?.addEventListener('click', () => {
