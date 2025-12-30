@@ -1959,3 +1959,40 @@ body:not(.light) .toggle-knob {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.collected-nft-actions {
+  margin-top: 8px;
+}
+
+.collected-nft-actions .btn-sm {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.edition-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.edition-badge.edition-one-of-one {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: white;
+}
+
+.edition-badge.edition-first {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+}
+
+.edition-badge.edition-early {
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+}
