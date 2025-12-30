@@ -24,14 +24,32 @@ export default async function handler(req, res) {
       let listings;
       if (seller) {
         listings = await sql`
-          SELECT * FROM secondary_listings 
-          WHERE seller_address = ${seller} AND status = 'active'
-          ORDER BY created_at DESC
+          SELECT l.*, 
+            t.title as track_title, 
+            t.audio_url,
+            r.title as release_title, 
+            r.cover_url, 
+            r.artist_name,
+            r.artist_address
+          FROM secondary_listings l
+          LEFT JOIN tracks t ON t.id = l.track_id
+          LEFT JOIN releases r ON r.id = l.release_id
+          WHERE l.seller_address = ${seller} AND l.status = 'active'
+          ORDER BY l.created_at DESC
         `;
       } else if (nftTokenId) {
         listings = await sql`
-          SELECT * FROM secondary_listings 
-          WHERE nft_token_id = ${nftTokenId} AND status = 'active'
+          SELECT l.*, 
+            t.title as track_title, 
+            t.audio_url,
+            r.title as release_title, 
+            r.cover_url, 
+            r.artist_name,
+            r.artist_address
+          FROM secondary_listings l
+          LEFT JOIN tracks t ON t.id = l.track_id
+          LEFT JOIN releases r ON r.id = l.release_id
+          WHERE l.nft_token_id = ${nftTokenId} AND l.status = 'active'
           LIMIT 1
         `;
       } else {
