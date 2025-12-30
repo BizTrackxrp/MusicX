@@ -1426,6 +1426,14 @@ const Modals = {
               <span>Only <strong>${available}</strong> of ${release.totalEditions} remaining!</span>
             </div>
             
+            <!-- 2 Signature Notice -->
+            <div class="purchase-notice">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span><strong>2 signatures required:</strong> First to send payment, then to receive your NFT</span>
+            </div>
+            
             <!-- Purchase Status -->
             <div class="purchase-status" id="purchase-status" style="display: none;">
               <div class="purchase-status-icon">
@@ -1526,6 +1534,18 @@ const Modals = {
           border-radius: var(--radius-lg);
           font-size: 13px;
           color: var(--warning);
+          margin-bottom: 12px;
+        }
+        .purchase-notice {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: rgba(59, 130, 246, 0.1);
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          border-radius: var(--radius-lg);
+          font-size: 13px;
+          color: var(--accent);
           margin-bottom: 20px;
         }
         .purchase-status {
@@ -1679,21 +1699,17 @@ const Modals = {
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
         </div>
-        <div class="purchase-status-text">Purchase Complete!</div>
+        <div class="purchase-status-text">Purchase Complete! 🎉</div>
         <div class="purchase-status-sub">Your NFT has been added to your collection</div>
+        <div style="margin-top: 20px;">
+          <button class="btn btn-primary" id="view-collection-btn">View My Collection</button>
+        </div>
       `;
       
-      // Show success for a moment then close
-      setTimeout(() => {
+      document.getElementById('view-collection-btn')?.addEventListener('click', () => {
         this.close();
-        // Refresh releases to update availability
-        if (typeof StreamPage !== 'undefined') {
-          StreamPage.render();
-        }
-        if (typeof ProfilePage !== 'undefined') {
-          ProfilePage.render();
-        }
-      }, 2000);
+        Router.navigate('profile');
+      });
       
     } catch (error) {
       console.error('Purchase failed:', error);
