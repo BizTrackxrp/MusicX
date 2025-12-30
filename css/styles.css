@@ -1370,8 +1370,15 @@ body:not(.light) .toggle-knob {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md);
-  object-fit: cover;
+  overflow: hidden;
   position: relative;
+  flex-shrink: 0;
+}
+
+.track-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .track-playing-indicator {
