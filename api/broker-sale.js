@@ -232,14 +232,17 @@ export default async function handler(req, res) {
         }
       }
       
-      // Step 5: Update database
-      await sql`
+      // Step 5: Update database - get the new sold count (this IS the edition number)
+      const updateResult = await sql`
         UPDATE releases 
         SET sold_editions = sold_editions + 1
         WHERE id = ${releaseId}
+        RETURNING sold_editions
       `;
       
-      // Record the sale
+      const editionNumber = updateResult[0]?.sold_editions || 1;
+      
+      // Record the sale with edition number and NFT token ID
       const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await sql`
         INSERT INTO sales (
@@ -247,6 +250,8 @@ export default async function handler(req, res) {
           release_id,
           buyer_address,
           seller_address,
+          nft_token_id,
+          edition_number,
           price,
           platform_fee,
           tx_hash,
@@ -256,6 +261,8 @@ export default async function handler(req, res) {
           ${releaseId},
           ${buyerAddress},
           ${artistAddress},
+          ${nftToTransfer.NFTokenID},
+          ${editionNumber},
           ${price},
           ${platformFee},
           ${offerResult.result.hash},
