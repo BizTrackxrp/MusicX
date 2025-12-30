@@ -482,14 +482,106 @@ const ProfilePage = {
   },
   
   renderCollectedTab() {
+    // Show loading initially
+    setTimeout(() => this.loadCollectedNFTs(), 0);
+    
     return `
-      <div class="empty-state">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-        </svg>
-        <h3>No Collected NFTs</h3>
-        <p>NFTs you purchase will appear here.</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Router.navigate('marketplace')">Browse Marketplace</button>
+      <div id="collected-content">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    `;
+  },
+  
+  async loadCollectedNFTs() {
+    const container = document.getElementById('collected-content');
+    if (!container) return;
+    
+    try {
+      const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
+      const data = await response.json();
+      
+      if (!data.nfts || data.nfts.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+            <h3>No Collected NFTs</h3>
+            <p>NFTs you purchase will appear here.</p>
+            <button class="btn btn-primary" style="margin-top: 16px;" onclick="Router.navigate('marketplace')">Browse Marketplace</button>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = `
+        <div class="collected-grid">
+          ${data.nfts.map(nft => this.renderCollectedNFT(nft)).join('')}
+        </div>
+      `;
+      
+      // Bind play buttons
+      container.querySelectorAll('.nft-play-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nftData = JSON.parse(btn.dataset.nft);
+          if (nftData.audioUrl) {
+            Player.play({
+              id: nftData.trackId || nftData.releaseId,
+              title: nftData.trackTitle || nftData.releaseTitle,
+              artist: nftData.artistName,
+              coverUrl: nftData.coverUrl,
+              audioUrl: nftData.audioUrl,
+            });
+          }
+        });
+      });
+      
+    } catch (error) {
+      console.error('Failed to load NFTs:', error);
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+          <h3>Failed to Load</h3>
+          <p>Couldn't fetch your NFTs. Please try again.</p>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="ProfilePage.loadCollectedNFTs()">Retry</button>
+        </div>
+      `;
+    }
+  },
+  
+  renderCollectedNFT(nft) {
+    return `
+      <div class="collected-nft-card">
+        <div class="collected-nft-cover">
+          ${nft.coverUrl 
+            ? `<img src="${nft.coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}">`
+            : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+          }
+          <div class="collected-nft-overlay">
+            <button class="nft-play-btn" data-nft='${JSON.stringify(nft).replace(/'/g, "\\'")}'>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </button>
+          </div>
+          <div class="collected-nft-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            Owned
+          </div>
+        </div>
+        <div class="collected-nft-info">
+          <div class="collected-nft-title">${nft.trackTitle || nft.releaseTitle}</div>
+          <div class="collected-nft-artist">${nft.artistName || 'Unknown Artist'}</div>
+        </div>
       </div>
     `;
   },
