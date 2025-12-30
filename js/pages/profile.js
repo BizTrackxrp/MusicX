@@ -677,7 +677,7 @@ const ProfilePage = {
             ? `<img src="${listing.cover_url}" alt="${listing.track_title || listing.release_title}">`
             : `<div class="cover-placeholder">🎵</div>`
           }
-          <div class="listing-price-badge">${listing.price} XRP</div>
+          <div class="listing-price-badge">${parseFloat(listing.price)} XRP</div>
         </div>
         <div class="collected-nft-info">
           <div class="collected-nft-title">${listing.track_title || listing.release_title || 'NFT'}</div>
