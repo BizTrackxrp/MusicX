@@ -47,10 +47,25 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
     
-    // Get release details
-    const [release] = await sql`
-      SELECT * FROM releases WHERE id = ${releaseId}
+    // Get release details with tracks
+    const releases = await sql`
+      SELECT r.*, 
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', t.id,
+              'metadata_cid', t.metadata_cid
+            )
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as tracks
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      WHERE r.id = ${releaseId}
+      GROUP BY r.id
     `;
+    
+    const release = releases[0];
     
     if (!release) {
       return res.status(404).json({ error: 'Release not found' });
@@ -64,6 +79,22 @@ export default async function handler(req, res) {
     
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
+    
+    // Build list of all possible metadata CIDs for this release
+    const possibleCids = [];
+    if (release.metadata_cid) {
+      possibleCids.push(release.metadata_cid);
+    }
+    // Add track-level metadata CIDs
+    if (release.tracks && Array.isArray(release.tracks)) {
+      for (const track of release.tracks) {
+        if (track.metadata_cid) {
+          possibleCids.push(track.metadata_cid);
+        }
+      }
+    }
+    
+    console.log('Looking for NFTs with CIDs:', possibleCids);
     
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
@@ -82,16 +113,17 @@ export default async function handler(req, res) {
       
       const platformNFTs = nftsResponse.result.account_nfts || [];
       
+      // Build expected URI hex values for all possible CIDs
+      const expectedUriHexes = possibleCids.map(cid => 
+        xrpl.convertStringToHex(`ipfs://${cid}`)
+      );
+      
       // Find NFT with matching URI (metadata)
       let nftToTransfer = null;
-      const metadataUri = `ipfs://${release.metadata_cid}`;
-      const expectedUriHex = xrpl.convertStringToHex(metadataUri);
       
       for (const nft of platformNFTs) {
-        // Check if NFT URI matches release metadata
-        if (nft.URI === expectedUriHex) {
-          // Also verify issuer is the artist
-          // NFT Issuer is encoded in the NFTokenID
+        // Check if NFT URI matches any of our expected URIs
+        if (expectedUriHexes.includes(nft.URI)) {
           nftToTransfer = nft;
           break;
         }
@@ -99,9 +131,42 @@ export default async function handler(req, res) {
       
       if (!nftToTransfer) {
         console.error('No matching NFT found for release:', releaseId);
-        console.error('Looking for URI:', metadataUri);
+        console.error('Looking for URIs:', possibleCids.map(c => `ipfs://${c}`));
         console.error('Platform has', platformNFTs.length, 'NFTs');
-        return res.status(400).json({ error: 'No NFT available for this release' });
+        // Log first few NFT URIs for debugging
+        console.error('First 5 NFT URIs:', platformNFTs.slice(0, 5).map(n => {
+          try {
+            return xrpl.convertHexToString(n.URI);
+          } catch {
+            return n.URI;
+          }
+        }));
+        
+        // REFUND the buyer since we can't fulfill the order
+        if (buyerAddress && price > 0) {
+          try {
+            console.log('Refunding buyer:', buyerAddress, price, 'XRP');
+            const refundTx = await client.autofill({
+              TransactionType: 'Payment',
+              Account: platformAddress,
+              Destination: buyerAddress,
+              Amount: xrpl.xrpToDrops(price.toFixed(6)),
+              Memos: [{
+                Memo: {
+                  MemoType: xrpl.convertStringToHex('XRPMusic'),
+                  MemoData: xrpl.convertStringToHex('Refund: NFT unavailable'),
+                }
+              }],
+            });
+            const signedRefund = platformWallet.sign(refundTx);
+            const refundResult = await client.submitAndWait(signedRefund.tx_blob);
+            console.log('Refund sent:', refundResult.result.hash);
+          } catch (refundError) {
+            console.error('Refund failed:', refundError);
+          }
+        }
+        
+        return res.status(400).json({ error: 'No NFT available for this release - payment refunded' });
       }
       
       console.log('Found NFT to transfer:', nftToTransfer.NFTokenID);
