@@ -626,4 +626,60 @@ const XamanWallet = {
     // Wait for result
     return this.waitForPayload(payload.uuid);
   },
+  
+  /**
+   * Create a sell offer for an NFT (secondary market listing)
+   * @param {string} nftTokenId - The NFT token ID to sell
+   * @param {number} price - Price in XRP
+   */
+  async createSellOffer(nftTokenId, price) {
+    if (!this.sdk) throw new Error('SDK not initialized');
+    if (!AppState.user?.address) throw new Error('Wallet not connected');
+    
+    console.log('Creating sell offer for:', nftTokenId, 'at', price, 'XRP');
+    
+    // Convert XRP to drops
+    const amountInDrops = Math.floor(price * 1000000).toString();
+    
+    const payload = await this.sdk.payload?.create({
+      txjson: {
+        TransactionType: 'NFTokenCreateOffer',
+        NFTokenID: nftTokenId,
+        Amount: amountInDrops,
+        Flags: 1, // tfSellNFToken
+      },
+      custom_meta: {
+        instruction: `List your NFT for sale at ${price} XRP`,
+      },
+    });
+    
+    if (!payload) {
+      throw new Error('Failed to create sell offer payload');
+    }
+    
+    console.log('Create sell offer payload:', payload);
+    
+    // Open Xaman for signing
+    if (payload.next?.always) {
+      window.open(payload.next.always, '_blank');
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
+    
+    // Wait for result
+    const result = await this.waitForPayload(payload.uuid);
+    
+    // Extract offer index from result if available
+    if (result.success && result.txHash) {
+      // We'll need to look up the offer index from the transaction
+      // For now, return what we have
+      return {
+        ...result,
+        // The offer index will be in the transaction meta
+        // We might need to fetch it separately
+      };
+    }
+    
+    return result;
+  },
 };
