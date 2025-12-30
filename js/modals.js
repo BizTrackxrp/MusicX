@@ -1958,8 +1958,8 @@ const Modals = {
           </svg>
         </div>
         <p style="font-weight: 600; color: var(--text-primary);">Listed for ${price} XRP!</p>
-        <p style="font-size: 13px; margin-top: 4px;">Your NFT is now available on the marketplace</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.close(); Router.navigate('marketplace')">View Marketplace</button>
+        <p style="font-size: 13px; margin-top: 4px;">Your NFT is now listed for sale</p>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.close(); ProfilePage.activeTab = 'forsale'; Router.navigate('profile')">View My Listing</button>
       `;
       
     } catch (error) {
@@ -1974,6 +1974,167 @@ const Modals = {
         </div>
         <p style="font-weight: 600; color: var(--text-primary);">Listing Failed</p>
         <p style="font-size: 13px; margin-top: 4px;">${error.message}</p>
+      `;
+      if (actionsEl) actionsEl.style.display = 'flex';
+    }
+  },
+
+  /**
+   * Show modal to purchase from secondary market
+   */
+  showSecondaryPurchase(listing) {
+    this.activeModal = 'secondary-purchase';
+    
+    const title = listing.track_title || listing.release_title || 'NFT';
+    const artist = listing.artist_name || 'Unknown Artist';
+    const price = parseFloat(listing.price);
+    const sellerShort = `${listing.seller_address.slice(0, 6)}...${listing.seller_address.slice(-4)}`;
+    
+    const html = `
+      <div class="modal-overlay purchase-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title">Buy from Resale</div>
+            <button class="modal-close close-modal-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <!-- Item Preview -->
+            <div class="purchase-item">
+              <div class="purchase-cover">
+                ${listing.cover_url 
+                  ? `<img src="${listing.cover_url}" alt="${title}">`
+                  : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;">🎵</div>`
+                }
+              </div>
+              <div class="purchase-details">
+                <div class="purchase-title">${title}</div>
+                <div class="purchase-artist">${artist}</div>
+                <div class="purchase-type" style="color: var(--accent);">Resale from ${sellerShort}</div>
+              </div>
+            </div>
+            
+            <!-- Price Summary -->
+            <div class="purchase-summary">
+              <div class="purchase-row">
+                <span>NFT Price</span>
+                <span>${price} XRP</span>
+              </div>
+              <div class="purchase-row">
+                <span>Network Fee</span>
+                <span>~0.00001 XRP</span>
+              </div>
+              <div class="purchase-row purchase-total">
+                <span>Total</span>
+                <span>${price} XRP</span>
+              </div>
+            </div>
+            
+            <!-- Info -->
+            <div class="purchase-notice">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 1l4 4-4 4"></path>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              </svg>
+              <span>This is a resale. Artist royalty is automatically paid by the XRP Ledger.</span>
+            </div>
+            
+            <!-- Status -->
+            <div class="purchase-status" id="secondary-purchase-status" style="display: none;">
+              <div class="purchase-status-icon">
+                <div class="spinner"></div>
+              </div>
+              <div class="purchase-status-text">Processing...</div>
+              <div class="purchase-status-sub">Check your Xaman app</div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="purchase-actions" id="secondary-purchase-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary" id="confirm-secondary-purchase-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+                Buy with Xaman
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    this.show(html);
+    
+    document.getElementById('confirm-secondary-purchase-btn')?.addEventListener('click', async () => {
+      await this.processSecondaryPurchase(listing);
+    });
+  },
+  
+  /**
+   * Process secondary market purchase
+   */
+  async processSecondaryPurchase(listing) {
+    const statusEl = document.getElementById('secondary-purchase-status');
+    const actionsEl = document.getElementById('secondary-purchase-actions');
+    
+    if (statusEl) statusEl.style.display = 'block';
+    if (actionsEl) actionsEl.style.display = 'none';
+    
+    try {
+      // Accept the seller's offer
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="purchase-status-text">Sign in Xaman</div>
+        <div class="purchase-status-sub">Accept the seller's offer to complete purchase</div>
+      `;
+      
+      const result = await XamanWallet.acceptSellOffer(listing.offer_index);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Transaction failed');
+      }
+      
+      // Mark listing as sold
+      await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
+      
+      // Success!
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon success">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="purchase-status-text">Purchase Complete! 🎉</div>
+        <div class="purchase-status-sub">The NFT has been added to your collection</div>
+        <button class="btn btn-primary" style="margin-top: 16px;" id="view-collection-btn-secondary">View My Collection</button>
+      `;
+      
+      document.getElementById('view-collection-btn-secondary')?.addEventListener('click', () => {
+        this.close();
+        ProfilePage.activeTab = 'collected';
+        Router.navigate('profile');
+      });
+      
+    } catch (error) {
+      console.error('Secondary purchase failed:', error);
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon error">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <div class="purchase-status-text">Purchase Failed</div>
+        <div class="purchase-status-sub">${error.message}</div>
       `;
       if (actionsEl) actionsEl.style.display = 'flex';
     }
