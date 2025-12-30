@@ -60,7 +60,8 @@ export default async function handler(req, res) {
           r.artist_address,
           r.artist_name,
           r.song_price,
-          r.type
+          r.type,
+          r.total_editions
         FROM tracks t
         JOIN releases r ON r.id = t.release_id
         WHERE t.metadata_cid IS NOT NULL
@@ -76,7 +77,8 @@ export default async function handler(req, res) {
           artist_address,
           artist_name,
           song_price,
-          type
+          type,
+          total_editions
         FROM releases
         WHERE metadata_cid IS NOT NULL
       `;
@@ -99,6 +101,7 @@ export default async function handler(req, res) {
             duration: track.duration,
             price: track.song_price,
             releaseType: track.type,
+            totalEditions: track.total_editions,
           });
         }
       }
@@ -114,12 +117,30 @@ export default async function handler(req, res) {
             artistName: release.artist_name,
             price: release.song_price,
             releaseType: release.type,
+            totalEditions: release.total_editions,
           });
         }
       }
       
       // Match user's NFTs with our database
       const matchedNFTs = [];
+      
+      // Get sales info to find edition numbers
+      const sales = await sql`
+        SELECT nft_token_id, edition_number, release_id, created_at
+        FROM sales 
+        WHERE buyer_address = ${address}
+      `;
+      
+      const salesMap = new Map();
+      for (const sale of sales) {
+        if (sale.nft_token_id) {
+          salesMap.set(sale.nft_token_id, {
+            editionNumber: sale.edition_number,
+            purchaseDate: sale.created_at,
+          });
+        }
+      }
       
       for (const nft of userNFTs) {
         try {
@@ -131,11 +152,15 @@ export default async function handler(req, res) {
             
             if (cidMap.has(cid)) {
               const info = cidMap.get(cid);
+              const saleInfo = salesMap.get(nft.NFTokenID) || {};
+              
               matchedNFTs.push({
                 nftTokenId: nft.NFTokenID,
                 issuer: nft.Issuer,
                 uri: uri,
                 cid: cid,
+                editionNumber: saleInfo.editionNumber || null,
+                purchaseDate: saleInfo.purchaseDate || null,
                 ...info,
               });
             }
