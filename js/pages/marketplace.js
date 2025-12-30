@@ -5,8 +5,10 @@
 
 const MarketplacePage = {
   releases: [],
+  secondaryListings: [],
   viewMode: 'grid',
   activeTab: 'all',
+  marketType: 'primary', // 'primary' or 'secondary'
   
   /**
    * Render marketplace page
@@ -20,7 +22,14 @@ const MarketplacePage = {
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
-      this.releases = await Promise.race([API.getReleases(), timeout]);
+      // Fetch both primary releases and secondary listings
+      const [releases, listingsResponse] = await Promise.all([
+        Promise.race([API.getReleases(), timeout]),
+        fetch('/api/listings').then(r => r.json()).catch(() => ({ listings: [] })),
+      ]);
+      
+      this.releases = releases;
+      this.secondaryListings = listingsResponse.listings || [];
       setReleases(this.releases);
       this.renderContent();
     } catch (error) {
@@ -34,6 +43,8 @@ const MarketplacePage = {
    */
   renderContent() {
     const filteredReleases = this.getFilteredReleases();
+    const availableReleases = filteredReleases.filter(r => (r.totalEditions - r.soldEditions) > 0);
+    const soldOutReleases = filteredReleases.filter(r => (r.totalEditions - r.soldEditions) === 0);
     
     const html = `
       <div class="marketplace-page animate-fade-in">
@@ -62,18 +73,95 @@ const MarketplacePage = {
           </div>
         </div>
         
-        <!-- Tabs -->
-        <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; margin-bottom: 24px; overflow-x: auto;">
-          <button class="tab-btn ${this.activeTab === 'all' ? 'active' : ''}" data-tab="all">All Releases</button>
-          <button class="tab-btn ${this.activeTab === 'singles' ? 'active' : ''}" data-tab="singles">Singles</button>
-          <button class="tab-btn ${this.activeTab === 'albums' ? 'active' : ''}" data-tab="albums">Albums</button>
+        <!-- Market Type Tabs -->
+        <div class="market-type-tabs">
+          <button class="market-type-btn ${this.marketType === 'primary' ? 'active' : ''}" data-market="primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+            From Artists
+            <span class="market-count">${availableReleases.length}</span>
+          </button>
+          <button class="market-type-btn ${this.marketType === 'secondary' ? 'active' : ''}" data-market="secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 1l4 4-4 4"></path>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              <path d="M7 23l-4-4 4-4"></path>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+            </svg>
+            Resale Market
+            <span class="market-count">${this.secondaryListings.length}</span>
+          </button>
         </div>
         
-        <!-- Content -->
-        ${filteredReleases.length === 0 ? this.renderEmptyState() : this.renderReleases(filteredReleases)}
+        ${this.marketType === 'primary' ? `
+          <!-- Primary Market Tabs -->
+          <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; margin-bottom: 24px; overflow-x: auto;">
+            <button class="tab-btn ${this.activeTab === 'all' ? 'active' : ''}" data-tab="all">Available</button>
+            <button class="tab-btn ${this.activeTab === 'singles' ? 'active' : ''}" data-tab="singles">Singles</button>
+            <button class="tab-btn ${this.activeTab === 'albums' ? 'active' : ''}" data-tab="albums">Albums</button>
+            <button class="tab-btn ${this.activeTab === 'soldout' ? 'active' : ''}" data-tab="soldout">
+              Sold Out
+              <span style="margin-left: 4px; padding: 2px 6px; background: var(--bg-hover); border-radius: 8px; font-size: 11px;">${soldOutReleases.length}</span>
+            </button>
+          </div>
+          
+          <!-- Primary Content -->
+          ${this.activeTab === 'soldout' 
+            ? (soldOutReleases.length === 0 ? this.renderEmptyState('No sold out releases yet') : this.renderReleases(soldOutReleases))
+            : (availableReleases.length === 0 ? this.renderEmptyState() : this.renderReleases(this.activeTab === 'all' ? availableReleases : availableReleases.filter(r => this.activeTab === 'singles' ? r.type === 'single' : r.type !== 'single')))}
+        ` : `
+          <!-- Secondary Market Content -->
+          <div style="margin-bottom: 24px;">
+            <input type="text" class="form-input" id="secondary-search" placeholder="Search resale listings..." style="max-width: 400px;">
+          </div>
+          ${this.secondaryListings.length === 0 
+            ? this.renderEmptyState('No resale listings yet. When collectors list their NFTs for sale, they appear here.')
+            : this.renderSecondaryListings()}
+        `}
       </div>
       
       <style>
+        .market-type-tabs {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .market-type-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 20px;
+          border: 2px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          background: var(--bg-card);
+          color: var(--text-secondary);
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 150ms ease;
+        }
+        .market-type-btn:hover {
+          border-color: var(--accent);
+          color: var(--text-primary);
+        }
+        .market-type-btn.active {
+          border-color: var(--accent);
+          background: rgba(59, 130, 246, 0.1);
+          color: var(--accent);
+        }
+        .market-count {
+          padding: 2px 8px;
+          background: var(--bg-hover);
+          border-radius: 100px;
+          font-size: 12px;
+        }
+        .market-type-btn.active .market-count {
+          background: var(--accent);
+          color: white;
+        }
         .tab-btn {
           padding: 12px 20px;
           border: none;
@@ -97,11 +185,118 @@ const MarketplacePage = {
           background: var(--bg-hover);
           color: var(--text-primary);
         }
+        .secondary-listing-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 150ms ease;
+        }
+        .secondary-listing-card:hover {
+          border-color: var(--accent);
+          transform: translateY(-4px);
+        }
+        .secondary-cover {
+          position: relative;
+          aspect-ratio: 1;
+          background: var(--bg-hover);
+        }
+        .secondary-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .secondary-price {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          padding: 6px 12px;
+          background: linear-gradient(135deg, #22c55e, #16a34a);
+          border-radius: 100px;
+          font-size: 13px;
+          font-weight: 700;
+          color: white;
+        }
+        .secondary-badge {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          padding: 4px 8px;
+          background: rgba(139, 92, 246, 0.9);
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          color: white;
+        }
+        .secondary-info {
+          padding: 12px;
+        }
+        .secondary-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .secondary-artist {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+        }
+        .secondary-seller {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .secondary-buy-btn {
+          width: 100%;
+          margin-top: 8px;
+        }
       </style>
     `;
     
     UI.renderPage(html);
     this.bindEvents();
+  },
+  
+  /**
+   * Render secondary market listings
+   */
+  renderSecondaryListings() {
+    return `
+      <div class="release-grid">
+        ${this.secondaryListings.map(listing => this.renderSecondaryCard(listing)).join('')}
+      </div>
+    `;
+  },
+  
+  /**
+   * Render a secondary listing card
+   */
+  renderSecondaryCard(listing) {
+    const title = listing.track_title || listing.release_title || 'NFT';
+    const artist = listing.artist_name || 'Unknown Artist';
+    const price = parseFloat(listing.price);
+    
+    return `
+      <div class="secondary-listing-card" data-listing-id="${listing.id}">
+        <div class="secondary-cover">
+          ${listing.cover_url 
+            ? `<img src="${listing.cover_url}" alt="${title}">`
+            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;">🎵</div>`
+          }
+          <div class="secondary-price">${price} XRP</div>
+          <div class="secondary-badge">Resale</div>
+        </div>
+        <div class="secondary-info">
+          <div class="secondary-title">${title}</div>
+          <div class="secondary-artist">${artist}</div>
+          <div class="secondary-seller">Seller: ${listing.seller_address.slice(0, 6)}...${listing.seller_address.slice(-4)}</div>
+          <button class="btn btn-primary btn-sm secondary-buy-btn" data-listing='${JSON.stringify(listing).replace(/'/g, "\\'")}'>
+            Buy Now
+          </button>
+        </div>
+      </div>
+    `;
   },
   
   /**
@@ -266,6 +461,7 @@ const MarketplacePage = {
     if (this.activeTab === 'all') return listedReleases;
     if (this.activeTab === 'singles') return listedReleases.filter(r => r.type === 'single');
     if (this.activeTab === 'albums') return listedReleases.filter(r => r.type === 'album');
+    if (this.activeTab === 'soldout') return this.releases.filter(r => r.sellOfferIndex && (r.totalEditions - r.soldEditions) <= 0);
     return listedReleases;
   },
   
@@ -273,6 +469,15 @@ const MarketplacePage = {
    * Bind events
    */
   bindEvents() {
+    // Market type toggle (Primary / Secondary)
+    document.querySelectorAll('.market-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.marketType = btn.dataset.market;
+        this.activeTab = 'all';
+        this.renderContent();
+      });
+    });
+    
     // View mode toggle
     document.querySelectorAll('.view-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -311,6 +516,25 @@ const MarketplacePage = {
         if (release && release.tracks?.length > 0) {
           StreamPage.playRelease(release);
         }
+      });
+    });
+    
+    // Secondary market buy buttons
+    document.querySelectorAll('.secondary-buy-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const listing = JSON.parse(btn.dataset.listing);
+        Modals.showSecondaryPurchase(listing);
+      });
+    });
+    
+    // Secondary search
+    document.getElementById('secondary-search')?.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('.secondary-listing-card').forEach(card => {
+        const title = card.querySelector('.secondary-title')?.textContent.toLowerCase() || '';
+        const artist = card.querySelector('.secondary-artist')?.textContent.toLowerCase() || '';
+        card.style.display = (title.includes(query) || artist.includes(query)) ? '' : 'none';
       });
     });
   },
