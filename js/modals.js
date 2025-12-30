@@ -1740,6 +1740,245 @@ const Modals = {
     }
   },
 
+  /**
+   * Show modal to list an owned NFT for sale (secondary market)
+   */
+  showListNFTForSale(nft) {
+    this.activeModal = 'list-nft';
+    
+    const isOneOfOne = nft.totalEditions === 1;
+    const editionText = isOneOfOne 
+      ? '1/1 Edition' 
+      : nft.editionNumber 
+        ? `Edition #${nft.editionNumber} of ${nft.totalEditions}` 
+        : `Edition of ${nft.totalEditions}`;
+    
+    const html = `
+      <div class="modal-overlay list-nft-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title">List for Sale</div>
+            <button class="modal-close close-modal-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <!-- NFT Preview -->
+            <div class="list-nft-preview">
+              <div class="list-nft-cover">
+                ${nft.coverUrl 
+                  ? `<img src="${nft.coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}">`
+                  : `<div class="cover-placeholder">🎵</div>`
+                }
+              </div>
+              <div class="list-nft-details">
+                <div class="list-nft-title">${nft.trackTitle || nft.releaseTitle}</div>
+                <div class="list-nft-artist">${nft.artistName || 'Unknown Artist'}</div>
+                <div class="list-nft-edition ${isOneOfOne ? 'one-of-one' : ''}">${editionText}</div>
+              </div>
+            </div>
+            
+            <!-- Price Input -->
+            <div class="form-group">
+              <label class="form-label">Sale Price (XRP)</label>
+              <input type="number" class="form-input" id="list-nft-price" placeholder="Enter price" step="0.01" min="0.01" value="${nft.price || ''}">
+              <p class="form-hint">You'll receive 98% • 2% platform fee</p>
+            </div>
+            
+            <!-- Info -->
+            <div class="list-nft-info">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>When someone buys, you'll need to approve the sale in Xaman</span>
+            </div>
+            
+            <!-- Status -->
+            <div class="list-nft-status hidden" id="list-nft-status">
+              <div class="spinner"></div>
+              <p>Creating sell offer...</p>
+            </div>
+            
+            <!-- Actions -->
+            <div class="list-nft-actions" id="list-nft-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary" id="confirm-list-nft-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="1" x2="12" y2="23"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                List for Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .list-nft-modal .modal { max-width: 420px; }
+        .list-nft-preview {
+          display: flex;
+          gap: 16px;
+          padding: 16px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-lg);
+          margin-bottom: 20px;
+        }
+        .list-nft-cover {
+          width: 80px;
+          height: 80px;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        .list-nft-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .list-nft-details {
+          flex: 1;
+          min-width: 0;
+        }
+        .list-nft-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .list-nft-artist {
+          font-size: 14px;
+          color: var(--text-secondary);
+          margin-bottom: 8px;
+        }
+        .list-nft-edition {
+          display: inline-block;
+          padding: 4px 10px;
+          background: var(--bg-card);
+          border-radius: 100px;
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-muted);
+        }
+        .list-nft-edition.one-of-one {
+          background: linear-gradient(135deg, #8b5cf6, #ec4899);
+          color: white;
+        }
+        .list-nft-info {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 12px;
+          background: rgba(59, 130, 246, 0.1);
+          border: 1px solid rgba(59, 130, 246, 0.2);
+          border-radius: var(--radius-lg);
+          font-size: 13px;
+          color: var(--accent);
+          margin-bottom: 20px;
+        }
+        .list-nft-info svg { flex-shrink: 0; margin-top: 2px; }
+        .list-nft-status {
+          text-align: center;
+          padding: 20px;
+        }
+        .list-nft-status.hidden { display: none; }
+        .list-nft-status .spinner { margin: 0 auto 12px; }
+        .list-nft-status p { color: var(--text-secondary); font-size: 14px; margin: 0; }
+        .list-nft-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .list-nft-actions .btn { flex: 1; }
+      </style>
+    `;
+    
+    this.show(html);
+    
+    // Bind confirm button
+    document.getElementById('confirm-list-nft-btn')?.addEventListener('click', async () => {
+      const price = parseFloat(document.getElementById('list-nft-price').value);
+      if (!price || price <= 0) {
+        alert('Please enter a valid price');
+        return;
+      }
+      
+      await this.processListNFT(nft, price);
+    });
+  },
+  
+  /**
+   * Process listing an NFT for sale
+   */
+  async processListNFT(nft, price) {
+    const statusEl = document.getElementById('list-nft-status');
+    const actionsEl = document.getElementById('list-nft-actions');
+    
+    statusEl?.classList.remove('hidden');
+    if (actionsEl) actionsEl.style.display = 'none';
+    
+    try {
+      // Create sell offer via Xaman
+      const result = await XamanWallet.createSellOffer(nft.nftTokenId, price);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create sell offer');
+      }
+      
+      // Save listing to database
+      const response = await fetch('/api/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nftTokenId: nft.nftTokenId,
+          sellerAddress: AppState.user.address,
+          price: price,
+          offerIndex: result.offerIndex,
+          releaseId: nft.releaseId,
+          trackId: nft.trackId,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        console.warn('Failed to save listing to DB:', data.error);
+      }
+      
+      // Success
+      statusEl.innerHTML = `
+        <div style="color: var(--success); margin-bottom: 12px;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <p style="font-weight: 600; color: var(--text-primary);">Listed for ${price} XRP!</p>
+        <p style="font-size: 13px; margin-top: 4px;">Your NFT is now available on the marketplace</p>
+        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.close(); Router.navigate('marketplace')">View Marketplace</button>
+      `;
+      
+    } catch (error) {
+      console.error('List NFT failed:', error);
+      statusEl.innerHTML = `
+        <div style="color: var(--error); margin-bottom: 12px;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <p style="font-weight: 600; color: var(--text-primary);">Listing Failed</p>
+        <p style="font-size: 13px; margin-top: 4px;">${error.message}</p>
+      `;
+      if (actionsEl) actionsEl.style.display = 'flex';
+    }
+  },
+
   showAuth() {
     this.activeModal = 'auth';
     const html = `
