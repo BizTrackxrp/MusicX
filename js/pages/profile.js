@@ -104,6 +104,12 @@ const ProfilePage = {
     const displayName = getDisplayName();
     const address = AppState.user.address;
     
+    // Set default tab based on whether user is an artist
+    const isArtist = profile.isArtist || this.releases.length > 0;
+    if (!isArtist && this.activeTab === 'posted') {
+      this.activeTab = 'collected';
+    }
+    
     const html = `
       <div class="profile-page animate-fade-in">
         <!-- Banner -->
@@ -157,19 +163,27 @@ const ProfilePage = {
         
         <!-- Tabs -->
         <div class="profile-tabs">
-          <button class="tab-btn ${this.activeTab === 'posted' ? 'active' : ''}" data-tab="posted">
-            My Releases
-            <span class="tab-count">${this.releases.length}</span>
-          </button>
+          ${profile.isArtist || this.releases.length > 0 ? `
+            <button class="tab-btn ${this.activeTab === 'posted' ? 'active' : ''}" data-tab="posted">
+              My Releases
+              <span class="tab-count">${this.releases.length}</span>
+            </button>
+          ` : ''}
           <button class="tab-btn ${this.activeTab === 'collected' ? 'active' : ''}" data-tab="collected">
-            Collected
+            ${profile.isArtist || this.releases.length > 0 ? 'Collected' : 'My Collection'}
             <span class="tab-count" id="collected-count">...</span>
+          </button>
+          <button class="tab-btn ${this.activeTab === 'forsale' ? 'active' : ''}" data-tab="forsale">
+            For Sale
+            <span class="tab-count" id="forsale-count">0</span>
           </button>
         </div>
         
         <!-- Tab Content -->
         <div class="profile-tab-content">
-          ${this.activeTab === 'posted' ? this.renderPostedTab() : this.renderCollectedTab()}
+          ${this.activeTab === 'posted' ? this.renderPostedTab() : 
+            this.activeTab === 'forsale' ? this.renderForSaleTab() :
+            this.renderCollectedTab()}
         </div>
       </div>
       
@@ -582,6 +596,121 @@ const ProfilePage = {
     }
   },
   
+  renderForSaleTab() {
+    // Show loading initially
+    setTimeout(() => this.loadForSaleNFTs(), 0);
+    
+    return `
+      <div id="forsale-content">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    `;
+  },
+  
+  async loadForSaleNFTs() {
+    const container = document.getElementById('forsale-content');
+    const countEl = document.getElementById('forsale-count');
+    if (!container) return;
+    
+    try {
+      const response = await fetch(`/api/listings?seller=${AppState.user.address}`);
+      const data = await response.json();
+      
+      // Update the counter
+      if (countEl) countEl.textContent = data.listings?.length || 0;
+      
+      if (!data.listings || data.listings.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <h3>No Active Listings</h3>
+            <p>NFTs you list for sale will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = `
+        <div class="collected-grid">
+          ${data.listings.map(listing => this.renderListingCard(listing)).join('')}
+        </div>
+      `;
+      
+      // Bind cancel buttons
+      container.querySelectorAll('.cancel-listing-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const listingId = btn.dataset.listingId;
+          if (confirm('Cancel this listing?')) {
+            await this.cancelListing(listingId);
+          }
+        });
+      });
+      
+    } catch (error) {
+      console.error('Failed to load listings:', error);
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+          <h3>Failed to Load</h3>
+          <p>Couldn't fetch your listings. Please try again.</p>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="ProfilePage.loadForSaleNFTs()">Retry</button>
+        </div>
+      `;
+    }
+  },
+  
+  renderListingCard(listing) {
+    return `
+      <div class="collected-nft-card listing-card">
+        <div class="collected-nft-cover">
+          ${listing.cover_url 
+            ? `<img src="${listing.cover_url}" alt="${listing.track_title || listing.release_title}">`
+            : `<div class="cover-placeholder">🎵</div>`
+          }
+          <div class="listing-price-badge">${listing.price} XRP</div>
+        </div>
+        <div class="collected-nft-info">
+          <div class="collected-nft-title">${listing.track_title || listing.release_title || 'NFT'}</div>
+          <div class="collected-nft-artist">${listing.artist_name || 'Unknown Artist'}</div>
+          <div class="collected-nft-actions">
+            <button class="btn btn-sm btn-secondary cancel-listing-btn" data-listing-id="${listing.id}">
+              Cancel Listing
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+  
+  async cancelListing(listingId) {
+    try {
+      const response = await fetch(`/api/listings?listingId=${listingId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        // Refresh the listings
+        this.loadForSaleNFTs();
+      } else {
+        alert('Failed to cancel listing');
+      }
+    } catch (error) {
+      console.error('Cancel listing error:', error);
+      alert('Failed to cancel listing');
+    }
+  },
+
   renderCollectedNFT(nft) {
     const isOneOfOne = nft.totalEditions === 1;
     const editionText = isOneOfOne 
