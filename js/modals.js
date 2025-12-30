@@ -1785,7 +1785,7 @@ const Modals = {
             <div class="form-group">
               <label class="form-label">Sale Price (XRP)</label>
               <input type="number" class="form-input" id="list-nft-price" placeholder="Enter price" step="0.01" min="0.01" value="${nft.price || ''}">
-              <p class="form-hint">You'll receive 98% • 2% platform fee</p>
+              <p class="form-hint">Artist royalty is automatically deducted by the XRP Ledger</p>
             </div>
             
             <!-- Info -->
