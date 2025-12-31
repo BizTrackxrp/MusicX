@@ -249,7 +249,8 @@ function formatRelease(row) {
     songPrice: parseFloat(row.song_price) || 0,
     albumPrice: row.album_price ? parseFloat(row.album_price) : null,
     totalEditions: row.total_editions || 100,
-    soldEditions: row.sold_editions || 0,
+    // Calculate sold editions as max of any track's sold count (for accurate album availability)
+    soldEditions: calculateSoldEditions(row),
     nftTokenId: row.nft_token_id,
     sellOfferIndex: row.sell_offer_index,
     listedAt: row.listed_at,
@@ -257,4 +258,24 @@ function formatRelease(row) {
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
+}
+
+// Calculate sold editions based on track with most sales
+// Album availability = total - max(track sold counts)
+function calculateSoldEditions(row) {
+  const tracks = row.tracks || [];
+  if (tracks.length === 0) {
+    return row.sold_editions || 0;
+  }
+  
+  // Find the track with most sales (determines album availability)
+  let maxSold = 0;
+  for (const track of tracks) {
+    const trackSold = parseInt(track.soldCount) || 0;
+    if (trackSold > maxSold) {
+      maxSold = trackSold;
+    }
+  }
+  
+  return maxSold;
 }
