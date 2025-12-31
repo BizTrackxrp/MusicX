@@ -2979,8 +2979,11 @@ const Modals = {
           <div class="qps-sub">Check your phone</div>
         </div>
         <div class="qps-tip">
-          <strong>💡 Tip:</strong> You'll sign 2 transactions.<br>
-          Pull down in Xaman to refresh events.
+          <strong>📱 In Xaman:</strong><br>
+          1. Pull down on Events to refresh<br>
+          2. Sign the first transaction<br>
+          3. Pull down again to refresh<br>
+          4. Sign the second transaction
         </div>
       </div>
     `;
@@ -3054,9 +3057,12 @@ const Modals = {
           ${sub ? `<div class="qps-sub" style="font-size:14px;color:rgba(255,255,255,0.7);margin-top:8px;">${sub}</div>` : ''}
         </div>
         ${!isError && !isSuccess ? `
-          <div class="qps-tip" style="margin-top:20px;padding:12px 16px;background:rgba(0,0,0,0.2);border-radius:10px;font-size:13px;color:rgba(255,255,255,0.8);line-height:1.5;">
-            <strong>💡 Tip:</strong> You'll sign 2 transactions.<br>
-            Pull down in Xaman to refresh events.
+          <div class="qps-tip" style="margin-top:20px;padding:12px 16px;background:rgba(0,0,0,0.2);border-radius:10px;font-size:13px;color:rgba(255,255,255,0.8);line-height:1.6;text-align:left;">
+            <strong>📱 In Xaman:</strong><br>
+            1. Pull down on Events to refresh<br>
+            2. Sign the first transaction<br>
+            3. Pull down again to refresh<br>
+            4. Sign the second transaction
           </div>
         ` : ''}
       `;
