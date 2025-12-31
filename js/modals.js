@@ -2966,17 +2966,21 @@ const Modals = {
     btn.style.borderColor = 'var(--border-color)';
     btn.style.minWidth = '80px';
     
-    // Create a prominent centered status overlay
+    // Create a prominent centered status overlay with purple theme
     const statusOverlay = document.createElement('div');
     statusOverlay.className = 'quick-purchase-status';
     statusOverlay.innerHTML = `
       <div class="qps-content">
         <div class="qps-icon">
-          <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+          <div class="spinner" style="width:40px;height:40px;border-width:3px;border-color:rgba(255,255,255,0.2);border-top-color:#fff;"></div>
         </div>
         <div class="qps-text">
           <div class="qps-title">Opening Xaman...</div>
           <div class="qps-sub">Check your phone</div>
+        </div>
+        <div class="qps-tip">
+          <strong>💡 Tip:</strong> You'll sign 2 transactions.<br>
+          Pull down in Xaman to refresh events.
         </div>
       </div>
     `;
@@ -2985,16 +2989,32 @@ const Modals = {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-xl);
-      padding: 32px 48px;
-      box-shadow: 0 16px 64px rgba(0,0,0,0.5);
+      background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 40px 48px;
+      box-shadow: 0 20px 60px rgba(124, 58, 237, 0.4), 0 0 40px rgba(124, 58, 237, 0.2);
       z-index: 1001;
-      min-width: 280px;
+      min-width: 320px;
+      max-width: 400px;
       text-align: center;
+      color: white;
     `;
     document.body.appendChild(statusOverlay);
+    
+    // Style the tip
+    const tipEl = statusOverlay.querySelector('.qps-tip');
+    if (tipEl) {
+      tipEl.style.cssText = `
+        margin-top: 20px;
+        padding: 12px 16px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 10px;
+        font-size: 13px;
+        color: rgba(255,255,255,0.8);
+        line-height: 1.5;
+      `;
+    }
     
     // Add backdrop
     const backdrop = document.createElement('div');
@@ -3005,34 +3025,40 @@ const Modals = {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.6);
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
       z-index: 1000;
     `;
     document.body.appendChild(backdrop);
     
     const updateStatus = (title, sub = '', isError = false, isSuccess = false) => {
-      const iconColor = isError ? 'var(--error)' : isSuccess ? 'var(--success)' : '';
       statusOverlay.querySelector('.qps-content').innerHTML = `
         <div class="qps-icon">
           ${isError ? `
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="15" y1="9" x2="9" y2="15"></line>
               <line x1="9" y1="9" x2="15" y2="15"></line>
             </svg>
           ` : isSuccess ? `
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
               <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
           ` : `
-            <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+            <div class="spinner" style="width:40px;height:40px;border-width:3px;border-color:rgba(255,255,255,0.2);border-top-color:#fff;"></div>
           `}
         </div>
         <div class="qps-text">
-          <div class="qps-title" style="font-size:18px;font-weight:600;margin-top:16px;${iconColor ? 'color:' + iconColor : ''}">${title}</div>
-          ${sub ? `<div class="qps-sub" style="font-size:14px;color:var(--text-muted);margin-top:8px;">${sub}</div>` : ''}
+          <div class="qps-title" style="font-size:20px;font-weight:700;margin-top:16px;color:white;">${title}</div>
+          ${sub ? `<div class="qps-sub" style="font-size:14px;color:rgba(255,255,255,0.7);margin-top:8px;">${sub}</div>` : ''}
         </div>
+        ${!isError && !isSuccess ? `
+          <div class="qps-tip" style="margin-top:20px;padding:12px 16px;background:rgba(0,0,0,0.2);border-radius:10px;font-size:13px;color:rgba(255,255,255,0.8);line-height:1.5;">
+            <strong>💡 Tip:</strong> You'll sign 2 transactions.<br>
+            Pull down in Xaman to refresh events.
+          </div>
+        ` : ''}
       `;
     };
     
@@ -3127,6 +3153,9 @@ const Modals = {
       btn.style.opacity = '0.8';
       btn.classList.remove('confirm-state');
       
+      // Update availability display
+      this.updateTrackAvailability(release, trackIdx);
+      
       // Remove status after delay
       setTimeout(() => {
         cleanup();
@@ -3148,6 +3177,40 @@ const Modals = {
         btn.style.minWidth = '';
         cleanup();
       }, 3000);
+    }
+  },
+  
+  // Update availability display after purchase
+  updateTrackAvailability(release, purchasedTrackIdx) {
+    // Update the track availability display
+    const trackRows = document.querySelectorAll('.track-row');
+    trackRows.forEach((row, idx) => {
+      const availEl = row.querySelector('.track-col-avail');
+      if (availEl && idx === purchasedTrackIdx) {
+        // Parse current availability and decrement
+        const current = availEl.textContent;
+        const match = current.match(/(\d+)\/(\d+)/);
+        if (match) {
+          const newAvail = Math.max(0, parseInt(match[1]) - 1);
+          const total = parseInt(match[2]);
+          availEl.textContent = `${newAvail}/${total}`;
+          if (newAvail < 5) {
+            availEl.classList.add('low');
+          }
+        }
+      }
+    });
+    
+    // Update the album availability badge
+    const albumAvailEl = document.querySelector('.availability-count');
+    if (albumAvailEl) {
+      const current = albumAvailEl.textContent;
+      const match = current.match(/(\d+) of (\d+)/);
+      if (match) {
+        const newAvail = Math.max(0, parseInt(match[1]) - 1);
+        const total = parseInt(match[2]);
+        albumAvailEl.textContent = `${newAvail} of ${total}`;
+      }
     }
   },
   
