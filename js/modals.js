@@ -2215,56 +2215,463 @@ const Modals = {
   showRelease(release) {
     this.activeModal = 'release';
     const available = release.totalEditions - release.soldEditions;
-    const price = release.albumPrice || release.songPrice;
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    const albumPrice = trackPrice * trackCount;
+    const isAlbum = release.type !== 'single' && trackCount > 1;
+    
+    // Check if full album is available (all tracks have stock)
+    const canBuyFullAlbum = isAlbum && available >= trackCount;
+    
+    // Calculate total duration
+    const totalDuration = release.tracks?.reduce((sum, t) => sum + (t.duration || 0), 0) || 0;
+    const durationText = totalDuration > 3600 
+      ? `${Math.floor(totalDuration / 3600)} hr ${Math.floor((totalDuration % 3600) / 60)} min`
+      : `${Math.floor(totalDuration / 60)} min ${totalDuration % 60} sec`;
+    
     const html = `
-      <div class="modal-overlay">
-        <div class="modal" style="max-width: 600px;">
-          <div class="modal-header">
-            <div class="modal-title">${release.title}</div>
-            <button class="modal-close">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+      <div class="modal-overlay release-modal-overlay">
+        <div class="modal release-modal">
+          <button class="modal-close release-modal-close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          
+          <!-- Header with gradient background -->
+          <div class="release-header" style="background: linear-gradient(180deg, ${this.getColorFromImage(release.coverUrl)} 0%, var(--bg-primary) 100%);">
+            <div class="release-header-content">
+              <div class="release-cover-small">
+                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : '<div class="cover-placeholder">🎵</div>'}
+              </div>
+              <div class="release-header-info">
+                <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
+                <h1 class="release-title-large">${release.title}</h1>
+                <div class="release-meta">
+                  <button class="artist-chip" data-artist="${release.artistAddress}">
+                    <div class="artist-chip-avatar">${(release.artistName || 'A')[0].toUpperCase()}</div>
+                    <span>${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
+                  </button>
+                  <span class="release-meta-dot">•</span>
+                  <span>${trackCount} song${trackCount > 1 ? 's' : ''}, ${durationText}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Action Bar -->
+          <div class="release-actions-bar">
+            <button class="btn-play-large" id="play-release-btn">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
             </button>
-          </div>
-          <div class="modal-body" style="padding: 0;">
-            <div style="aspect-ratio: 1; background: var(--bg-hover);">
-              ${release.coverUrl ? `<img src="${release.coverUrl}" style="width: 100%; height: 100%; object-fit: cover;">` : ''}
-            </div>
-            <div style="padding: 24px;">
-              <button class="artist-link" data-artist="${release.artistAddress}" style="display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); margin-bottom: 16px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">${(release.artistName || 'A')[0].toUpperCase()}</div>
-                <span>${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
+            <button class="btn-icon-circle" id="like-release-btn" title="Add to Liked Songs">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+            <button class="btn-icon-circle" id="add-to-playlist-btn" title="Add to Playlist">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+              </svg>
+            </button>
+            <div style="flex: 1;"></div>
+            ${canBuyFullAlbum ? `
+              <button class="btn btn-primary buy-album-btn" id="buy-album-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"></circle>
+                  <circle cx="20" cy="21" r="1"></circle>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                </svg>
+                Buy Full ${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Release'} • ${albumPrice} XRP
               </button>
-              <div style="display: flex; justify-content: space-between; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 16px;">
-                <div><div style="font-size: 24px; font-weight: 700; color: var(--accent);">${price} XRP</div></div>
-                <div style="text-align: right;"><div style="font-size: 18px; font-weight: 600;">${available} / ${release.totalEditions}</div><div style="font-size: 13px; color: var(--text-muted);">available</div></div>
-              </div>
-              ${release.tracks?.length > 0 ? `
-                <div style="margin-bottom: 16px;">
-                  <h4 style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">TRACKS</h4>
-                  <div class="track-list">
-                    ${release.tracks.map((track, idx) => `
-                      <div class="track-item modal-track" data-track-idx="${idx}" style="cursor: pointer;">
-                        <div style="width: 32px; text-align: center; color: var(--text-muted);">${idx + 1}</div>
-                        <div class="track-info"><div class="track-title">${release.type === 'single' ? release.title : track.title}</div></div>
-                        <div style="color: var(--text-muted);">${Helpers.formatDuration(track.duration)}</div>
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-              <div style="display: flex; gap: 12px;">
-                <button class="btn btn-primary" style="flex: 1;" id="play-release-btn">Play</button>
-                ${available > 0 ? '<button class="btn btn-secondary" style="flex: 1;" id="buy-release-btn">Buy NFT</button>' : ''}
-              </div>
+            ` : available > 0 && !isAlbum ? `
+              <button class="btn btn-primary" id="buy-release-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"></circle>
+                  <circle cx="20" cy="21" r="1"></circle>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                </svg>
+                Buy NFT • ${trackPrice} XRP
+              </button>
+            ` : ''}
+          </div>
+          
+          <!-- Track List -->
+          <div class="release-track-list">
+            <div class="track-list-header">
+              <span class="track-col-num">#</span>
+              <span class="track-col-title">Title</span>
+              <span class="track-col-actions"></span>
+              <span class="track-col-duration">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </span>
+              <span class="track-col-buy"></span>
             </div>
+            ${release.tracks?.map((track, idx) => {
+              const trackAvailable = available > 0; // TODO: per-track availability
+              return `
+                <div class="track-row" data-track-idx="${idx}">
+                  <span class="track-col-num">
+                    <span class="track-num">${idx + 1}</span>
+                    <button class="track-play-btn" data-track-idx="${idx}">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      </svg>
+                    </button>
+                  </span>
+                  <div class="track-col-title">
+                    <span class="track-name">${release.type === 'single' ? release.title : track.title}</span>
+                    <span class="track-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
+                  </div>
+                  <span class="track-col-actions">
+                    <button class="track-action-btn like-track-btn" data-track-idx="${idx}" title="Like">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                      </svg>
+                    </button>
+                    <button class="track-action-btn add-track-btn" data-track-idx="${idx}" title="Add to Playlist">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                    </button>
+                  </span>
+                  <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
+                  <span class="track-col-buy">
+                    ${trackAvailable ? `
+                      <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="9" cy="21" r="1"></circle>
+                          <circle cx="20" cy="21" r="1"></circle>
+                          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                        </svg>
+                        ${trackPrice} XRP
+                      </button>
+                    ` : `<span class="sold-out-label">Sold Out</span>`}
+                  </span>
+                </div>
+              `;
+            }).join('') || ''}
+          </div>
+          
+          <!-- Availability Info -->
+          <div class="release-availability">
+            <span class="availability-count">${available} of ${release.totalEditions}</span>
+            <span class="availability-label">editions available</span>
           </div>
         </div>
       </div>
+      
+      <style>
+        .release-modal-overlay {
+          align-items: flex-start;
+          padding-top: 40px;
+        }
+        .release-modal {
+          max-width: 800px;
+          width: 100%;
+          max-height: calc(100vh - 80px);
+          overflow-y: auto;
+          border-radius: var(--radius-xl);
+          padding: 0;
+        }
+        .release-modal-close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          z-index: 10;
+          background: rgba(0,0,0,0.5);
+          border: none;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: white;
+          transition: background 150ms;
+        }
+        .release-modal-close:hover { background: rgba(0,0,0,0.7); }
+        
+        .release-header {
+          padding: 24px 24px 24px;
+          position: relative;
+        }
+        .release-header-content {
+          display: flex;
+          gap: 24px;
+          align-items: flex-end;
+        }
+        .release-cover-small {
+          width: 180px;
+          height: 180px;
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+          flex-shrink: 0;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .release-cover-small img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .release-header-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .release-type-label {
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--text-primary);
+        }
+        .release-title-large {
+          font-size: 36px;
+          font-weight: 800;
+          color: var(--text-primary);
+          margin: 8px 0 16px;
+          line-height: 1.1;
+        }
+        .release-meta {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 14px;
+          color: var(--text-secondary);
+          flex-wrap: wrap;
+        }
+        .release-meta-dot { opacity: 0.5; }
+        .artist-chip {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--text-primary);
+          font-weight: 600;
+          padding: 0;
+        }
+        .artist-chip:hover { text-decoration: underline; }
+        .artist-chip-avatar {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: var(--accent-gradient);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          color: white;
+        }
+        
+        .release-actions-bar {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 16px 24px;
+          background: var(--bg-primary);
+        }
+        .btn-play-large {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: var(--success);
+          border: none;
+          color: black;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 100ms, background 100ms;
+        }
+        .btn-play-large:hover {
+          transform: scale(1.05);
+          background: #3be477;
+        }
+        .btn-play-large svg { margin-left: 2px; }
+        .btn-icon-circle {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: transparent;
+          border: 1px solid var(--text-muted);
+          color: var(--text-muted);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 150ms;
+        }
+        .btn-icon-circle:hover {
+          border-color: var(--text-primary);
+          color: var(--text-primary);
+          transform: scale(1.05);
+        }
+        .buy-album-btn {
+          margin-left: auto;
+        }
+        
+        .release-track-list {
+          padding: 0 24px;
+        }
+        .track-list-header {
+          display: grid;
+          grid-template-columns: 48px 1fr 80px 60px 100px;
+          gap: 16px;
+          padding: 8px 16px;
+          border-bottom: 1px solid var(--border-color);
+          font-size: 12px;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .track-row {
+          display: grid;
+          grid-template-columns: 48px 1fr 80px 60px 100px;
+          gap: 16px;
+          padding: 12px 16px;
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: background 100ms;
+        }
+        .track-row:hover {
+          background: var(--bg-hover);
+        }
+        .track-row:hover .track-num { display: none; }
+        .track-row:hover .track-play-btn { display: flex; }
+        .track-col-num {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-muted);
+        }
+        .track-play-btn {
+          display: none;
+          align-items: center;
+          justify-content: center;
+          background: none;
+          border: none;
+          color: var(--text-primary);
+          cursor: pointer;
+        }
+        .track-col-title {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          min-width: 0;
+        }
+        .track-name {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .track-artist {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .track-col-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          opacity: 0;
+          transition: opacity 100ms;
+        }
+        .track-row:hover .track-col-actions { opacity: 1; }
+        .track-action-btn {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          transition: color 100ms;
+        }
+        .track-action-btn:hover { color: var(--text-primary); }
+        .track-col-duration {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          color: var(--text-muted);
+          font-size: 14px;
+        }
+        .track-col-buy {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+        }
+        .buy-track-btn {
+          font-size: 12px;
+          padding: 6px 12px;
+          background: var(--accent);
+          border-color: var(--accent);
+        }
+        .buy-track-btn:hover {
+          background: var(--accent-hover);
+        }
+        .sold-out-label {
+          font-size: 12px;
+          color: var(--text-muted);
+          font-style: italic;
+        }
+        
+        .release-availability {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 16px 24px 24px;
+          font-size: 14px;
+        }
+        .availability-count {
+          font-weight: 600;
+          color: var(--accent);
+        }
+        .availability-label {
+          color: var(--text-muted);
+        }
+        
+        @media (max-width: 600px) {
+          .release-header-content { flex-direction: column; align-items: center; text-align: center; }
+          .release-cover-small { width: 150px; height: 150px; }
+          .release-title-large { font-size: 24px; }
+          .release-meta { justify-content: center; }
+          .track-list-header { display: none; }
+          .track-row { grid-template-columns: 32px 1fr auto; }
+          .track-col-actions, .track-col-duration { display: none; }
+          .track-col-buy .btn { font-size: 11px; padding: 4px 8px; }
+        }
+      </style>
     `;
+    
     this.show(html);
+    this.bindReleaseModalEvents(release);
+  },
+  
+  getColorFromImage(url) {
+    // Simple color extraction based on URL hash - could be enhanced
+    if (!url) return 'var(--accent)';
+    const hash = url.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 40%, 30%)`;
+  },
+  
+  bindReleaseModalEvents(release) {
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    
+    // Play button
     document.getElementById('play-release-btn')?.addEventListener('click', () => {
       if (release.tracks?.length > 0) {
         const queue = release.tracks.map((t, i) => ({
@@ -2274,12 +2681,14 @@ const Modals = {
           cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
         }));
         Player.playTrack(queue[0], queue, 0);
-        this.close();
       }
     });
-    document.querySelectorAll('.modal-track').forEach(item => {
-      item.addEventListener('click', () => {
-        const idx = parseInt(item.dataset.trackIdx, 10);
+    
+    // Track row click to play
+    document.querySelectorAll('.track-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.buy-track-btn') || e.target.closest('.track-action-btn')) return;
+        const idx = parseInt(row.dataset.trackIdx, 10);
         if (release.tracks?.[idx]) {
           const queue = release.tracks.map((t, i) => ({
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
@@ -2291,15 +2700,321 @@ const Modals = {
         }
       });
     });
+    
+    // Track play buttons
+    document.querySelectorAll('.track-play-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.trackIdx, 10);
+        if (release.tracks?.[idx]) {
+          const queue = release.tracks.map((t, i) => ({
+            id: parseInt(t.id) || i, trackId: t.id?.toString(),
+            title: release.type === 'single' ? release.title : t.title,
+            artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
+            cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+          }));
+          Player.playTrack(queue[idx], queue, idx);
+        }
+      });
+    });
+    
+    // Buy single track
+    document.querySelectorAll('.buy-track-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
+        const trackIdx = parseInt(btn.dataset.trackIdx, 10);
+        const track = release.tracks?.[trackIdx];
+        if (track) {
+          this.showTrackPurchase(release, track, trackIdx);
+        }
+      });
+    });
+    
+    // Buy full album
+    document.getElementById('buy-album-btn')?.addEventListener('click', () => {
+      if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
+      this.showAlbumPurchase(release);
+    });
+    
+    // Single release buy
     document.getElementById('buy-release-btn')?.addEventListener('click', () => {
       if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
       this.showPurchase(release);
     });
-    document.querySelector('.artist-link')?.addEventListener('click', () => {
-      const address = document.querySelector('.artist-link').dataset.artist;
+    
+    // Artist link
+    document.querySelector('.artist-chip')?.addEventListener('click', () => {
       this.close();
-      Router.navigate('artist', { address });
+      Router.navigate('artist', { address: release.artistAddress });
     });
+    
+    // Like release
+    document.getElementById('like-release-btn')?.addEventListener('click', () => {
+      this.showToast('Liked Songs feature coming soon!');
+    });
+    
+    // Add to playlist
+    document.getElementById('add-to-playlist-btn')?.addEventListener('click', () => {
+      this.showAddToPlaylist(release);
+    });
+    
+    // Like track buttons
+    document.querySelectorAll('.like-track-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.showToast('Liked Songs feature coming soon!');
+      });
+    });
+    
+    // Add track to playlist buttons
+    document.querySelectorAll('.add-track-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackIdx = parseInt(btn.dataset.trackIdx, 10);
+        const track = release.tracks?.[trackIdx];
+        if (track) {
+          this.showAddToPlaylist(release, track);
+        }
+      });
+    });
+  },
+  
+  showToast(message) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 12px 24px;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 1000;
+      animation: slideUp 200ms ease;
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  },
+  
+  showAddToPlaylist(release, track = null) {
+    // TODO: Implement playlist picker modal
+    this.showToast('Playlists feature coming soon!');
+  },
+  
+  showTrackPurchase(release, track, trackIdx) {
+    // Purchase a single track from an album
+    const trackRelease = {
+      ...release,
+      title: track.title,
+      tracks: [track],
+      trackToPurchase: track,
+      trackIndex: trackIdx,
+    };
+    this.showPurchaseConfirm(trackRelease);
+  },
+  
+  showAlbumPurchase(release) {
+    // Purchase all tracks in album
+    this.activeModal = 'album-purchase';
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    const totalPrice = trackPrice * trackCount;
+    
+    const html = `
+      <div class="modal-overlay purchase-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title">Buy Full ${release.type === 'album' ? 'Album' : 'EP'}</div>
+            <button class="modal-close close-modal-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="purchase-item">
+              <div class="purchase-cover">
+                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
+              </div>
+              <div class="purchase-details">
+                <div class="purchase-title">${release.title}</div>
+                <div class="purchase-artist">${release.artistName}</div>
+                <div class="purchase-type">${trackCount} tracks</div>
+              </div>
+            </div>
+            
+            <div class="purchase-summary">
+              <div class="purchase-row">
+                <span>${trackCount} NFTs × ${trackPrice} XRP</span>
+                <span>${totalPrice} XRP</span>
+              </div>
+              <div class="purchase-row">
+                <span>Network Fee</span>
+                <span>~0.00001 XRP</span>
+              </div>
+              <div class="purchase-row purchase-total">
+                <span>Total</span>
+                <span>${totalPrice} XRP</span>
+              </div>
+            </div>
+            
+            <div class="purchase-notice">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span><strong>2 signatures required:</strong> Payment + NFT transfers</span>
+            </div>
+            
+            <div class="purchase-status" id="album-purchase-status" style="display: none;">
+              <div class="purchase-status-icon"><div class="spinner"></div></div>
+              <div class="purchase-status-text">Processing...</div>
+              <div class="purchase-status-sub">Check Xaman</div>
+            </div>
+            
+            <div class="purchase-actions" id="album-purchase-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary" id="confirm-album-purchase">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+                Pay ${totalPrice} XRP
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    this.show(html);
+    
+    document.getElementById('confirm-album-purchase')?.addEventListener('click', async () => {
+      await this.processAlbumPurchase(release);
+    });
+  },
+  
+  async processAlbumPurchase(release) {
+    const statusEl = document.getElementById('album-purchase-status');
+    const actionsEl = document.getElementById('album-purchase-actions');
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    const totalPrice = trackPrice * trackCount;
+    
+    if (statusEl) statusEl.style.display = 'block';
+    if (actionsEl) actionsEl.style.display = 'none';
+    
+    try {
+      // Step 1: Send payment
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon"><div class="spinner"></div></div>
+        <div class="purchase-status-text">Sending payment...</div>
+        <div class="purchase-status-sub">Approve ${totalPrice} XRP in Xaman</div>
+      `;
+      
+      const configResponse = await fetch('/api/batch-mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getConfig' }),
+      });
+      const configData = await configResponse.json();
+      const platformAddress = configData.platformAddress;
+      
+      const paymentResult = await XamanWallet.sendPayment(
+        platformAddress,
+        totalPrice,
+        `XRP Music: ${release.title} (Full Album)`
+      );
+      
+      if (!paymentResult.success) {
+        throw new Error(paymentResult.error || 'Payment failed');
+      }
+      
+      // Step 2: Process album purchase on backend
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon"><div class="spinner"></div></div>
+        <div class="purchase-status-text">Processing ${trackCount} NFTs...</div>
+        <div class="purchase-status-sub">This may take a moment</div>
+      `;
+      
+      const purchaseResponse = await fetch('/api/broker-album-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: release.id,
+          buyerAddress: AppState.user.address,
+          paymentTxHash: paymentResult.txHash,
+          trackCount: trackCount,
+        }),
+      });
+      
+      const purchaseResult = await purchaseResponse.json();
+      
+      if (!purchaseResult.success) {
+        throw new Error(purchaseResult.error || 'Purchase failed');
+      }
+      
+      // Step 3: Accept all NFT offers
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon"><div class="spinner"></div></div>
+        <div class="purchase-status-text">Accept NFT transfers...</div>
+        <div class="purchase-status-sub">Sign in Xaman to receive ${trackCount} NFTs</div>
+      `;
+      
+      // Accept each offer sequentially
+      for (let i = 0; i < purchaseResult.offerIndexes.length; i++) {
+        const offerIndex = purchaseResult.offerIndexes[i];
+        statusEl.querySelector('.purchase-status-sub').textContent = 
+          `Accepting NFT ${i + 1} of ${purchaseResult.offerIndexes.length}...`;
+        
+        const acceptResult = await XamanWallet.acceptSellOffer(offerIndex);
+        if (!acceptResult.success) {
+          throw new Error(`Failed to accept NFT ${i + 1}`);
+        }
+      }
+      
+      // Success!
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon success">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="purchase-status-text">Album Purchased! 🎉</div>
+        <div class="purchase-status-sub">${trackCount} NFTs added to your collection</div>
+        <button class="btn btn-primary" style="margin-top: 16px;" id="view-collection-btn">View My Collection</button>
+      `;
+      
+      document.getElementById('view-collection-btn')?.addEventListener('click', () => {
+        this.close();
+        ProfilePage.activeTab = 'collected';
+        Router.navigate('profile');
+      });
+      
+    } catch (error) {
+      console.error('Album purchase failed:', error);
+      statusEl.innerHTML = `
+        <div class="purchase-status-icon error">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <div class="purchase-status-text">Purchase Failed</div>
+        <div class="purchase-status-sub">${error.message}</div>
+      `;
+      if (actionsEl) actionsEl.style.display = 'flex';
+    }
   },
   
   showCreate() {
