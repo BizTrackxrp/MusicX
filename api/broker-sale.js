@@ -171,22 +171,101 @@ export default async function handler(req, res) {
       
       console.log('Found NFT to transfer:', nftToTransfer.NFTokenID);
       
+      // Check if there's already an existing sell offer for this NFT
+      try {
+        const offersResponse = await client.request({
+          command: 'nft_sell_offers',
+          nft_id: nftToTransfer.NFTokenID,
+        });
+        
+        const existingOffers = offersResponse.result.offers || [];
+        console.log('Existing sell offers:', existingOffers.length);
+        
+        // If there's already an offer from platform, cancel it first
+        for (const offer of existingOffers) {
+          if (offer.owner === platformAddress) {
+            console.log('Cancelling existing offer:', offer.nft_offer_index);
+            try {
+              const cancelTx = await client.autofill({
+                TransactionType: 'NFTokenCancelOffer',
+                Account: platformAddress,
+                NFTokenOffers: [offer.nft_offer_index],
+              });
+              const signedCancel = platformWallet.sign(cancelTx);
+              await client.submitAndWait(signedCancel.tx_blob);
+              console.log('Cancelled existing offer');
+            } catch (cancelErr) {
+              console.error('Failed to cancel existing offer:', cancelErr);
+            }
+          }
+        }
+      } catch (offerCheckErr) {
+        // nft_sell_offers returns error if no offers exist, which is fine
+        console.log('No existing sell offers (or error checking):', offerCheckErr.message);
+      }
+      
       // Step 2: Create sell offer for buyer (Amount: 0 = free transfer)
       // Since buyer already paid, we transfer for free
+      
+      // Validate buyer address format
+      if (!buyerAddress || !buyerAddress.startsWith('r') || buyerAddress.length < 25) {
+        throw new Error(`Invalid buyer address: ${buyerAddress}`);
+      }
+      
+      console.log('Creating sell offer:', {
+        Account: platformAddress,
+        NFTokenID: nftToTransfer.NFTokenID,
+        Amount: '1', // 1 drop (essentially free)
+        Destination: buyerAddress,
+      });
+      
       const createOfferTx = await client.autofill({
         TransactionType: 'NFTokenCreateOffer',
         Account: platformAddress,
         NFTokenID: nftToTransfer.NFTokenID,
-        Amount: '0', // Free transfer (buyer already paid)
+        Amount: '1', // 1 drop - using 0 can cause issues with Destination
         Flags: 1, // tfSellNFToken
         Destination: buyerAddress, // Only buyer can accept
       });
+      
+      console.log('Autofilled tx:', JSON.stringify(createOfferTx, null, 2));
       
       const signedOffer = platformWallet.sign(createOfferTx);
       const offerResult = await client.submitAndWait(signedOffer.tx_blob);
       
       if (offerResult.result.meta.TransactionResult !== 'tesSUCCESS') {
-        throw new Error(`Create offer failed: ${offerResult.result.meta.TransactionResult}`);
+        console.error('Create offer failed:', offerResult.result.meta.TransactionResult);
+        
+        // Refund the buyer since offer creation failed
+        try {
+          const refundTx = await client.autofill({
+            TransactionType: 'Payment',
+            Account: platformAddress,
+            Destination: buyerAddress,
+            Amount: xrpl.xrpToDrops(price.toFixed(6)),
+            Memos: [{
+              Memo: {
+                MemoType: xrpl.convertStringToHex('XRPMusic'),
+                MemoData: xrpl.convertStringToHex('Refund: Offer creation failed'),
+              }
+            }],
+          });
+          const signedRefund = platformWallet.sign(refundTx);
+          const refundResult = await client.submitAndWait(signedRefund.tx_blob);
+          console.log('Refund sent:', refundResult.result.hash);
+          
+          return res.status(400).json({ 
+            error: `NFT transfer failed (${offerResult.result.meta.TransactionResult}) - payment refunded`,
+            refunded: true,
+            refundTxHash: refundResult.result.hash,
+          });
+        } catch (refundError) {
+          console.error('Refund failed:', refundError);
+          return res.status(500).json({ 
+            error: `NFT transfer failed and refund also failed. Please contact support.`,
+            refunded: false,
+          });
+        }
       }
       
       // Get the offer index from the transaction result
@@ -272,12 +351,46 @@ export default async function handler(req, res) {
       
       return res.json({
         success: true,
-        offerIndex: offerIndex,
+        sellOfferIndex: offerIndex,
         nftTokenId: nftToTransfer.NFTokenID,
         txHash: offerResult.result.hash,
         message: 'NFT ready for transfer!',
       });
       
+    } catch (innerError) {
+      console.error('Inner purchase error:', innerError);
+      
+      // Try to refund the buyer
+      try {
+        console.log('Attempting refund due to error:', innerError.message);
+        const refundTx = await client.autofill({
+          TransactionType: 'Payment',
+          Account: platformAddress,
+          Destination: buyerAddress,
+          Amount: xrpl.xrpToDrops(price.toFixed(6)),
+          Memos: [{
+            Memo: {
+              MemoType: xrpl.convertStringToHex('XRPMusic'),
+              MemoData: xrpl.convertStringToHex('Refund: Transaction error'),
+            }
+          }],
+        });
+        const signedRefund = platformWallet.sign(refundTx);
+        const refundResult = await client.submitAndWait(signedRefund.tx_blob);
+        console.log('Error refund sent:', refundResult.result.hash);
+        
+        return res.status(500).json({ 
+          error: innerError.message || 'Purchase failed',
+          refunded: true,
+          refundTxHash: refundResult.result.hash,
+        });
+      } catch (refundError) {
+        console.error('Error refund failed:', refundError);
+        return res.status(500).json({ 
+          error: `Purchase failed: ${innerError.message}. Refund also failed - please contact support.`,
+          refunded: false,
+        });
+      }
     } finally {
       await client.disconnect();
     }
