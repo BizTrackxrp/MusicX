@@ -3190,33 +3190,38 @@ const Modals = {
   updateTrackAvailability(release, purchasedTrackIdx) {
     // Update the track availability display
     const trackRows = document.querySelectorAll('.track-row');
+    let minAvailability = Infinity;
+    let totalEditions = 0;
+    
     trackRows.forEach((row, idx) => {
       const availEl = row.querySelector('.track-col-avail');
-      if (availEl && idx === purchasedTrackIdx) {
-        // Parse current availability and decrement
+      if (availEl) {
+        // Parse current availability
         const current = availEl.textContent;
         const match = current.match(/(\d+)\/(\d+)/);
         if (match) {
-          const newAvail = Math.max(0, parseInt(match[1]) - 1);
-          const total = parseInt(match[2]);
-          availEl.textContent = `${newAvail}/${total}`;
-          if (newAvail < 5) {
-            availEl.classList.add('low');
+          let trackAvail = parseInt(match[1]);
+          totalEditions = parseInt(match[2]);
+          
+          // Decrement if this is the purchased track
+          if (idx === purchasedTrackIdx) {
+            trackAvail = Math.max(0, trackAvail - 1);
+            availEl.textContent = `${trackAvail}/${totalEditions}`;
+            if (trackAvail < 5) {
+              availEl.classList.add('low');
+            }
           }
+          
+          // Track minimum across all tracks
+          minAvailability = Math.min(minAvailability, trackAvail);
         }
       }
     });
     
-    // Update the album availability badge
+    // Update the album availability badge (minimum of all tracks)
     const albumAvailEl = document.querySelector('.availability-count');
-    if (albumAvailEl) {
-      const current = albumAvailEl.textContent;
-      const match = current.match(/(\d+) of (\d+)/);
-      if (match) {
-        const newAvail = Math.max(0, parseInt(match[1]) - 1);
-        const total = parseInt(match[2]);
-        albumAvailEl.textContent = `${newAvail} of ${total}`;
-      }
+    if (albumAvailEl && minAvailability !== Infinity) {
+      albumAvailEl.textContent = `${minAvailability} of ${totalEditions}`;
     }
   },
   
