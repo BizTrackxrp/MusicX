@@ -27,6 +27,84 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
+  // Check for action type
+  const { action } = req.body;
+  
+  if (action === 'confirm') {
+    return handleConfirmSale(req, res, sql);
+  }
+  
+  // Default: handle purchase
+  return handlePurchase(req, res, sql);
+}
+
+// Confirm sale after buyer successfully accepts NFT
+async function handleConfirmSale(req, res, sql) {
+  try {
+    const { pendingSale, acceptTxHash } = req.body;
+    
+    if (!pendingSale || !acceptTxHash) {
+      return res.status(400).json({ error: 'Missing pending sale data or transaction hash' });
+    }
+    
+    const { releaseId, trackId, buyerAddress, artistAddress, nftTokenId, price, platformFee } = pendingSale;
+    
+    // Update database - get the new sold count (this IS the edition number)
+    const updateResult = await sql`
+      UPDATE releases 
+      SET sold_editions = sold_editions + 1
+      WHERE id = ${releaseId}
+      RETURNING sold_editions
+    `;
+    
+    const editionNumber = updateResult[0]?.sold_editions || 1;
+    
+    // Record the sale
+    const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    await sql`
+      INSERT INTO sales (
+        id,
+        release_id,
+        track_id,
+        buyer_address,
+        seller_address,
+        nft_token_id,
+        edition_number,
+        price,
+        platform_fee,
+        tx_hash,
+        created_at
+      ) VALUES (
+        ${saleId},
+        ${releaseId},
+        ${trackId},
+        ${buyerAddress},
+        ${artistAddress},
+        ${nftTokenId},
+        ${editionNumber},
+        ${price},
+        ${platformFee},
+        ${acceptTxHash},
+        NOW()
+      )
+    `;
+    
+    console.log('Sale confirmed:', saleId, 'Edition #', editionNumber);
+    
+    return res.json({
+      success: true,
+      saleId,
+      editionNumber,
+    });
+    
+  } catch (error) {
+    console.error('Confirm sale error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to confirm sale' });
+  }
+}
+
+async function handlePurchase(req, res, sql) {
   try {
     const {
       releaseId,
@@ -334,53 +412,25 @@ export default async function handler(req, res) {
         }
       }
       
-      // Step 5: Update database - get the new sold count (this IS the edition number)
-      const updateResult = await sql`
-        UPDATE releases 
-        SET sold_editions = sold_editions + 1
-        WHERE id = ${releaseId}
-        RETURNING sold_editions
-      `;
-      
-      const editionNumber = updateResult[0]?.sold_editions || 1;
-      
-      // Record the sale with edition number, NFT token ID, and track ID
-      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // DON'T record sale yet - wait for buyer to confirm NFT acceptance
+      // Return the data needed to confirm later
       const soldTrackId = targetTrack?.id || (release.tracks?.[0]?.id) || null;
-      
-      await sql`
-        INSERT INTO sales (
-          id,
-          release_id,
-          track_id,
-          buyer_address,
-          seller_address,
-          nft_token_id,
-          edition_number,
-          price,
-          platform_fee,
-          tx_hash,
-          created_at
-        ) VALUES (
-          ${saleId},
-          ${releaseId},
-          ${soldTrackId},
-          ${buyerAddress},
-          ${artistAddress},
-          ${nftToTransfer.NFTokenID},
-          ${editionNumber},
-          ${price},
-          ${platformFee},
-          ${offerResult.result.hash},
-          NOW()
-        )
-      `;
       
       return res.json({
         success: true,
         sellOfferIndex: offerIndex,
         nftTokenId: nftToTransfer.NFTokenID,
         txHash: offerResult.result.hash,
+        // Data for confirming sale after buyer accepts
+        pendingSale: {
+          releaseId,
+          trackId: soldTrackId,
+          buyerAddress,
+          artistAddress,
+          nftTokenId: nftToTransfer.NFTokenID,
+          price,
+          platformFee,
+        },
         message: 'NFT ready for transfer!',
       });
       
