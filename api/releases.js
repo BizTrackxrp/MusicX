@@ -38,7 +38,7 @@ async function getReleases(req, res, sql) {
   let releases;
   
   if (id) {
-    // Get single release with tracks
+    // Get single release with tracks and per-track sold counts
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -50,7 +50,10 @@ async function getReleases(req, res, sql) {
               'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
-              'audioUrl', t.audio_url
+              'audioUrl', t.audio_url,
+              'soldCount', COALESCE((
+                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
+              ), 0)
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -70,7 +73,7 @@ async function getReleases(req, res, sql) {
   }
   
   if (artist) {
-    // Get releases by artist
+    // Get releases by artist with per-track sold counts
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -82,7 +85,10 @@ async function getReleases(req, res, sql) {
               'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
-              'audioUrl', t.audio_url
+              'audioUrl', t.audio_url,
+              'soldCount', COALESCE((
+                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
+              ), 0)
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -95,7 +101,7 @@ async function getReleases(req, res, sql) {
       ORDER BY r.created_at DESC
     `;
   } else {
-    // Get all releases
+    // Get all releases with per-track sold counts
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -107,7 +113,10 @@ async function getReleases(req, res, sql) {
               'trackNumber', t.track_order,
               'duration', t.duration,
               'audioCid', t.audio_cid,
-              'audioUrl', t.audio_url
+              'audioUrl', t.audio_url,
+              'soldCount', COALESCE((
+                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
+              ), 0)
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
