@@ -760,7 +760,7 @@ body:not(.light) .toggle-knob {
   height: var(--player-height);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  z-index: 90;
+  z-index: 1100; /* Above modals (1000-1002) so player is always accessible */
 }
 
 @media (max-width: 1024px) {
