@@ -1691,6 +1691,23 @@ const Modals = {
         throw new Error('Failed to accept NFT transfer');
       }
       
+      // Confirm the sale in database
+      if (purchaseResult.pendingSale) {
+        try {
+          await fetch('/api/broker-sale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'confirm',
+              pendingSale: purchaseResult.pendingSale,
+              acceptTxHash: acceptResult.txHash,
+            }),
+          });
+        } catch (confirmErr) {
+          console.error('Failed to confirm sale in DB:', confirmErr);
+        }
+      }
+      
       // Success!
       statusEl.innerHTML = `
         <div class="purchase-status-icon success">
@@ -3139,6 +3156,24 @@ const Modals = {
       
       if (!acceptResult.success) {
         throw new Error(acceptResult.error || 'NFT transfer failed');
+      }
+      
+      // Step 5: Confirm the sale in database (only after NFT successfully transferred)
+      updateStatus('Confirming purchase...', 'Almost done!');
+      
+      try {
+        await fetch('/api/broker-sale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'confirm',
+            pendingSale: purchaseResult.pendingSale,
+            acceptTxHash: acceptResult.txHash,
+          }),
+        });
+      } catch (confirmErr) {
+        console.error('Failed to confirm sale in DB:', confirmErr);
+        // Don't throw - user still got their NFT
       }
       
       // Success!
