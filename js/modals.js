@@ -2810,15 +2810,208 @@ const Modals = {
   },
   
   showTrackPurchase(release, track, trackIdx) {
-    // Purchase a single track from an album
-    const trackRelease = {
-      ...release,
-      title: track.title,
-      tracks: [track],
-      trackToPurchase: track,
-      trackIndex: trackIdx,
+    // Quick inline purchase confirmation
+    const price = parseFloat(release.songPrice) || 0;
+    const btn = document.querySelector(`.buy-track-btn[data-track-idx="${trackIdx}"]`);
+    
+    // If already in confirm state, process the purchase
+    if (btn && btn.classList.contains('confirm-state')) {
+      this.processQuickPurchase(release, track, trackIdx, btn);
+      return;
+    }
+    
+    // Change button to confirm state
+    if (btn) {
+      const originalHTML = btn.innerHTML;
+      btn.classList.add('confirm-state');
+      btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Confirm
+      `;
+      btn.style.background = 'var(--success)';
+      btn.style.borderColor = 'var(--success)';
+      
+      // Add cancel on click outside
+      const cancelHandler = (e) => {
+        if (!btn.contains(e.target)) {
+          btn.classList.remove('confirm-state');
+          btn.innerHTML = originalHTML;
+          btn.style.background = '';
+          btn.style.borderColor = '';
+          document.removeEventListener('click', cancelHandler);
+        }
+      };
+      
+      // Delay adding listener to prevent immediate trigger
+      setTimeout(() => {
+        document.addEventListener('click', cancelHandler);
+      }, 10);
+      
+      // Auto-cancel after 5 seconds
+      setTimeout(() => {
+        if (btn.classList.contains('confirm-state')) {
+          btn.classList.remove('confirm-state');
+          btn.innerHTML = originalHTML;
+          btn.style.background = '';
+          btn.style.borderColor = '';
+        }
+      }, 5000);
+    }
+  },
+  
+  async processQuickPurchase(release, track, trackIdx, btn) {
+    const price = parseFloat(release.songPrice) || 0;
+    const originalHTML = btn.innerHTML;
+    
+    // Show processing state on button
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>`;
+    btn.style.background = 'var(--bg-hover)';
+    btn.style.borderColor = 'var(--border-color)';
+    btn.style.minWidth = '80px';
+    
+    // Create a small status overlay near the button
+    const statusOverlay = document.createElement('div');
+    statusOverlay.className = 'quick-purchase-status';
+    statusOverlay.innerHTML = `
+      <div class="qps-content">
+        <div class="spinner" style="width:20px;height:20px;"></div>
+        <span>Opening Xaman...</span>
+      </div>
+    `;
+    statusOverlay.style.cssText = `
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      z-index: 1001;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    `;
+    document.body.appendChild(statusOverlay);
+    
+    const updateStatus = (text, isError = false) => {
+      statusOverlay.querySelector('.qps-content').innerHTML = `
+        ${isError ? '' : '<div class="spinner" style="width:20px;height:20px;"></div>'}
+        <span style="${isError ? 'color: var(--error);' : ''}">${text}</span>
+      `;
     };
-    this.showPurchaseConfirm(trackRelease);
+    
+    try {
+      // Step 1: Get platform address
+      const configResponse = await fetch('/api/batch-mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getConfig' }),
+      });
+      const configData = await configResponse.json();
+      const platformAddress = configData.platformAddress;
+      
+      if (!platformAddress) throw new Error('Platform not configured');
+      
+      // Step 2: Buyer pays platform
+      updateStatus('Approve payment in Xaman...');
+      
+      const paymentResult = await XamanWallet.sendPayment(
+        platformAddress,
+        price,
+        `XRP Music: ${track.title}`
+      );
+      
+      if (!paymentResult.success) {
+        throw new Error(paymentResult.error || 'Payment cancelled');
+      }
+      
+      // Step 3: Call broker API
+      updateStatus('Preparing your NFT...');
+      
+      const purchaseResponse = await fetch('/api/broker-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: release.id,
+          buyerAddress: AppState.user.address,
+          paymentTxHash: paymentResult.txHash,
+        }),
+      });
+      
+      const purchaseResult = await purchaseResponse.json();
+      
+      if (!purchaseResult.success) {
+        throw new Error(purchaseResult.error || 'Transfer failed');
+      }
+      
+      // Step 4: Accept NFT
+      updateStatus('Accept NFT in Xaman...');
+      
+      const acceptResult = await XamanWallet.acceptSellOffer(purchaseResult.sellOfferIndex);
+      
+      if (!acceptResult.success) {
+        throw new Error(acceptResult.error || 'NFT transfer failed');
+      }
+      
+      // Success!
+      statusOverlay.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <span style="color:var(--success);font-weight:600;">NFT Purchased! 🎉</span>
+        </div>
+      `;
+      
+      // Update button to show "Owned"
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01" fill="none" stroke="currentColor" stroke-width="2"></polyline>
+        </svg>
+        Owned
+      `;
+      btn.style.background = 'var(--success)';
+      btn.style.borderColor = 'var(--success)';
+      btn.style.opacity = '0.8';
+      btn.classList.remove('confirm-state');
+      
+      // Remove status after delay
+      setTimeout(() => {
+        statusOverlay.remove();
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Quick purchase failed:', error);
+      
+      // Show error
+      updateStatus(error.message, true);
+      
+      // Reset button after delay
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove('confirm-state');
+        btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          ${price} XRP
+        `;
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.minWidth = '';
+        statusOverlay.remove();
+      }, 3000);
+    }
   },
   
   showAlbumPurchase(release) {
