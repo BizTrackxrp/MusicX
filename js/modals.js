@@ -1700,16 +1700,15 @@ const Modals = {
           </svg>
         </div>
         <div class="purchase-status-text">Purchase Complete! 🎉</div>
-        <div class="purchase-status-sub">Your NFT has been added to your collection</div>
-        <div style="margin-top: 20px;">
-          <button class="btn btn-primary" id="view-collection-btn">View My Collection</button>
-        </div>
+        <div class="purchase-status-sub">Redirecting to your collection...</div>
       `;
       
-      document.getElementById('view-collection-btn')?.addEventListener('click', () => {
+      // Auto-redirect to profile NFTs tab
+      setTimeout(() => {
         this.close();
+        ProfilePage.activeTab = 'nfts';
         Router.navigate('profile');
-      });
+      }, 2000);
       
     } catch (error) {
       console.error('Purchase failed:', error);
@@ -2113,15 +2112,15 @@ const Modals = {
           </svg>
         </div>
         <div class="purchase-status-text">Purchase Complete! 🎉</div>
-        <div class="purchase-status-sub">The NFT has been added to your collection</div>
-        <button class="btn btn-primary" style="margin-top: 16px;" id="view-collection-btn-secondary">View My Collection</button>
+        <div class="purchase-status-sub">Redirecting to your collection...</div>
       `;
       
-      document.getElementById('view-collection-btn-secondary')?.addEventListener('click', () => {
+      // Auto-redirect to profile NFTs tab
+      setTimeout(() => {
         this.close();
-        ProfilePage.activeTab = 'collected';
+        ProfilePage.activeTab = 'nfts';
         Router.navigate('profile');
-      });
+      }, 2000);
       
     } catch (error) {
       console.error('Secondary purchase failed:', error);
@@ -3143,7 +3142,7 @@ const Modals = {
       }
       
       // Success!
-      updateStatus('NFT Purchased! 🎉', 'Added to your collection', false, true);
+      updateStatus('NFT Purchased! 🎉', 'Redirecting to your collection...', false, true);
       
       // Update button to show "Owned"
       btn.disabled = true;
@@ -3162,10 +3161,13 @@ const Modals = {
       // Update availability display
       this.updateTrackAvailability(release, trackIdx);
       
-      // Remove status after delay
+      // Redirect to profile NFTs tab after delay
       setTimeout(() => {
         cleanup();
-      }, 3000);
+        this.close();
+        ProfilePage.activeTab = 'nfts';
+        Router.navigate('profile');
+      }, 2000);
       
     } catch (error) {
       console.error('Quick purchase failed:', error);
@@ -3394,15 +3396,15 @@ const Modals = {
           </svg>
         </div>
         <div class="purchase-status-text">Album Purchased! 🎉</div>
-        <div class="purchase-status-sub">${trackCount} NFTs added to your collection</div>
-        <button class="btn btn-primary" style="margin-top: 16px;" id="view-collection-btn">View My Collection</button>
+        <div class="purchase-status-sub">Redirecting to your collection...</div>
       `;
       
-      document.getElementById('view-collection-btn')?.addEventListener('click', () => {
+      // Auto-redirect to profile NFTs tab
+      setTimeout(() => {
         this.close();
-        ProfilePage.activeTab = 'collected';
+        ProfilePage.activeTab = 'nfts';
         Router.navigate('profile');
-      });
+      }, 2000);
       
     } catch (error) {
       console.error('Album purchase failed:', error);
