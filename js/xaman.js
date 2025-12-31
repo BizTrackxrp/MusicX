@@ -11,6 +11,31 @@ const XamanWallet = {
   isConnecting: false,
   
   /**
+   * Open Xaman URL in a popup window instead of a tab
+   */
+  openXamanPopup(url) {
+    // Calculate popup position (centered)
+    const width = 420;
+    const height = 700;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    
+    // Open as popup window
+    const popup = window.open(
+      url,
+      'XamanSign',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+    );
+    
+    // Focus the popup if it opened
+    if (popup) {
+      popup.focus();
+    }
+    
+    return popup;
+  },
+  
+  /**
    * Initialize Xaman SDK
    */
   async init() {
@@ -265,7 +290,7 @@ const XamanWallet = {
       // Open Xaman for fee payment
       if (paymentPayload.next?.always) {
         console.log('Opening Xaman for fee payment:', paymentPayload.next.always);
-        window.open(paymentPayload.next.always, '_blank');
+        this.openXamanPopup(paymentPayload.next.always);
       } else {
         throw new Error('No sign URL returned from Xaman');
       }
@@ -306,7 +331,7 @@ const XamanWallet = {
       // Open Xaman for authorization
       if (authPayload.next?.always) {
         console.log('Opening Xaman for authorization:', authPayload.next.always);
-        window.open(authPayload.next.always, '_blank');
+        this.openXamanPopup(authPayload.next.always);
       } else {
         throw new Error('No sign URL returned from Xaman');
       }
@@ -481,12 +506,9 @@ const XamanWallet = {
       throw new Error('Failed to create payment payload');
     }
     
-    // Open Xaman for signing
-    if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
-    } else {
-      throw new Error('No sign URL returned from Xaman');
-    }
+    // Push notification is sent to user's Xaman app automatically
+    // No need to open browser popup - user checks their phone
+    console.log('Payment payload created, push notification sent:', payload.uuid);
     
     // Wait for result
     return this.waitForPayload(payload.uuid);
@@ -525,7 +547,7 @@ const XamanWallet = {
     
     // Open Xaman for signing
     if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
+      this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
@@ -575,7 +597,7 @@ const XamanWallet = {
     
     // Open Xaman for signing
     if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
+      this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
@@ -616,12 +638,8 @@ const XamanWallet = {
     
     console.log('Accept offer payload:', payload);
     
-    // Open Xaman for signing
-    if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
-    } else {
-      throw new Error('No sign URL returned from Xaman');
-    }
+    // Push notification is sent to user's Xaman app automatically
+    // No need to open browser popup - user checks their phone
     
     // Wait for result
     return this.waitForPayload(payload.uuid);
@@ -661,7 +679,7 @@ const XamanWallet = {
     
     // Open Xaman for signing
     if (payload.next?.always) {
-      window.open(payload.next.always, '_blank');
+      this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
