@@ -2737,7 +2737,10 @@ const Modals = {
     document.querySelectorAll('.buy-track-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
+        if (!AppState.user?.address) { 
+          this.showConnectWalletPrompt();
+          return; 
+        }
         const trackIdx = parseInt(btn.dataset.trackIdx, 10);
         const track = release.tracks?.[trackIdx];
         if (track) {
@@ -2748,13 +2751,19 @@ const Modals = {
     
     // Buy full album
     document.getElementById('buy-album-btn')?.addEventListener('click', () => {
-      if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
+      if (!AppState.user?.address) { 
+        this.showConnectWalletPrompt();
+        return; 
+      }
       this.showAlbumPurchase(release);
     });
     
     // Single release buy
     document.getElementById('buy-release-btn')?.addEventListener('click', () => {
-      if (!AppState.user?.address) { this.close(); this.showAuth(); return; }
+      if (!AppState.user?.address) { 
+        this.showConnectWalletPrompt();
+        return; 
+      }
       this.showPurchase(release);
     });
     
@@ -2817,6 +2826,76 @@ const Modals = {
     `;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
+  },
+  
+  showConnectWalletPrompt() {
+    // Create a nice centered modal prompting user to connect wallet
+    const overlay = document.createElement('div');
+    overlay.className = 'connect-wallet-prompt-overlay';
+    overlay.innerHTML = `
+      <div class="connect-wallet-prompt">
+        <div class="cwp-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+            <line x1="1" y1="10" x2="23" y2="10"></line>
+          </svg>
+        </div>
+        <h3 class="cwp-title">Connect Your Wallet</h3>
+        <p class="cwp-text">To purchase NFTs, you need to connect your Xaman wallet first.</p>
+        <p class="cwp-subtext">Don't have Xaman? <a href="https://xaman.app" target="_blank">Download it here</a> - it's the best XRP wallet!</p>
+        <div class="cwp-actions">
+          <button class="btn btn-primary cwp-connect-btn">Connect Wallet</button>
+          <button class="btn btn-secondary cwp-cancel-btn">Maybe Later</button>
+        </div>
+      </div>
+    `;
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1002;
+    `;
+    
+    const prompt = overlay.querySelector('.connect-wallet-prompt');
+    prompt.style.cssText = `
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.5);
+    `;
+    
+    // Style the inner elements
+    overlay.querySelector('.cwp-icon').style.cssText = 'margin-bottom: 16px;';
+    overlay.querySelector('.cwp-title').style.cssText = 'font-size: 24px; font-weight: 700; margin-bottom: 12px; color: var(--text-primary);';
+    overlay.querySelector('.cwp-text').style.cssText = 'color: var(--text-secondary); margin-bottom: 8px;';
+    overlay.querySelector('.cwp-subtext').style.cssText = 'font-size: 13px; color: var(--text-muted); margin-bottom: 24px;';
+    overlay.querySelector('.cwp-subtext a').style.cssText = 'color: var(--accent);';
+    overlay.querySelector('.cwp-actions').style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
+    
+    document.body.appendChild(overlay);
+    
+    // Bind events
+    overlay.querySelector('.cwp-connect-btn').addEventListener('click', () => {
+      overlay.remove();
+      this.showAuth();
+    });
+    
+    overlay.querySelector('.cwp-cancel-btn').addEventListener('click', () => {
+      overlay.remove();
+    });
+    
+    // Close on backdrop click
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
   },
   
   showAddToPlaylist(release, track = null) {
@@ -2887,37 +2966,79 @@ const Modals = {
     btn.style.borderColor = 'var(--border-color)';
     btn.style.minWidth = '80px';
     
-    // Create a small status overlay near the button
+    // Create a prominent centered status overlay
     const statusOverlay = document.createElement('div');
     statusOverlay.className = 'quick-purchase-status';
     statusOverlay.innerHTML = `
       <div class="qps-content">
-        <div class="spinner" style="width:20px;height:20px;"></div>
-        <span>Opening Xaman...</span>
+        <div class="qps-icon">
+          <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+        </div>
+        <div class="qps-text">
+          <div class="qps-title">Opening Xaman...</div>
+          <div class="qps-sub">Check your phone</div>
+        </div>
       </div>
     `;
     statusOverlay.style.cssText = `
       position: fixed;
-      bottom: 100px;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
       background: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 16px 24px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      border-radius: var(--radius-xl);
+      padding: 32px 48px;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.5);
       z-index: 1001;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      min-width: 280px;
+      text-align: center;
     `;
     document.body.appendChild(statusOverlay);
     
-    const updateStatus = (text, isError = false) => {
+    // Add backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'qps-backdrop';
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+    `;
+    document.body.appendChild(backdrop);
+    
+    const updateStatus = (title, sub = '', isError = false, isSuccess = false) => {
+      const iconColor = isError ? 'var(--error)' : isSuccess ? 'var(--success)' : '';
       statusOverlay.querySelector('.qps-content').innerHTML = `
-        ${isError ? '' : '<div class="spinner" style="width:20px;height:20px;"></div>'}
-        <span style="${isError ? 'color: var(--error);' : ''}">${text}</span>
+        <div class="qps-icon">
+          ${isError ? `
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          ` : isSuccess ? `
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          ` : `
+            <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+          `}
+        </div>
+        <div class="qps-text">
+          <div class="qps-title" style="font-size:18px;font-weight:600;margin-top:16px;${iconColor ? 'color:' + iconColor : ''}">${title}</div>
+          ${sub ? `<div class="qps-sub" style="font-size:14px;color:var(--text-muted);margin-top:8px;">${sub}</div>` : ''}
+        </div>
       `;
+    };
+    
+    const cleanup = () => {
+      statusOverlay.remove();
+      backdrop.remove();
     };
     
     try {
@@ -2933,7 +3054,7 @@ const Modals = {
       if (!platformAddress) throw new Error('Platform not configured');
       
       // Step 2: Buyer pays platform
-      updateStatus('Approve payment in Xaman...');
+      updateStatus('Approve Payment', 'Check Xaman on your phone');
       
       const paymentResult = await XamanWallet.sendPayment(
         platformAddress,
@@ -2946,7 +3067,7 @@ const Modals = {
       }
       
       // Step 3: Call broker API
-      updateStatus('Preparing your NFT...');
+      updateStatus('Preparing NFT', 'Processing your purchase...');
       
       const purchaseResponse = await fetch('/api/broker-sale', {
         method: 'POST',
@@ -2964,39 +3085,24 @@ const Modals = {
       if (!purchaseResult.success) {
         // Check if refunded
         if (purchaseResult.refunded) {
-          statusOverlay.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-              <span style="color:var(--warning);font-weight:600;">Purchase Failed</span>
-              <span style="font-size:12px;color:var(--text-muted);">Your payment has been refunded ✓</span>
-            </div>
-          `;
-          setTimeout(() => statusOverlay.remove(), 4000);
-          // Reset button
-          btn.disabled = false;
-          btn.classList.remove('confirm-state');
-          btn.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="9" cy="21" r="1"></circle>
-              <circle cx="20" cy="21" r="1"></circle>
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-            </svg>
-            ${price} XRP
-          `;
-          btn.style.background = '';
-          btn.style.borderColor = '';
-          btn.style.minWidth = '';
+          updateStatus('Purchase Failed', 'Your payment has been refunded ✓', true);
+          setTimeout(() => {
+            cleanup();
+            // Reset button
+            btn.disabled = false;
+            btn.classList.remove('confirm-state');
+            btn.innerHTML = originalHTML;
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.minWidth = '';
+          }, 3000);
           return;
         }
         throw new Error(purchaseResult.error || 'Transfer failed');
       }
       
       // Step 4: Accept NFT
-      updateStatus('Accept NFT in Xaman...');
+      updateStatus('Accept NFT', 'Check Xaman on your phone');
       
       const acceptResult = await XamanWallet.acceptSellOffer(purchaseResult.sellOfferIndex);
       
@@ -3005,15 +3111,7 @@ const Modals = {
       }
       
       // Success!
-      statusOverlay.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          <span style="color:var(--success);font-weight:600;">NFT Purchased! 🎉</span>
-        </div>
-      `;
+      updateStatus('NFT Purchased! 🎉', 'Added to your collection', false, true);
       
       // Update button to show "Owned"
       btn.disabled = true;
@@ -3031,31 +3129,24 @@ const Modals = {
       
       // Remove status after delay
       setTimeout(() => {
-        statusOverlay.remove();
+        cleanup();
       }, 3000);
       
     } catch (error) {
       console.error('Quick purchase failed:', error);
       
       // Show error
-      updateStatus(error.message, true);
+      updateStatus('Purchase Failed', error.message, true);
       
       // Reset button after delay
       setTimeout(() => {
         btn.disabled = false;
         btn.classList.remove('confirm-state');
-        btn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="9" cy="21" r="1"></circle>
-            <circle cx="20" cy="21" r="1"></circle>
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-          </svg>
-          ${price} XRP
-        `;
+        btn.innerHTML = originalHTML;
         btn.style.background = '';
         btn.style.borderColor = '';
         btn.style.minWidth = '';
-        statusOverlay.remove();
+        cleanup();
       }, 3000);
     }
   },
