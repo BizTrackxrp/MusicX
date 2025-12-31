@@ -30,6 +30,7 @@ export default async function handler(req, res) {
   try {
     const {
       releaseId,
+      trackId,  // Optional - for buying specific track from album
       buyerAddress,
       paymentTxHash,
     } = req.body;
@@ -54,6 +55,7 @@ export default async function handler(req, res) {
           json_agg(
             json_build_object(
               'id', t.id,
+              'title', t.title,
               'metadata_cid', t.metadata_cid
             )
           ) FILTER (WHERE t.id IS NOT NULL),
@@ -71,7 +73,17 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Release not found' });
     }
     
-    // Check if still available
+    // If trackId specified, find that specific track
+    let targetTrack = null;
+    if (trackId && release.tracks) {
+      targetTrack = release.tracks.find(t => t.id === trackId);
+      if (!targetTrack) {
+        return res.status(404).json({ error: 'Track not found in release' });
+      }
+      console.log('Buying specific track:', targetTrack.title, targetTrack.metadata_cid);
+    }
+    
+    // Check if still available (at release level for now)
     const available = release.total_editions - release.sold_editions;
     if (available <= 0) {
       return res.status(400).json({ error: 'Sold out' });
@@ -80,21 +92,29 @@ export default async function handler(req, res) {
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
     
-    // Build list of all possible metadata CIDs for this release
+    // Build list of possible metadata CIDs for this release
+    // If trackId is specified, ONLY look for that track's NFT
     const possibleCids = [];
-    if (release.metadata_cid) {
-      possibleCids.push(release.metadata_cid);
-    }
-    // Add track-level metadata CIDs
-    if (release.tracks && Array.isArray(release.tracks)) {
-      for (const track of release.tracks) {
-        if (track.metadata_cid) {
-          possibleCids.push(track.metadata_cid);
+    
+    if (targetTrack && targetTrack.metadata_cid) {
+      // Only search for the specific track's NFT
+      possibleCids.push(targetTrack.metadata_cid);
+      console.log('Looking for specific track NFT with CID:', targetTrack.metadata_cid);
+    } else {
+      // Search for any NFT from this release (singles or album-level)
+      if (release.metadata_cid) {
+        possibleCids.push(release.metadata_cid);
+      }
+      // Add track-level metadata CIDs
+      if (release.tracks && Array.isArray(release.tracks)) {
+        for (const track of release.tracks) {
+          if (track.metadata_cid) {
+            possibleCids.push(track.metadata_cid);
+          }
         }
       }
+      console.log('Looking for any NFT with CIDs:', possibleCids);
     }
-    
-    console.log('Looking for NFTs with CIDs:', possibleCids);
     
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
@@ -120,17 +140,20 @@ export default async function handler(req, res) {
       
       // Find NFT with matching URI (metadata)
       let nftToTransfer = null;
+      let matchedCid = null;
       
       for (const nft of platformNFTs) {
         // Check if NFT URI matches any of our expected URIs
-        if (expectedUriHexes.includes(nft.URI)) {
+        const uriIndex = expectedUriHexes.indexOf(nft.URI);
+        if (uriIndex !== -1) {
           nftToTransfer = nft;
+          matchedCid = possibleCids[uriIndex];
           break;
         }
       }
       
       if (!nftToTransfer) {
-        console.error('No matching NFT found for release:', releaseId);
+        console.error('No matching NFT found for release:', releaseId, 'track:', trackId);
         console.error('Looking for URIs:', possibleCids.map(c => `ipfs://${c}`));
         console.error('Platform has', platformNFTs.length, 'NFTs');
         // Log first few NFT URIs for debugging
@@ -321,12 +344,15 @@ export default async function handler(req, res) {
       
       const editionNumber = updateResult[0]?.sold_editions || 1;
       
-      // Record the sale with edition number and NFT token ID
+      // Record the sale with edition number, NFT token ID, and track ID
       const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const soldTrackId = targetTrack?.id || (release.tracks?.[0]?.id) || null;
+      
       await sql`
         INSERT INTO sales (
           id,
           release_id,
+          track_id,
           buyer_address,
           seller_address,
           nft_token_id,
@@ -338,6 +364,7 @@ export default async function handler(req, res) {
         ) VALUES (
           ${saleId},
           ${releaseId},
+          ${soldTrackId},
           ${buyerAddress},
           ${artistAddress},
           ${nftToTransfer.NFTokenID},
