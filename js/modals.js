@@ -2313,10 +2313,13 @@ const Modals = {
                   <polyline points="12 6 12 12 16 14"></polyline>
                 </svg>
               </span>
+              <span class="track-col-avail"></span>
               <span class="track-col-buy"></span>
             </div>
             ${release.tracks?.map((track, idx) => {
-              const trackAvailable = available > 0; // TODO: per-track availability
+              const trackSold = track.soldCount || 0;
+              const trackRemaining = release.totalEditions - trackSold;
+              const trackAvailable = trackRemaining > 0;
               return `
                 <div class="track-row" data-track-idx="${idx}">
                   <span class="track-col-num">
@@ -2345,6 +2348,7 @@ const Modals = {
                     </button>
                   </span>
                   <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
+                  <span class="track-col-avail ${trackRemaining < 5 ? 'low' : ''}">${trackRemaining}/${release.totalEditions}</span>
                   <span class="track-col-buy">
                     ${trackAvailable ? `
                       <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
@@ -2365,7 +2369,7 @@ const Modals = {
           <!-- Availability Info -->
           <div class="release-availability">
             <span class="availability-count">${available} of ${release.totalEditions}</span>
-            <span class="availability-label">editions available</span>
+            <span class="availability-label">full albums available</span>
           </div>
         </div>
       </div>
@@ -2526,7 +2530,7 @@ const Modals = {
         }
         .track-list-header {
           display: grid;
-          grid-template-columns: 48px 1fr 80px 60px 100px;
+          grid-template-columns: 48px 1fr 80px 60px 60px 100px;
           gap: 16px;
           padding: 8px 16px;
           border-bottom: 1px solid var(--border-color);
@@ -2537,7 +2541,7 @@ const Modals = {
         }
         .track-row {
           display: grid;
-          grid-template-columns: 48px 1fr 80px 60px 100px;
+          grid-template-columns: 48px 1fr 80px 60px 60px 100px;
           gap: 16px;
           padding: 12px 16px;
           border-radius: var(--radius-md);
@@ -2554,6 +2558,17 @@ const Modals = {
           align-items: center;
           justify-content: center;
           color: var(--text-muted);
+        }
+        .track-col-avail {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .track-col-avail.low {
+          color: var(--warning);
+          font-weight: 600;
         }
         .track-play-btn {
           display: none;
@@ -2649,7 +2664,7 @@ const Modals = {
           .release-meta { justify-content: center; }
           .track-list-header { display: none; }
           .track-row { grid-template-columns: 32px 1fr auto; }
-          .track-col-actions, .track-col-duration { display: none; }
+          .track-col-actions, .track-col-duration, .track-col-avail { display: none; }
           .track-col-buy .btn { font-size: 11px; padding: 4px 8px; }
         }
       </style>
@@ -2938,6 +2953,7 @@ const Modals = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           releaseId: release.id,
+          trackId: track.id,  // Pass specific track ID
           buyerAddress: AppState.user.address,
           paymentTxHash: paymentResult.txHash,
         }),
@@ -2946,6 +2962,36 @@ const Modals = {
       const purchaseResult = await purchaseResponse.json();
       
       if (!purchaseResult.success) {
+        // Check if refunded
+        if (purchaseResult.refunded) {
+          statusOverlay.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span style="color:var(--warning);font-weight:600;">Purchase Failed</span>
+              <span style="font-size:12px;color:var(--text-muted);">Your payment has been refunded ✓</span>
+            </div>
+          `;
+          setTimeout(() => statusOverlay.remove(), 4000);
+          // Reset button
+          btn.disabled = false;
+          btn.classList.remove('confirm-state');
+          btn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+            </svg>
+            ${price} XRP
+          `;
+          btn.style.background = '';
+          btn.style.borderColor = '';
+          btn.style.minWidth = '';
+          return;
+        }
         throw new Error(purchaseResult.error || 'Transfer failed');
       }
       
