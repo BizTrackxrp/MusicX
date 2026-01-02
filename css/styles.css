@@ -117,7 +117,7 @@ body {
 /* Utility Classes */
 .hidden { display: none !important; }
 .desktop-only { display: flex; }
-.mobile-only { display: none; }
+.mobile-only { display: none !important; }
 
 @media (max-width: 1024px) {
   .desktop-only { display: none !important; }
@@ -760,7 +760,7 @@ body:not(.light) .toggle-knob {
   height: var(--player-height);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  z-index: 1100; /* Above modals (1000-1002) so player is always accessible */
+  z-index: 1100;
 }
 
 @media (max-width: 1024px) {
@@ -933,6 +933,7 @@ body:not(.light) .toggle-knob {
   color: white;
 }
 
+/* Mobile play button - ONLY show on mobile */
 .mobile-play-btn {
   width: 40px;
   height: 40px;
@@ -940,10 +941,10 @@ body:not(.light) .toggle-knob {
   border-radius: 50%;
   background: var(--accent);
   color: white;
-  display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  /* display is controlled by .mobile-only class */
 }
 
 /* Volume */
