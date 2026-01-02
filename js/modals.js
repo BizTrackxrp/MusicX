@@ -2660,12 +2660,15 @@ const Modals = {
           font-style: italic;
         }
         
-        .release-availability {
+       .release-availability {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 16px 24px 24px;
+          padding: 16px 24px;
           font-size: 14px;
+        }
+        .release-availability:empty {
+          display: none;
         }
         .availability-count {
           font-weight: 600;
