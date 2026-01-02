@@ -2265,9 +2265,9 @@ const Modals = {
                 <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
                 <h1 class="release-title-large">${release.title}</h1>
                 <div class="release-meta">
-                  <button class="artist-chip" data-artist="${release.artistAddress}">
-                    ${release.artistAvatarUrl 
-                      ? `<img class="artist-chip-avatar" src="${release.artistAvatarUrl}" alt="${release.artistName || 'Artist'}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">`
+                 <button class="artist-chip" data-artist="${release.artistAddress}">
+                    ${(release.artistAvatarUrl || release.artistAvatar || release.avatar_url)
+                      ? `<img class="artist-chip-avatar" src="${release.artistAvatarUrl || release.artistAvatar || release.avatar_url}" alt="${release.artistName || 'Artist'}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">`
                       : `<div class="artist-chip-avatar">${(release.artistName || 'A')[0].toUpperCase()}</div>`
                     }
                     <span>${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
@@ -2322,18 +2322,13 @@ const Modals = {
           
           <!-- Track List -->
           <div class="release-track-list">
-            <div class="track-list-header">
+           <div class="track-list-header">
               <span class="track-col-num">#</span>
               <span class="track-col-title">Title</span>
               <span class="track-col-actions"></span>
-              <span class="track-col-duration">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-              </span>
-              <span class="track-col-avail"></span>
-              <span class="track-col-buy"></span>
+              <span class="track-col-duration">Length</span>
+              <span class="track-col-avail">Available</span>
+              <span class="track-col-buy">Price</span>
             </div>
             ${release.tracks?.map((track, idx) => {
               const trackSold = track.soldCount || 0;
@@ -2367,7 +2362,7 @@ const Modals = {
                     </button>
                   </span>
                   <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
-                  <span class="track-col-avail ${trackSold === 0 ? 'first-edition' : trackRemaining < 5 ? 'low' : ''}">${trackSold === 0 ? '🏆 1st' : trackRemaining + '/' + release.totalEditions}</span>
+                  <span class="track-col-avail ${trackRemaining < 5 ? 'low' : ''}">${trackRemaining}/${release.totalEditions}</span>
                   <span class="track-col-buy">
                     ${trackAvailable ? `
                       <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
@@ -2592,20 +2587,7 @@ const Modals = {
           color: var(--warning);
           font-weight: 600;
         }
-        .track-col-avail.first-edition {
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
-          color: white;
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-weight: 600;
-          font-size: 11px;
-          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
-          animation: pulse-blue 2s ease-in-out infinite;
-        }
-        @keyframes pulse-blue {
-          0%, 100% { box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4); }
-          50% { box-shadow: 0 2px 16px rgba(37, 99, 235, 0.6); }
-        }
+       
         .track-play-btn {
           display: none;
           align-items: center;
