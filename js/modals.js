@@ -2248,12 +2248,12 @@ const Modals = {
     const html = `
       <div class="modal-overlay release-modal-overlay">
         <div class="modal release-modal">
-           <button class="release-close-x" onclick="Modals.close()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+           <button onclick="Modals.close()" style="position:absolute;top:16px;right:16px;z-index:10;background:none;border:none;padding:0;cursor:pointer;color:white;opacity:0.8;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"></line>
+    <line x1="6" y1="6" x2="18" y2="18"></line>
+  </svg>
+</button>
           
           <!-- Header with gradient background -->
           <div class="release-header" style="background: linear-gradient(180deg, ${this.getColorFromImage(release.coverUrl)} 0%, var(--bg-primary) 100%);">
