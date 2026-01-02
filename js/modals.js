@@ -2266,7 +2266,10 @@ const Modals = {
                 <h1 class="release-title-large">${release.title}</h1>
                 <div class="release-meta">
                   <button class="artist-chip" data-artist="${release.artistAddress}">
-                    <div class="artist-chip-avatar">${(release.artistName || 'A')[0].toUpperCase()}</div>
+                    ${release.artistAvatarUrl 
+                      ? `<img class="artist-chip-avatar" src="${release.artistAvatarUrl}" alt="${release.artistName || 'Artist'}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">`
+                      : `<div class="artist-chip-avatar">${(release.artistName || 'A')[0].toUpperCase()}</div>`
+                    }
                     <span>${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
                   </button>
                   <span class="release-meta-dot">•</span>
@@ -2364,7 +2367,7 @@ const Modals = {
                     </button>
                   </span>
                   <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
-                  <span class="track-col-avail ${trackRemaining < 5 ? 'low' : ''}">${trackRemaining}/${release.totalEditions}</span>
+                  <span class="track-col-avail ${trackSold === 0 ? 'first-edition' : trackRemaining < 5 ? 'low' : ''}">${trackSold === 0 ? '🏆 1st' : trackRemaining + '/' + release.totalEditions}</span>
                   <span class="track-col-buy">
                     ${trackAvailable ? `
                       <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
@@ -2382,10 +2385,13 @@ const Modals = {
             }).join('') || ''}
           </div>
           
-          <!-- Availability Info -->
-          <div class="release-availability">
-            <span class="availability-count">${available} of ${release.totalEditions}</span>
-            <span class="availability-label">full albums available</span>
+         <!-- Availability Info -->
+          <div class="release-availability ${release.soldEditions === 0 ? 'first-edition-available' : ''}">
+            ${release.soldEditions === 0 
+              ? `<span class="first-edition-badge">🏆 1st Edition Available!</span>`
+              : `<span class="availability-count">${available} of ${release.totalEditions}</span>
+                 <span class="availability-label">editions available</span>`
+            }
           </div>
         </div>
       </div>
@@ -2546,7 +2552,7 @@ const Modals = {
         }
         .track-list-header {
           display: grid;
-          grid-template-columns: 48px 1fr 80px 60px 60px 100px;
+          grid-template-columns: 48px 1fr 80px 60px 70px 100px;
           gap: 16px;
           padding: 8px 16px;
           border-bottom: 1px solid var(--border-color);
@@ -2585,6 +2591,20 @@ const Modals = {
         .track-col-avail.low {
           color: var(--warning);
           font-weight: 600;
+        }
+        .track-col-avail.first-edition {
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          color: white;
+          padding: 4px 10px;
+          border-radius: 20px;
+          font-weight: 600;
+          font-size: 11px;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+          animation: pulse-blue 2s ease-in-out infinite;
+        }
+        @keyframes pulse-blue {
+          0%, 100% { box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4); }
+          50% { box-shadow: 0 2px 16px rgba(37, 99, 235, 0.6); }
         }
         .track-play-btn {
           display: none;
@@ -2671,6 +2691,19 @@ const Modals = {
         }
         .availability-label {
           color: var(--text-muted);
+        }
+        .release-availability.first-edition-available {
+          background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(37, 99, 235, 0.05));
+          border: 1px solid rgba(37, 99, 235, 0.3);
+          border-radius: var(--radius-lg);
+          padding: 16px 24px;
+          margin: 0 24px 24px;
+          justify-content: center;
+        }
+        .first-edition-badge {
+          font-size: 18px;
+          font-weight: 700;
+          color: #2563eb;
         }
         
         @media (max-width: 600px) {
