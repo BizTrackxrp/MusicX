@@ -2403,6 +2403,7 @@ const Modals = {
           overflow-y: auto;
           border-radius: var(--radius-xl);
           padding: 0;
+           overflow: hidden;  /* ADD THIS LINE */
         }
       .release-close-x {
           position: absolute;
