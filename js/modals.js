@@ -234,21 +234,21 @@ const Modals = {
           padding: 0;
         }
         .np-close {
-          position: absolute;
-          top: 16px;
-          right: 16px;
-          z-index: 10;
-          padding: 8px;
-          background: var(--bg-hover);
-          border: none;
-          border-radius: 50%;
-          color: var(--text-muted);
-          cursor: pointer;
-          transition: all 150ms;
-        }
-        .np-close:hover {
-          background: var(--border-color);
-          color: var(--text-primary);
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  padding: 0;
+  background: none;
+  border: none;
+  color: white;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+.np-close:hover {
+  opacity: 1;
+}
         }
         .np-layout {
           display: grid;
