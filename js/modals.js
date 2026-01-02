@@ -2674,18 +2674,13 @@ const Modals = {
         .availability-label {
           color: var(--text-muted);
         }
-        .release-availability.first-edition-available {
-          background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(37, 99, 235, 0.05));
-          border: 1px solid rgba(37, 99, 235, 0.3);
-          border-radius: var(--radius-lg);
-          padding: 16px 24px;
-          margin: 0 24px 24px;
-          justify-content: center;
-        }
         .first-edition-badge {
-          font-size: 18px;
-          font-weight: 700;
-          color: #2563eb;
+          position: absolute;
+          top: 20px;
+          right: 60px;
+          font-size: 16px;
+          font-weight: 600;
+          color: white;
         }
         
         @media (max-width: 600px) {
