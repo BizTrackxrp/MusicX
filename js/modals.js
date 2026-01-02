@@ -2248,7 +2248,7 @@ const Modals = {
     const html = `
       <div class="modal-overlay release-modal-overlay">
         <div class="modal release-modal">
-           <button class="release-modal-close">
+           <button class="release-close-x" onclick="Modals.close()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -2404,31 +2404,26 @@ const Modals = {
           border-radius: var(--radius-xl);
           padding: 0;
         }
-      .release-modal-close,
-        .release-modal-close:before,
-        .release-modal-close:after {
+      .release-close-x {
           position: absolute;
           top: 16px;
           right: 16px;
           z-index: 10;
-          background: none !important;
-          background-color: transparent !important;
-          border: none !important;
-          border-radius: 0;
-          width: 40px;
-          height: 40px;
+          background: transparent;
+          border: none;
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           color: white;
-          box-shadow: none !important;
+          opacity: 0.8;
+          padding: 0;
         }
-        .release-modal-close:hover {
-          background: none !important;
-          opacity: 0.7;
+        .release-close-x:hover {
+          opacity: 1;
         }
-        
         .release-header {
           padding: 24px 24px 24px;
           position: relative;
