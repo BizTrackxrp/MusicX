@@ -2381,7 +2381,7 @@ const Modals = {
           </div>
           
          <!-- Availability Info -->
-          <div class="release-availability ${release.soldEditions === 0 ? 'first-edition-available' : ''}">
+          <div class="release-availability">
             ${release.soldEditions === 0 
               ? `<span class="first-edition-badge">🏆 1st Edition Available!</span>`
               : `<span class="availability-count">${available} of ${release.totalEditions}</span>
