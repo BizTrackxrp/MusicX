@@ -2404,14 +2404,17 @@ const Modals = {
           border-radius: var(--radius-xl);
           padding: 0;
         }
-        .release-modal-close {
+      .release-modal-close,
+        .release-modal-close:before,
+        .release-modal-close:after {
           position: absolute;
           top: 16px;
           right: 16px;
           z-index: 10;
-          background: transparent;
-          border: none;
-          border-radius: 50%;
+          background: none !important;
+          background-color: transparent !important;
+          border: none !important;
+          border-radius: 0;
           width: 40px;
           height: 40px;
           display: flex;
@@ -2419,10 +2422,11 @@ const Modals = {
           justify-content: center;
           cursor: pointer;
           color: white;
-          transition: background 150ms;
+          box-shadow: none !important;
         }
         .release-modal-close:hover {
-          background: rgba(255,255,255,0.1);
+          background: none !important;
+          opacity: 0.7;
         }
         
         .release-header {
