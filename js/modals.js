@@ -2362,7 +2362,7 @@ const Modals = {
                     </button>
                   </span>
                   <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
-                  <span class="track-col-avail ${trackRemaining < 5 ? 'low' : ''}">${trackRemaining}/${release.totalEditions}</span>
+                 <span class="track-col-avail">${trackRemaining}/${release.totalEditions}</span>
                   <span class="track-col-buy">
                     ${trackAvailable ? `
                       <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
@@ -2409,7 +2409,7 @@ const Modals = {
           top: 16px;
           right: 16px;
           z-index: 10;
-          background: rgba(0,0,0,0.5);
+          background: transparent;
           border: none;
           border-radius: 50%;
           width: 40px;
@@ -2420,6 +2420,9 @@ const Modals = {
           cursor: pointer;
           color: white;
           transition: background 150ms;
+        }
+        .release-modal-close:hover {
+          background: rgba(255,255,255,0.1);
         }
         .release-modal-close:hover { background: rgba(0,0,0,0.7); }
         
@@ -2583,7 +2586,7 @@ const Modals = {
           font-size: 12px;
           color: var(--text-muted);
         }
-        .track-col-avail.low {
+       track-col-avail.low {
           color: var(--warning);
           font-weight: 600;
         }
@@ -2677,13 +2680,14 @@ const Modals = {
         .availability-label {
           color: var(--text-muted);
         }
-        .first-edition-badge {
+       .first-edition-badge {
           position: absolute;
           top: 20px;
-          right: 60px;
-          font-size: 16px;
+          right: 70px;
+          font-size: 14px;
           font-weight: 600;
           color: white;
+          white-space: nowrap;
         }
         
         @media (max-width: 600px) {
