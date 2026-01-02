@@ -2248,12 +2248,16 @@ const Modals = {
     const html = `
       <div class="modal-overlay release-modal-overlay">
         <div class="modal release-modal">
-           <button onclick="Modals.close()" style="position:absolute;top:16px;right:16px;z-index:10;background:none;border:none;padding:0;cursor:pointer;color:white;opacity:0.8;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <line x1="18" y1="6" x2="6" y2="18"></line>
-    <line x1="6" y1="6" x2="18" y2="18"></line>
-  </svg>
-</button>
+          <!-- Badge + Close container -->
+<div style="position:absolute;top:16px;right:16px;z-index:10;display:flex;align-items:center;gap:12px;">
+  ${release.soldEditions === 0 ? `<span style="font-size:14px;font-weight:600;color:white;white-space:nowrap;">🏆 1st Edition Available!</span>` : `<span style="font-size:14px;color:rgba(255,255,255,0.8);">${available} of ${release.totalEditions} available</span>`}
+  <button onclick="Modals.close()" style="background:none;border:none;padding:0;cursor:pointer;color:white;opacity:0.8;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  </button>
+</div>
           
           <!-- Header with gradient background -->
           <div class="release-header" style="background: linear-gradient(180deg, ${this.getColorFromImage(release.coverUrl)} 0%, var(--bg-primary) 100%);">
@@ -2381,13 +2385,7 @@ const Modals = {
           </div>
           
          <!-- Availability Info -->
-          <div class="release-availability">
-            ${release.soldEditions === 0 
-              ? `<span class="first-edition-badge">🏆 1st Edition Available!</span>`
-              : `<span class="availability-count">${available} of ${release.totalEditions}</span>
-                 <span class="availability-label">editions available</span>`
-            }
-          </div>
+          
         </div>
       </div>
       
@@ -2679,15 +2677,7 @@ const Modals = {
         .availability-label {
           color: var(--text-muted);
         }
-       .first-edition-badge {
-          position: absolute;
-          top: 20px;
-          right: 70px;
-          font-size: 14px;
-          font-weight: 600;
-          color: white;
-          white-space: nowrap;
-        }
+       
         
         @media (max-width: 600px) {
           .release-header-content { flex-direction: column; align-items: center; text-align: center; }
