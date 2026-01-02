@@ -2424,7 +2424,6 @@ const Modals = {
         .release-modal-close:hover {
           background: rgba(255,255,255,0.1);
         }
-        .release-modal-close:hover { background: rgba(0,0,0,0.7); }
         
         .release-header {
           padding: 24px 24px 24px;
