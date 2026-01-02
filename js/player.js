@@ -94,8 +94,8 @@ const Player = {
       expProgressBar.addEventListener('click', (e) => this.seekExpanded(e));
     }
     
-    // Expand/Collapse mobile player
-    if (expandBtn) expandBtn.addEventListener('click', () => this.expandPlayer());
+    // Expand/Collapse mobile player - NOW OPENS RELEASE MODAL
+    if (expandBtn) expandBtn.addEventListener('click', () => this.openReleaseModal());
     if (collapseBtn) collapseBtn.addEventListener('click', () => this.collapsePlayer());
     
     // Like button
@@ -104,17 +104,45 @@ const Player = {
     if (likeBtn) likeBtn.addEventListener('click', () => this.toggleLike());
     if (expLikeBtn) expLikeBtn.addEventListener('click', () => this.toggleLike());
     
-    // Click on track info to open Now Playing modal
+    // Click on track info to open release modal (not expanded player)
     const playerTrack = document.getElementById('player-track-info');
     if (playerTrack) {
-      playerTrack.addEventListener('click', (e) => {
+      playerTrack.addEventListener('click', async (e) => {
         // Don't trigger if clicking on the expand button
         if (e.target.closest('.player-expand-btn')) return;
-        if (AppState.player.currentTrack) {
-          Modals.showNowPlaying();
-        }
+        await this.openReleaseModal();
       });
       playerTrack.style.cursor = 'pointer';
+    }
+  },
+  
+  /**
+   * Open release modal for current track
+   */
+  async openReleaseModal() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    if (track.releaseId) {
+      // Find or fetch the release and open release modal
+      let release = AppState.releases.find(r => r.id === track.releaseId);
+      if (!release) {
+        try {
+          const data = await API.getRelease(track.releaseId);
+          release = data?.release;
+        } catch (e) {
+          console.error('Failed to fetch release:', e);
+        }
+      }
+      if (release) {
+        Modals.showRelease(release);
+      } else {
+        // Fallback to now playing if no release found
+        Modals.showNowPlaying();
+      }
+    } else {
+      // No releaseId, show now playing
+      Modals.showNowPlaying();
     }
   },
   
@@ -341,16 +369,10 @@ const Player = {
   },
   
   /**
-   * Expand mobile player
+   * Expand mobile player (legacy - now opens release modal)
    */
   expandPlayer() {
-    const expandedPlayer = document.getElementById('expanded-player');
-    if (expandedPlayer) {
-      expandedPlayer.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-      AppState.expandedPlayer = true;
-      this.updateExpandedPlayer();
-    }
+    this.openReleaseModal();
   },
   
   /**
