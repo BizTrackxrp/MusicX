@@ -44,20 +44,25 @@ async function handleConfirmSale(req, res, sql) {
       return res.status(400).json({ error: 'Missing pending sales data' });
     }
     
-    // Confirm each track sale
+    const releaseId = pendingSales[0]?.releaseId;
+    
+    // Confirm each track sale - update per-track sold_count
     for (let i = 0; i < pendingSales.length; i++) {
       const sale = pendingSales[i];
       const txHash = acceptTxHashes[i];
       
-      const updateResult = await sql`
-        UPDATE releases 
-        SET sold_editions = sold_editions + 1
-        WHERE id = ${sale.releaseId}
-        RETURNING sold_editions
+      // Update THIS TRACK's sold_count and get edition number
+      const trackUpdate = await sql`
+        UPDATE tracks 
+        SET sold_count = COALESCE(sold_count, 0) + 1
+        WHERE id = ${sale.trackId}
+        RETURNING sold_count
       `;
       
-      const editionNumber = updateResult[0]?.sold_editions || 1;
-      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const editionNumber = trackUpdate[0]?.sold_count || 1;
+      
+      // Unique sale ID (add index to prevent duplicates)
+      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${i}`;
       
       await sql`
         INSERT INTO sales (
@@ -68,6 +73,20 @@ async function handleConfirmSale(req, res, sql) {
           ${sale.artistAddress}, ${sale.nftTokenId}, ${editionNumber},
           ${sale.price}, ${sale.platformFee}, ${txHash}, NOW()
         )
+      `;
+    }
+    
+    // Update release sold_editions = MIN of all track sold_counts
+    // This way "10 albums available" means 10 COMPLETE sets
+    if (releaseId) {
+      await sql`
+        UPDATE releases r
+        SET sold_editions = (
+          SELECT COALESCE(MIN(COALESCE(t.sold_count, 0)), 0)
+          FROM tracks t
+          WHERE t.release_id = r.id
+        )
+        WHERE r.id = ${releaseId}
       `;
     }
     
