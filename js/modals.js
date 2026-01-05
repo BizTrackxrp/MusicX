@@ -1369,238 +1369,12 @@ const Modals = {
    * Show Purchase/Checkout Modal
    */
   showPurchase(release) {
-    this.activeModal = 'purchase';
-    
-    const price = release.albumPrice || release.songPrice;
-    const available = release.totalEditions - release.soldEditions;
-    
-    const html = `
-      <div class="modal-overlay">
-        <div class="modal purchase-modal">
-          <div class="modal-header">
-            <div class="modal-title">Complete Purchase</div>
-            <button class="modal-close">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          
-          <div class="modal-body">
-            <!-- Item Preview -->
-            <div class="purchase-item">
-              <div class="purchase-cover">
-                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
-              </div>
-              <div class="purchase-details">
-                <div class="purchase-title">${release.title}</div>
-                <div class="purchase-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
-                <div class="purchase-type">${release.type} • ${release.tracks?.length || 1} track${release.tracks?.length !== 1 ? 's' : ''}</div>
-              </div>
-            </div>
-            
-            <!-- Price Summary -->
-            <div class="purchase-summary">
-              <div class="purchase-row">
-                <span>NFT Price</span>
-                <span>${price} XRP</span>
-              </div>
-              <div class="purchase-row">
-                <span>Network Fee</span>
-                <span>~0.00001 XRP</span>
-              </div>
-              <div class="purchase-row purchase-total">
-                <span>Total</span>
-                <span>${price} XRP</span>
-              </div>
-            </div>
-            
-            <!-- Scarcity Reminder -->
-            <div class="purchase-scarcity">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-              <span>Only <strong>${available}</strong> of ${release.totalEditions} remaining!</span>
-            </div>
-            
-            <!-- 2 Signature Notice -->
-            <div class="purchase-notice">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-              <span><strong>2 signatures required:</strong> First to send payment, then to receive your NFT</span>
-            </div>
-            
-            <!-- Purchase Status -->
-            <div class="purchase-status" id="purchase-status" style="display: none;">
-              <div class="purchase-status-icon">
-                <div class="spinner"></div>
-              </div>
-              <div class="purchase-status-text">Waiting for payment...</div>
-              <div class="purchase-status-sub">Check your Xaman app to sign the transaction</div>
-            </div>
-            
-            <!-- Actions -->
-            <div class="purchase-actions" id="purchase-actions">
-              <button class="btn btn-secondary close-modal-btn">Cancel</button>
-              <button class="btn btn-primary purchase-confirm-btn" id="confirm-purchase-btn">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                  <line x1="1" y1="10" x2="23" y2="10"></line>
-                </svg>
-                Pay with Xaman
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <style>
-        .purchase-modal {
-          max-width: 440px;
-        }
-        .purchase-item {
-          display: flex;
-          gap: 16px;
-          padding: 16px;
-          background: var(--bg-hover);
-          border-radius: var(--radius-lg);
-          margin-bottom: 20px;
-        }
-        .purchase-cover {
-          width: 80px;
-          height: 80px;
-          border-radius: var(--radius-md);
-          overflow: hidden;
-          flex-shrink: 0;
-          background: var(--bg-card);
-        }
-        .purchase-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .purchase-details {
-          flex: 1;
-          min-width: 0;
-        }
-        .purchase-title {
-          font-size: 16px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-        }
-        .purchase-artist {
-          font-size: 14px;
-          color: var(--text-secondary);
-          margin-bottom: 4px;
-        }
-        .purchase-type {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
-        .purchase-summary {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: 16px;
-          margin-bottom: 16px;
-        }
-        .purchase-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 8px 0;
-          font-size: 14px;
-          color: var(--text-secondary);
-        }
-        .purchase-row.purchase-total {
-          border-top: 1px solid var(--border-color);
-          margin-top: 8px;
-          padding-top: 16px;
-          font-size: 18px;
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-        .purchase-scarcity {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 16px;
-          background: rgba(245, 158, 11, 0.1);
-          border: 1px solid rgba(245, 158, 11, 0.3);
-          border-radius: var(--radius-lg);
-          font-size: 13px;
-          color: var(--warning);
-          margin-bottom: 12px;
-        }
-        .purchase-notice {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 16px;
-          background: rgba(59, 130, 246, 0.1);
-          border: 1px solid rgba(59, 130, 246, 0.3);
-          border-radius: var(--radius-lg);
-          font-size: 13px;
-          color: var(--accent);
-          margin-bottom: 20px;
-        }
-        .purchase-status {
-          text-align: center;
-          padding: 24px;
-          margin-bottom: 20px;
-        }
-        .purchase-status-icon {
-          margin-bottom: 16px;
-        }
-        .purchase-status-icon .spinner {
-          width: 48px;
-          height: 48px;
-          border-width: 3px;
-          margin: 0 auto;
-        }
-        .purchase-status-icon.success {
-          color: var(--success);
-        }
-        .purchase-status-icon.error {
-          color: var(--error);
-        }
-        .purchase-status-text {
-          font-size: 16px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-        }
-        .purchase-status-sub {
-          font-size: 13px;
-          color: var(--text-muted);
-        }
-        .purchase-actions {
-          display: flex;
-          gap: 12px;
-        }
-        .purchase-actions .btn {
-          flex: 1;
-        }
-        .purchase-confirm-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-        }
-      </style>
-    `;
-    
-    this.show(html);
-    
-    // Bind confirm button
-    document.getElementById('confirm-purchase-btn')?.addEventListener('click', async () => {
-      await this.processPurchase(release);
+    // Navigate to full purchase page instead of modal
+    this.close();
+    Router.navigate('purchase', { 
+      release: release.id 
     });
-  },
+  },,
   
   /**
    * Process the actual purchase
@@ -2925,56 +2699,13 @@ const Modals = {
     this.showToast('Playlists feature coming soon!');
   },
   
-  showTrackPurchase(release, track, trackIdx) {
-    // Quick inline purchase confirmation
-    const price = parseFloat(release.songPrice) || 0;
-    const btn = document.querySelector(`.buy-track-btn[data-track-idx="${trackIdx}"]`);
-    
-    // If already in confirm state, process the purchase
-    if (btn && btn.classList.contains('confirm-state')) {
-      this.processQuickPurchase(release, track, trackIdx, btn);
-      return;
-    }
-    
-    // Change button to confirm state
-    if (btn) {
-      const originalHTML = btn.innerHTML;
-      btn.classList.add('confirm-state');
-      btn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        Confirm
-      `;
-      btn.style.background = 'var(--success)';
-      btn.style.borderColor = 'var(--success)';
-      
-      // Add cancel on click outside
-      const cancelHandler = (e) => {
-        if (!btn.contains(e.target)) {
-          btn.classList.remove('confirm-state');
-          btn.innerHTML = originalHTML;
-          btn.style.background = '';
-          btn.style.borderColor = '';
-          document.removeEventListener('click', cancelHandler);
-        }
-      };
-      
-      // Delay adding listener to prevent immediate trigger
-      setTimeout(() => {
-        document.addEventListener('click', cancelHandler);
-      }, 10);
-      
-      // Auto-cancel after 5 seconds
-      setTimeout(() => {
-        if (btn.classList.contains('confirm-state')) {
-          btn.classList.remove('confirm-state');
-          btn.innerHTML = originalHTML;
-          btn.style.background = '';
-          btn.style.borderColor = '';
-        }
-      }, 5000);
-    }
+showTrackPurchase(release, track, trackIdx) {
+    // Navigate to full purchase page instead of modal
+    this.close();
+    Router.navigate('purchase', { 
+      release: release.id, 
+      track: track.id 
+    });
   },
   
   async processQuickPurchase(release, track, trackIdx, btn) {
@@ -3268,84 +2999,12 @@ const Modals = {
     }
   },
   
-  showAlbumPurchase(release) {
-    // Purchase all tracks in album
-    this.activeModal = 'album-purchase';
-    const trackPrice = parseFloat(release.songPrice) || 0;
-    const trackCount = release.tracks?.length || 1;
-    const totalPrice = trackPrice * trackCount;
-    
-    const html = `
-      <div class="modal-overlay purchase-modal">
-        <div class="modal">
-          <div class="modal-header">
-            <div class="modal-title">Buy Full ${release.type === 'album' ? 'Album' : 'EP'}</div>
-            <button class="modal-close close-modal-btn">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <div class="purchase-item">
-              <div class="purchase-cover">
-                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
-              </div>
-              <div class="purchase-details">
-                <div class="purchase-title">${release.title}</div>
-                <div class="purchase-artist">${release.artistName}</div>
-                <div class="purchase-type">${trackCount} tracks</div>
-              </div>
-            </div>
-            
-            <div class="purchase-summary">
-              <div class="purchase-row">
-                <span>${trackCount} NFTs × ${trackPrice} XRP</span>
-                <span>${totalPrice} XRP</span>
-              </div>
-              <div class="purchase-row">
-                <span>Network Fee</span>
-                <span>~0.00001 XRP</span>
-              </div>
-              <div class="purchase-row purchase-total">
-                <span>Total</span>
-                <span>${totalPrice} XRP</span>
-              </div>
-            </div>
-            
-            <div class="purchase-notice">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-              <span><strong>2 signatures required:</strong> Payment + NFT transfers</span>
-            </div>
-            
-            <div class="purchase-status" id="album-purchase-status" style="display: none;">
-              <div class="purchase-status-icon"><div class="spinner"></div></div>
-              <div class="purchase-status-text">Processing...</div>
-              <div class="purchase-status-sub">Check Xaman</div>
-            </div>
-            
-            <div class="purchase-actions" id="album-purchase-actions">
-              <button class="btn btn-secondary close-modal-btn">Cancel</button>
-              <button class="btn btn-primary" id="confirm-album-purchase">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                  <line x1="1" y1="10" x2="23" y2="10"></line>
-                </svg>
-                Pay ${totalPrice} XRP
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    this.show(html);
-    
-    document.getElementById('confirm-album-purchase')?.addEventListener('click', async () => {
-      await this.processAlbumPurchase(release);
+ showAlbumPurchase(release) {
+    // Navigate to full purchase page instead of modal
+    this.close();
+    Router.navigate('purchase', { 
+      release: release.id, 
+      album: 'true' 
     });
   },
   
