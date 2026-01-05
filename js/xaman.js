@@ -515,57 +515,6 @@ const XamanWallet = {
   },
   
   /**
-   * Create NFT sell offer with platform as destination (for brokered sales)
-   * @param {string} nftTokenId - The NFT token ID
-   * @param {number} amountDrops - Price in drops
-   * @param {string} destination - Platform wallet address (broker)
-   */
-  async createSellOffer(nftTokenId, amountDrops, destination) {
-    if (!this.sdk) throw new Error('SDK not initialized');
-    if (!AppState.user?.address) throw new Error('Wallet not connected');
-    
-    console.log('Creating sell offer:', { nftTokenId, amountDrops, destination });
-    
-    const payload = await this.sdk.payload?.create({
-      txjson: {
-        TransactionType: 'NFTokenCreateOffer',
-        NFTokenID: nftTokenId,
-        Amount: amountDrops.toString(),
-        Flags: 1, // tfSellNFToken
-        Destination: destination, // Platform can broker this offer
-      },
-      custom_meta: {
-        instruction: 'Sign to list your music NFT for sale',
-      },
-    });
-    
-    if (!payload) {
-      throw new Error('Failed to create sell offer payload');
-    }
-    
-    console.log('Sell offer payload:', payload);
-    
-    // Open Xaman for signing
-    if (payload.next?.always) {
-      this.openXamanPopup(payload.next.always);
-    } else {
-      throw new Error('No sign URL returned from Xaman');
-    }
-    
-    // Wait for result
-    const result = await this.waitForPayload(payload.uuid);
-    
-    // Extract offer index from the result if available
-    if (result.success && result.txHash) {
-      // The offer index will be in the transaction result
-      // For now, we'll store the tx hash and look up the offer later
-      result.offerIndex = result.txHash; // Placeholder - actual offer index comes from tx meta
-    }
-    
-    return result;
-  },
-  
-  /**
    * Create NFT transfer offer (Amount: 0) to transfer NFT to platform
    * @param {string} nftTokenId - The NFT token ID
    * @param {string} destination - Platform wallet address to receive NFT
@@ -606,7 +555,20 @@ const XamanWallet = {
     const result = await this.waitForPayload(payload.uuid);
     
     if (result.success && result.txHash) {
-      result.offerIndex = result.txHash;
+      // Try to get the actual offer index
+      try {
+        const offerIndex = await this.getOfferIndexFromTx(result.txHash);
+        if (offerIndex) {
+          result.offerIndex = offerIndex;
+        } else {
+          const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
+          if (fallbackIndex) {
+            result.offerIndex = fallbackIndex;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get offer index for transfer:', err);
+      }
     }
     
     return result;
@@ -687,17 +649,93 @@ const XamanWallet = {
     // Wait for result
     const result = await this.waitForPayload(payload.uuid);
     
-    // Extract offer index from result if available
+    // If successful, fetch the actual offer index from XRPL
     if (result.success && result.txHash) {
-      // We'll need to look up the offer index from the transaction
-      // For now, return what we have
-      return {
-        ...result,
-        // The offer index will be in the transaction meta
-        // We might need to fetch it separately
-      };
+      try {
+        const offerIndex = await this.getOfferIndexFromTx(result.txHash);
+        if (offerIndex) {
+          result.offerIndex = offerIndex;
+          console.log('Got offer index:', offerIndex);
+        } else {
+          // Fallback: look up sell offers for this NFT
+          const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
+          if (fallbackIndex) {
+            result.offerIndex = fallbackIndex;
+            console.log('Got offer index from fallback:', fallbackIndex);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get offer index:', err);
+        try {
+          const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
+          if (fallbackIndex) {
+            result.offerIndex = fallbackIndex;
+          }
+        } catch (e) {
+          console.error('Fallback also failed:', e);
+        }
+      }
     }
     
     return result;
+  },
+  
+  /**
+   * Get offer index from transaction metadata
+   */
+  async getOfferIndexFromTx(txHash) {
+    try {
+      const response = await fetch('https://xrplcluster.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: 'tx',
+          params: [{ transaction: txHash, binary: false }]
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.result?.meta?.AffectedNodes) {
+        for (const node of data.result.meta.AffectedNodes) {
+          if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
+            return node.CreatedNode.LedgerIndex;
+          }
+        }
+      }
+      return null;
+    } catch (err) {
+      console.error('getOfferIndexFromTx error:', err);
+      return null;
+    }
+  },
+  
+  /**
+   * Get the latest sell offer for an NFT from a specific owner
+   */
+  async getLatestSellOffer(nftTokenId, ownerAddress) {
+    try {
+      const response = await fetch('https://xrplcluster.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: 'nft_sell_offers',
+          params: [{ nft_id: nftTokenId }]
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.result?.offers) {
+        const ownerOffers = data.result.offers.filter(o => o.owner === ownerAddress);
+        if (ownerOffers.length > 0) {
+          return ownerOffers[0].nft_offer_index;
+        }
+      }
+      return null;
+    } catch (err) {
+      console.error('getLatestSellOffer error:', err);
+      return null;
+    }
   },
 };
