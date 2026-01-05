@@ -1948,7 +1948,7 @@ const Modals = {
             <h3 class="auth-title">Welcome to XRP Music</h3>
             <p class="auth-description">Connect your Xaman wallet to stream, create, and collect music NFTs.</p>
             <button class="xaman-btn" id="xaman-connect-btn">
-              <img src="https://xumm.app/assets/icons/icon-512.png" alt="Xaman">
+              <img src="/Xaman-logo.png" alt="Xaman">
               <div class="xaman-btn-info">
                 <span class="xaman-btn-title">Connect with Xaman</span>
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
