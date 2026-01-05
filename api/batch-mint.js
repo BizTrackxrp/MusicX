@@ -11,6 +11,7 @@
  * 2. This endpoint mints NFTs using platform wallet
  * 3. Artist set as Issuer - gets royalties on resale
  * 4. NFTs go to platform wallet - ready to sell
+ * 5. NFT token IDs stored in database for tracking
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -48,6 +49,38 @@ export default async function handler(req, res) {
   return res.status(400).json({ error: 'Invalid action' });
 }
 
+/**
+ * Extract NFT Token ID from mint transaction result
+ */
+function extractNFTokenID(meta) {
+  // Look through AffectedNodes for the newly created NFToken
+  for (const node of meta.AffectedNodes || []) {
+    // Check for modified NFTokenPage (token added to existing page)
+    if (node.ModifiedNode?.LedgerEntryType === 'NFTokenPage') {
+      const finalTokens = node.ModifiedNode.FinalFields?.NFTokens || [];
+      const prevTokens = node.ModifiedNode.PreviousFields?.NFTokens || [];
+      
+      // Find the new token (in final but not in previous)
+      const prevIds = new Set(prevTokens.map(t => t.NFToken?.NFTokenID));
+      for (const token of finalTokens) {
+        if (!prevIds.has(token.NFToken?.NFTokenID)) {
+          return token.NFToken.NFTokenID;
+        }
+      }
+    }
+    
+    // Check for created NFTokenPage (new page created for token)
+    if (node.CreatedNode?.LedgerEntryType === 'NFTokenPage') {
+      const tokens = node.CreatedNode.NewFields?.NFTokens || [];
+      if (tokens.length > 0) {
+        return tokens[0].NFToken?.NFTokenID;
+      }
+    }
+  }
+  
+  return null;
+}
+
 async function handleMint(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
@@ -56,6 +89,8 @@ async function handleMint(req, res) {
       artistAddress,
       metadataUri,      // Single track URI (backward compatible)
       tracks,           // Array of track URIs for albums
+      trackIds,         // Array of track database IDs (for storing in nfts table)
+      releaseId,        // Release ID for linking
       quantity,
       transferFee = 500,
       taxon = 0,
@@ -108,10 +143,12 @@ async function handleMint(req, res) {
       // Results storage
       const mintedTracks = [];
       let totalMinted = 0;
+      const allNftTokenIds = [];
       
       // Loop through each track
       for (let t = 0; t < trackUris.length; t++) {
         const trackUri = trackUris[t];
+        const trackId = trackIds?.[t] || null;
         const uriHex = xrpl.convertStringToHex(trackUri);
         const trackNFTs = [];
         
@@ -119,7 +156,8 @@ async function handleMint(req, res) {
         
         // Mint X editions of this track
         for (let i = 0; i < quantity; i++) {
-          console.log(`  Edition ${i + 1}/${quantity}...`);
+          const editionNumber = i + 1;
+          console.log(`  Edition ${editionNumber}/${quantity}...`);
           
           try {
             const mintTx = await client.autofill({
@@ -136,14 +174,50 @@ async function handleMint(req, res) {
             const result = await client.submitAndWait(signed.tx_blob);
             
             if (result.result.meta.TransactionResult === 'tesSUCCESS') {
-              trackNFTs.push({
-                txHash: result.result.hash,
-                success: true,
-              });
-              totalMinted++;
-              console.log(`    ✓ Edition ${i + 1} minted: ${result.result.hash}`);
+              // Extract the actual NFT Token ID from the transaction result
+              const nftTokenId = extractNFTokenID(result.result.meta);
+              
+              if (nftTokenId) {
+                console.log(`    ✓ Edition ${editionNumber} minted: ${nftTokenId}`);
+                
+                // Store in database
+                if (trackId || releaseId) {
+                  const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  try {
+                    await sql`
+                      INSERT INTO nfts (
+                        id, nft_token_id, track_id, release_id, edition_number,
+                        status, owner_address, tx_hash, minted_at
+                      ) VALUES (
+                        ${nftId}, ${nftTokenId}, ${trackId}, ${releaseId},
+                        ${editionNumber}, 'available', ${platformAddress},
+                        ${result.result.hash}, NOW()
+                      )
+                    `;
+                    console.log(`    ✓ Stored in database: ${nftId}`);
+                  } catch (dbError) {
+                    console.error(`    ⚠ DB insert failed (continuing):`, dbError.message);
+                  }
+                }
+                
+                trackNFTs.push({
+                  nftTokenId: nftTokenId,
+                  editionNumber: editionNumber,
+                  txHash: result.result.hash,
+                  success: true,
+                });
+                allNftTokenIds.push(nftTokenId);
+                totalMinted++;
+              } else {
+                console.error(`    ⚠ Could not extract NFT Token ID from result`);
+                trackNFTs.push({
+                  txHash: result.result.hash,
+                  error: 'Could not extract NFT Token ID',
+                  success: false,
+                });
+              }
             } else {
-              console.error(`    ✗ Edition ${i + 1} failed: ${result.result.meta.TransactionResult}`);
+              console.error(`    ✗ Edition ${editionNumber} failed: ${result.result.meta.TransactionResult}`);
               trackNFTs.push({
                 error: result.result.meta.TransactionResult,
                 success: false,
@@ -156,7 +230,7 @@ async function handleMint(req, res) {
             }
             
           } catch (mintError) {
-            console.error(`    ✗ Failed to mint edition ${i + 1}:`, mintError.message);
+            console.error(`    ✗ Failed to mint edition ${editionNumber}:`, mintError.message);
             trackNFTs.push({
               error: mintError.message,
               success: false,
@@ -166,6 +240,7 @@ async function handleMint(req, res) {
         
         mintedTracks.push({
           trackIndex: t,
+          trackId: trackId,
           trackUri: trackUri,
           editions: trackNFTs.filter(n => n.success).length,
           nfts: trackNFTs,
@@ -181,8 +256,8 @@ async function handleMint(req, res) {
         trackCount: trackUris.length,
         editionsPerTrack: quantity,
         tracks: mintedTracks,
-        // Backward compatible
-        nftTokenIds: mintedTracks.flatMap(t => t.nfts.filter(n => n.success).map(n => n.txHash)),
+        // All NFT Token IDs (for reference)
+        nftTokenIds: allNftTokenIds,
       });
       
     } finally {
