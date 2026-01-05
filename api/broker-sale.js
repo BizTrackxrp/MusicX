@@ -49,15 +49,32 @@ async function handleConfirmSale(req, res, sql) {
     
     const { releaseId, trackId, buyerAddress, artistAddress, nftTokenId, price, platformFee } = pendingSale;
     
-    // Update database - get the new sold count (this IS the edition number)
-    const updateResult = await sql`
-      UPDATE releases 
-      SET sold_editions = sold_editions + 1
-      WHERE id = ${releaseId}
-      RETURNING sold_editions
-    `;
+    // Update THIS TRACK's sold_count and get edition number
+    let editionNumber = 1;
     
-    const editionNumber = updateResult[0]?.sold_editions || 1;
+    if (trackId) {
+      const trackUpdate = await sql`
+        UPDATE tracks 
+        SET sold_count = COALESCE(sold_count, 0) + 1
+        WHERE id = ${trackId}
+        RETURNING sold_count
+      `;
+      editionNumber = trackUpdate[0]?.sold_count || 1;
+    }
+    
+    // Update release sold_editions = MIN of all track sold_counts
+    // This keeps "albums available" in sync (complete sets available)
+    if (releaseId) {
+      await sql`
+        UPDATE releases r
+        SET sold_editions = (
+          SELECT COALESCE(MIN(COALESCE(t.sold_count, 0)), 0)
+          FROM tracks t
+          WHERE t.release_id = r.id
+        )
+        WHERE r.id = ${releaseId}
+      `;
+    }
     
     // Record the sale
     const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -90,7 +107,7 @@ async function handleConfirmSale(req, res, sql) {
       )
     `;
     
-    console.log('Sale confirmed:', saleId, 'Edition #', editionNumber);
+    console.log('Sale confirmed:', saleId, 'Track:', trackId, 'Edition #', editionNumber);
     
     return res.json({
       success: true,
@@ -126,7 +143,7 @@ async function handlePurchase(req, res, sql) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
     
-    // Get release details with tracks
+    // Get release details with tracks and their sold_counts
     const releases = await sql`
       SELECT r.*, 
         COALESCE(
@@ -134,7 +151,8 @@ async function handlePurchase(req, res, sql) {
             json_build_object(
               'id', t.id,
               'title', t.title,
-              'metadata_cid', t.metadata_cid
+              'metadata_cid', t.metadata_cid,
+              'sold_count', COALESCE(t.sold_count, 0)
             )
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -159,12 +177,18 @@ async function handlePurchase(req, res, sql) {
         return res.status(404).json({ error: 'Track not found in release' });
       }
       console.log('Buying specific track:', targetTrack.title, targetTrack.metadata_cid);
-    }
-    
-    // Check if still available (at release level for now)
-    const available = release.total_editions - release.sold_editions;
-    if (available <= 0) {
-      return res.status(400).json({ error: 'Sold out' });
+      
+      // Check if THIS TRACK is still available
+      const trackAvailable = release.total_editions - (targetTrack.sold_count || 0);
+      if (trackAvailable <= 0) {
+        return res.status(400).json({ error: `Track "${targetTrack.title}" is sold out` });
+      }
+    } else {
+      // Check if release has any availability (for singles)
+      const available = release.total_editions - release.sold_editions;
+      if (available <= 0) {
+        return res.status(400).json({ error: 'Sold out' });
+      }
     }
     
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
@@ -267,7 +291,7 @@ async function handlePurchase(req, res, sql) {
           }
         }
         
-        return res.status(400).json({ error: 'No NFT available for this release - payment refunded' });
+        return res.status(400).json({ error: 'No NFT available for this release - payment refunded', refunded: true });
       }
       
       console.log('Found NFT to transfer:', nftToTransfer.NFTokenID);
