@@ -1,10 +1,7 @@
 /**
  * XRP Music - Album Purchase API
  * Handles buying all tracks in an album with one payment
- * 1. Buyer pays platform (total price for all tracks)
- * 2. Platform creates sell offers for ALL track NFTs
- * 3. Returns offer indexes for buyer to accept each
- * 4. Platform sends 98% to artist
+ * Uses nfts table for inventory tracking
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -46,22 +43,42 @@ async function handleConfirmSale(req, res, sql) {
     
     const releaseId = pendingSales[0]?.releaseId;
     
-    // Confirm each track sale - update per-track sold_count
+    // Confirm each track sale
     for (let i = 0; i < pendingSales.length; i++) {
       const sale = pendingSales[i];
       const txHash = acceptTxHashes[i];
       
-      // Update THIS TRACK's sold_count and get edition number
-      const trackUpdate = await sql`
-        UPDATE tracks 
-        SET sold_count = COALESCE(sold_count, 0) + 1
-        WHERE id = ${sale.trackId}
-        RETURNING sold_count
-      `;
+      // Update NFT status in nfts table
+      if (sale.nftTokenId) {
+        await sql`
+          UPDATE nfts 
+          SET status = 'sold', 
+              owner_address = ${sale.buyerAddress},
+              sold_at = NOW()
+          WHERE nft_token_id = ${sale.nftTokenId}
+        `;
+      }
       
-      const editionNumber = trackUpdate[0]?.sold_count || 1;
+      // Update track sold_count and get edition number
+      let editionNumber = sale.editionNumber;
+      if (sale.trackId && !editionNumber) {
+        const trackUpdate = await sql`
+          UPDATE tracks 
+          SET sold_count = COALESCE(sold_count, 0) + 1
+          WHERE id = ${sale.trackId}
+          RETURNING sold_count
+        `;
+        editionNumber = trackUpdate[0]?.sold_count || 1;
+      } else if (sale.trackId) {
+        // Still increment sold_count even if we already have edition number
+        await sql`
+          UPDATE tracks 
+          SET sold_count = COALESCE(sold_count, 0) + 1
+          WHERE id = ${sale.trackId}
+        `;
+      }
       
-      // Unique sale ID (add index to prevent duplicates)
+      // Record the sale
       const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${i}`;
       
       await sql`
@@ -74,10 +91,11 @@ async function handleConfirmSale(req, res, sql) {
           ${sale.price}, ${sale.platformFee}, ${txHash}, NOW()
         )
       `;
+      
+      console.log('Sale confirmed:', saleId, 'Track:', sale.trackId, 'NFT:', sale.nftTokenId, 'Edition #', editionNumber);
     }
     
     // Update release sold_editions = MIN of all track sold_counts
-    // This way "10 albums available" means 10 COMPLETE sets
     if (releaseId) {
       await sql`
         UPDATE releases r
@@ -121,7 +139,8 @@ async function handleAlbumPurchase(req, res, sql) {
             json_build_object(
               'id', t.id,
               'title', t.title,
-              'metadata_cid', t.metadata_cid
+              'metadata_cid', t.metadata_cid,
+              'sold_count', COALESCE(t.sold_count, 0)
             )
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -153,7 +172,7 @@ async function handleAlbumPurchase(req, res, sql) {
     try {
       const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
       
-      // Get platform's NFTs
+      // Get platform's NFTs (for legacy fallback)
       const nftsResponse = await client.request({
         command: 'account_nfts',
         account: platformAddress,
@@ -165,31 +184,59 @@ async function handleAlbumPurchase(req, res, sql) {
       const offerIndexes = [];
       const pendingSales = [];
       const nftsToTransfer = [];
+      const pendingNftIds = []; // Track NFT IDs we've marked as pending
       
       for (const track of tracks) {
-        if (!track.metadata_cid) {
-          console.error('Track missing metadata_cid:', track.id);
-          continue;
+        let nft = null;
+        let editionNumber = null;
+        
+        // Try to get from nfts table first (new system)
+        const availableNfts = await sql`
+          SELECT * FROM nfts 
+          WHERE track_id = ${track.id} 
+            AND status = 'available'
+          ORDER BY edition_number ASC
+          LIMIT 1
+        `;
+        
+        if (availableNfts.length > 0) {
+          const nftRecord = availableNfts[0];
+          nft = { NFTokenID: nftRecord.nft_token_id };
+          editionNumber = nftRecord.edition_number;
+          console.log('Found NFT in database for track:', track.title, nftRecord.nft_token_id, 'Edition:', editionNumber);
+          
+          // Mark as pending
+          await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
+          pendingNftIds.push(nftRecord.id);
+        } else {
+          // Fallback to on-chain search (legacy)
+          if (!track.metadata_cid) {
+            console.error('Track missing metadata_cid:', track.id);
+            continue;
+          }
+          
+          const expectedUri = xrpl.convertStringToHex(`ipfs://${track.metadata_cid}`);
+          nft = platformNFTs.find(n => n.URI === expectedUri);
+          
+          if (!nft) {
+            console.error('NFT not found for track:', track.title, track.metadata_cid);
+            // Reset any NFTs we marked as pending
+            for (const nftId of pendingNftIds) {
+              await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftId}`;
+            }
+            await refundBuyer(client, platformWallet, platformAddress, buyerAddress, totalPrice, 'NFT not found for track: ' + track.title);
+            return res.status(400).json({ 
+              error: `NFT not available for track: ${track.title}`,
+              refunded: true 
+            });
+          }
         }
         
-        const expectedUri = xrpl.convertStringToHex(`ipfs://${track.metadata_cid}`);
-        const nft = platformNFTs.find(n => n.URI === expectedUri);
-        
-        if (!nft) {
-          console.error('NFT not found for track:', track.title, track.metadata_cid);
-          // Refund and abort
-          await refundBuyer(client, platformWallet, platformAddress, buyerAddress, totalPrice, 'NFT not found for track: ' + track.title);
-          return res.status(400).json({ 
-            error: `NFT not available for track: ${track.title}`,
-            refunded: true 
-          });
-        }
-        
-        nftsToTransfer.push({ nft, track });
+        nftsToTransfer.push({ nft, track, editionNumber });
       }
       
-      // Create sell offers for all found NFTs
-      for (const { nft, track } of nftsToTransfer) {
+      // Create sell offers for all NFTs
+      for (const { nft, track, editionNumber } of nftsToTransfer) {
         // Cancel any existing offers first
         try {
           const offersResponse = await client.request({
@@ -227,6 +274,10 @@ async function handleAlbumPurchase(req, res, sql) {
         
         if (offerResult.result.meta.TransactionResult !== 'tesSUCCESS') {
           console.error('Create offer failed for track:', track.title);
+          // Reset pending NFTs
+          for (const nftId of pendingNftIds) {
+            await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftId}`;
+          }
           await refundBuyer(client, platformWallet, platformAddress, buyerAddress, totalPrice, 'Offer creation failed');
           return res.status(400).json({ 
             error: 'Failed to create offer for: ' + track.title,
@@ -252,6 +303,7 @@ async function handleAlbumPurchase(req, res, sql) {
           buyerAddress,
           artistAddress,
           nftTokenId: nft.NFTokenID,
+          editionNumber: editionNumber,
           price: trackPrice,
           platformFee,
         });
