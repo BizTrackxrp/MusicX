@@ -31,6 +31,13 @@ const Router = {
     if (page === 'playlist' && params.id) {
       return `/playlist/${params.id}`;
     }
+    if (page === 'purchase') {
+      const queryParams = new URLSearchParams();
+      if (params.release) queryParams.set('release', params.release);
+      if (params.track) queryParams.set('track', params.track);
+      if (params.album) queryParams.set('album', params.album);
+      return `/purchase?${queryParams.toString()}`;
+    }
     return `/${page === 'stream' ? '' : page}`;
   },
   
@@ -39,6 +46,7 @@ const Router = {
    */
   parseUrl() {
     const path = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
     
     // Artist page
     if (path.startsWith('/artist/')) {
@@ -50,6 +58,18 @@ const Router = {
     if (path.startsWith('/playlist/')) {
       const id = path.replace('/playlist/', '');
       return { page: 'playlist', params: { id } };
+    }
+    
+    // Purchase page
+    if (path === '/purchase') {
+      return { 
+        page: 'purchase', 
+        params: { 
+          release: searchParams.get('release'),
+          track: searchParams.get('track'),
+          album: searchParams.get('album')
+        } 
+      };
     }
     
     // Other pages
@@ -70,6 +90,9 @@ const Router = {
         break;
       case 'profile':
         ProfilePage.render();
+        break;
+      case 'purchase':
+        PurchasePage.init();
         break;
       case 'liked':
         this.renderLikedPage();
