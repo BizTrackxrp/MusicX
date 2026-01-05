@@ -1374,7 +1374,7 @@ const Modals = {
     Router.navigate('purchase', { 
       release: release.id 
     });
-  },,
+  },
   
   /**
    * Process the actual purchase
