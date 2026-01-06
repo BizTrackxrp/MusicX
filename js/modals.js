@@ -1704,7 +1704,7 @@ const Modals = {
   /**
    * Process listing an NFT for sale
    */
-  async processListNFT(nft, price) {
+ async processListNFT(nft, price) {
     const statusEl = document.getElementById('list-nft-status');
     const actionsEl = document.getElementById('list-nft-actions');
     
@@ -1715,8 +1715,21 @@ const Modals = {
       // Create sell offer via Xaman
       const result = await XamanWallet.createSellOffer(nft.nftTokenId, price);
       
+      // Check if transaction was successful FIRST
       if (!result.success) {
         throw new Error(result.error || 'Failed to create sell offer');
+      }
+      
+      // Verify we got an offer index back
+      if (!result.offerIndex) {
+        throw new Error('No offer index returned from transaction');
+      }
+      
+      // Pad offer_index to 64 characters (preserves leading zeros)
+      let offerIndex = result.offerIndex;
+      if (offerIndex.length < 64) {
+        console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
+        offerIndex = offerIndex.padStart(64, '0');
       }
       
       // Save listing to database
@@ -1727,9 +1740,10 @@ const Modals = {
           nftTokenId: nft.nftTokenId,
           sellerAddress: AppState.user.address,
           price: price,
-          offerIndex: result.offerIndex,
+          offerIndex: offerIndex,
           releaseId: nft.releaseId,
           trackId: nft.trackId,
+          txHash: result.txHash,
         }),
       });
       
