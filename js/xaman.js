@@ -582,12 +582,6 @@ const XamanWallet = {
     if (!this.sdk) throw new Error('SDK not initialized');
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     
-    // Ensure offer index is 64 characters (pad with leading zeros if needed)
-    if (offerIndex && offerIndex.length < 64) {
-      offerIndex = offerIndex.padStart(64, '0');
-      console.log('Padded offer index to 64 chars:', offerIndex);
-    }
-    
     console.log('Accepting sell offer:', offerIndex);
     
     const payload = await this.sdk.payload?.create({
@@ -688,7 +682,6 @@ const XamanWallet = {
   
   /**
    * Get offer index from transaction metadata
-   * IMPORTANT: Always pads to 64 characters to preserve leading zeros
    */
   async getOfferIndexFromTx(txHash) {
     try {
@@ -706,12 +699,7 @@ const XamanWallet = {
       if (data.result?.meta?.AffectedNodes) {
         for (const node of data.result.meta.AffectedNodes) {
           if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
-            let offerIndex = node.CreatedNode.LedgerIndex;
-            // Ensure offer index is always 64 characters (pad with leading zeros)
-            if (offerIndex && offerIndex.length < 64) {
-              offerIndex = offerIndex.padStart(64, '0');
-            }
-            return offerIndex;
+            return node.CreatedNode.LedgerIndex;
           }
         }
       }
@@ -724,7 +712,6 @@ const XamanWallet = {
   
   /**
    * Get the latest sell offer for an NFT from a specific owner
-   * IMPORTANT: Always pads to 64 characters to preserve leading zeros
    */
   async getLatestSellOffer(nftTokenId, ownerAddress) {
     try {
@@ -742,12 +729,7 @@ const XamanWallet = {
       if (data.result?.offers) {
         const ownerOffers = data.result.offers.filter(o => o.owner === ownerAddress);
         if (ownerOffers.length > 0) {
-          let offerIndex = ownerOffers[0].nft_offer_index;
-          // Ensure offer index is always 64 characters (pad with leading zeros)
-          if (offerIndex && offerIndex.length < 64) {
-            offerIndex = offerIndex.padStart(64, '0');
-          }
-          return offerIndex;
+          return ownerOffers[0].nft_offer_index;
         }
       }
       return null;
