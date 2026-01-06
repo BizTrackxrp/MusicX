@@ -699,7 +699,13 @@ const XamanWallet = {
       if (data.result?.meta?.AffectedNodes) {
         for (const node of data.result.meta.AffectedNodes) {
           if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
-            return node.CreatedNode.LedgerIndex;
+            let offerIndex = node.CreatedNode.LedgerIndex;
+            // Pad to 64 characters to preserve leading zeros
+            if (offerIndex && offerIndex.length < 64) {
+              console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
+              offerIndex = offerIndex.padStart(64, '0');
+            }
+            return offerIndex;
           }
         }
       }
@@ -729,7 +735,13 @@ const XamanWallet = {
       if (data.result?.offers) {
         const ownerOffers = data.result.offers.filter(o => o.owner === ownerAddress);
         if (ownerOffers.length > 0) {
-          return ownerOffers[0].nft_offer_index;
+          let offerIndex = ownerOffers[0].nft_offer_index;
+          // Pad to 64 characters to preserve leading zeros
+          if (offerIndex && offerIndex.length < 64) {
+            console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
+            offerIndex = offerIndex.padStart(64, '0');
+          }
+          return offerIndex;
         }
       }
       return null;
