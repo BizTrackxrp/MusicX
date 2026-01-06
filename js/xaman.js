@@ -655,7 +655,7 @@ const XamanWallet = {
         const offerIndex = await this.getOfferIndexFromTx(result.txHash);
         if (offerIndex) {
           result.offerIndex = offerIndex;
-          console.log('Got offer index:', offerIndex);
+          console.log('Got offer index from transaction:', offerIndex);
         } else {
           // Fallback: look up sell offers for this NFT
           const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
@@ -684,6 +684,9 @@ const XamanWallet = {
    * Get offer index from transaction metadata
    */
   async getOfferIndexFromTx(txHash) {
+    // Wait a moment for transaction to be fully validated
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     try {
       const response = await fetch('https://xrplcluster.com', {
         method: 'POST',
@@ -695,6 +698,7 @@ const XamanWallet = {
       });
       
       const data = await response.json();
+      console.log('Transaction data for offer lookup:', data.result);
       
       if (data.result?.meta?.AffectedNodes) {
         for (const node of data.result.meta.AffectedNodes) {
@@ -705,10 +709,13 @@ const XamanWallet = {
               console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
               offerIndex = offerIndex.padStart(64, '0');
             }
+            console.log('Found offer index from transaction:', offerIndex);
             return offerIndex;
           }
         }
       }
+      
+      console.log('No NFTokenOffer found in transaction metadata');
       return null;
     } catch (err) {
       console.error('getOfferIndexFromTx error:', err);
@@ -735,12 +742,14 @@ const XamanWallet = {
       if (data.result?.offers) {
         const ownerOffers = data.result.offers.filter(o => o.owner === ownerAddress);
         if (ownerOffers.length > 0) {
-          let offerIndex = ownerOffers[0].nft_offer_index;
+          // Get the LAST offer (most recent), not the first
+          let offerIndex = ownerOffers[ownerOffers.length - 1].nft_offer_index;
           // Pad to 64 characters to preserve leading zeros
           if (offerIndex && offerIndex.length < 64) {
             console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
             offerIndex = offerIndex.padStart(64, '0');
           }
+          console.log('Fallback: using most recent offer:', offerIndex);
           return offerIndex;
         }
       }
