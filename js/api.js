@@ -69,6 +69,14 @@ const API = {
     return data.releases || [];
   },
 
+  /**
+   * Get a single release by ID
+   */
+  async getRelease(releaseId) {
+    const data = await this.fetch(`/api/releases?id=${releaseId}`);
+    return data;
+  },
+
   // ============================================
   // PROFILES
   // ============================================
@@ -312,6 +320,16 @@ const API = {
   },
 };
 
+/**
+ * IPFS Gateway fallback list (shared with player.js)
+ */
+const IPFS_GATEWAYS = [
+  'https://gateway.lighthouse.storage/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://dweb.link/ipfs/'
+];
+
 // Helper functions
 const Helpers = {
   /**
@@ -349,10 +367,31 @@ const Helpers = {
   },
   
   /**
-   * Get IPFS URL
+   * Get IPFS URL (uses first gateway, fallback handled by error handler)
    */
   getIPFSUrl(cid) {
-    return `https://gateway.lighthouse.storage/ipfs/${cid}`;
+    if (!cid) return '';
+    // Clean the CID in case it already has a gateway prefix
+    if (cid.includes('/ipfs/')) {
+      cid = cid.split('/ipfs/')[1].split('?')[0];
+    }
+    return `${IPFS_GATEWAYS[0]}${cid}`;
+  },
+  
+  /**
+   * Get next IPFS gateway URL for fallback
+   */
+  getNextIPFSUrl(currentUrl) {
+    if (!currentUrl || !currentUrl.includes('/ipfs/')) return null;
+    
+    const cid = currentUrl.split('/ipfs/')[1].split('?')[0];
+    const currentGatewayIndex = IPFS_GATEWAYS.findIndex(g => currentUrl.startsWith(g));
+    const nextIndex = currentGatewayIndex + 1;
+    
+    if (nextIndex < IPFS_GATEWAYS.length) {
+      return `${IPFS_GATEWAYS[nextIndex]}${cid}`;
+    }
+    return null; // No more gateways to try
   },
   
   /**
@@ -385,3 +424,36 @@ const Helpers = {
     return Math.random().toString(36).substr(2, 9);
   },
 };
+
+/**
+ * Global image error handler for IPFS fallback
+ * Automatically tries next gateway when an image fails to load
+ */
+document.addEventListener('error', function(e) {
+  const target = e.target;
+  
+  // Only handle image errors
+  if (target.tagName !== 'IMG') return;
+  
+  const currentSrc = target.src;
+  
+  // Only handle IPFS URLs
+  if (!currentSrc.includes('/ipfs/')) return;
+  
+  // Prevent infinite loops - track retry count
+  const retryCount = parseInt(target.dataset.ipfsRetry || '0', 10);
+  if (retryCount >= IPFS_GATEWAYS.length - 1) {
+    console.warn('All IPFS gateways failed for image:', currentSrc);
+    // Set to placeholder if all gateways fail
+    target.src = '/placeholder.png';
+    return;
+  }
+  
+  // Try next gateway
+  const nextUrl = Helpers.getNextIPFSUrl(currentSrc);
+  if (nextUrl) {
+    console.log(`🔄 Image gateway fallback (attempt ${retryCount + 1}):`, nextUrl);
+    target.dataset.ipfsRetry = (retryCount + 1).toString();
+    target.src = nextUrl;
+  }
+}, true); // Use capture phase to catch errors before they bubble
