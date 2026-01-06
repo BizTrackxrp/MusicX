@@ -320,15 +320,7 @@ const API = {
   },
 };
 
-/**
- * IPFS Gateway fallback list (shared with player.js)
- */
-const IPFS_GATEWAYS = [
-  'https://gateway.lighthouse.storage/ipfs/',
-  'https://ipfs.io/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
-  'https://dweb.link/ipfs/'
-];
+// Note: IPFS_GATEWAYS is defined in player.js and shared globally
 
 // Helper functions
 const Helpers = {
