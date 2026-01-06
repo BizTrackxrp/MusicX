@@ -1704,84 +1704,111 @@ const Modals = {
   /**
    * Process listing an NFT for sale
    */
- async processListNFT(nft, price) {
-    const statusEl = document.getElementById('list-nft-status');
-    const actionsEl = document.getElementById('list-nft-actions');
+/**
+ * Process listing an NFT for sale
+ */
+async processListNFT(nft, price) {
+  const statusEl = document.getElementById('list-nft-status');
+  const actionsEl = document.getElementById('list-nft-actions');
+  
+  statusEl?.classList.remove('hidden');
+  if (actionsEl) actionsEl.style.display = 'none';
+  
+  try {
+    // Create sell offer via Xaman
+    const result = await XamanWallet.createSellOffer(nft.nftTokenId, price);
     
-    statusEl?.classList.remove('hidden');
-    if (actionsEl) actionsEl.style.display = 'none';
-    
-    try {
-      // Create sell offer via Xaman
-      const result = await XamanWallet.createSellOffer(nft.nftTokenId, price);
-      
-      // Check if transaction was successful FIRST
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create sell offer');
-      }
-      
-      // Verify we got an offer index back
-      if (!result.offerIndex) {
-        throw new Error('No offer index returned from transaction');
-      }
-      
-      // Pad offer_index to 64 characters (preserves leading zeros)
-      let offerIndex = result.offerIndex;
-      if (offerIndex.length < 64) {
-        console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
-        offerIndex = offerIndex.padStart(64, '0');
-      }
-      
-      // Save listing to database
-      const response = await fetch('/api/listings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nftTokenId: nft.nftTokenId,
-          sellerAddress: AppState.user.address,
-          price: price,
-          offerIndex: offerIndex,
-          releaseId: nft.releaseId,
-          trackId: nft.trackId,
-          txHash: result.txHash,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (!data.success) {
-        console.warn('Failed to save listing to DB:', data.error);
-      }
-      
-      // Success
-      statusEl.innerHTML = `
-        <div style="color: var(--success); margin-bottom: 12px;">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-        </div>
-        <p style="font-weight: 600; color: var(--text-primary);">Listed for ${price} XRP!</p>
-        <p style="font-size: 13px; margin-top: 4px;">Your NFT is now listed for sale</p>
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.close(); ProfilePage.activeTab = 'forsale'; Router.navigate('profile')">View My Listing</button>
-      `;
-      
-    } catch (error) {
-      console.error('List NFT failed:', error);
-      statusEl.innerHTML = `
-        <div style="color: var(--error); margin-bottom: 12px;">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-          </svg>
-        </div>
-        <p style="font-weight: 600; color: var(--text-primary);">Listing Failed</p>
-        <p style="font-size: 13px; margin-top: 4px;">${error.message}</p>
-      `;
-      if (actionsEl) actionsEl.style.display = 'flex';
+    // Check if transaction was successful FIRST
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create sell offer');
     }
-  },
+    
+    // Verify we got an offer index back
+    if (!result.offerIndex) {
+      throw new Error('No offer index returned from transaction');
+    }
+    
+    // Pad offer_index to 64 characters (preserves leading zeros)
+    let offerIndex = result.offerIndex;
+    if (offerIndex.length < 64) {
+      console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
+      offerIndex = offerIndex.padStart(64, '0');
+    }
+    
+    // VERIFY the offer actually exists on XRPL before saving
+    console.log('Verifying offer exists on XRPL...');
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for ledger
+    
+    const verifyResponse = await fetch('https://xrplcluster.com', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        method: 'nft_sell_offers',
+        params: [{ nft_id: nft.nftTokenId }]
+      })
+    });
+    const verifyData = await verifyResponse.json();
+    
+    const offerExists = verifyData.result?.offers?.some(
+      o => o.nft_offer_index === offerIndex || o.nft_offer_index === result.offerIndex
+    );
+    
+    if (!offerExists) {
+      throw new Error('Transaction failed on-chain. Check your XRP reserve.');
+    }
+    
+    console.log('Offer verified on XRPL, saving to database...');
+    
+    // NOW save listing to database (only after XRPL verification)
+    const response = await fetch('/api/listings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nftTokenId: nft.nftTokenId,
+        sellerAddress: AppState.user.address,
+        price: price,
+        offerIndex: offerIndex,
+        releaseId: nft.releaseId,
+        trackId: nft.trackId,
+        txHash: result.txHash,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      console.warn('Failed to save listing to DB:', data.error);
+    }
+    
+    // Success
+    statusEl.innerHTML = `
+      <div style="color: var(--success); margin-bottom: 12px;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      </div>
+      <p style="font-weight: 600; color: var(--text-primary);">Listed for ${price} XRP!</p>
+      <p style="font-size: 13px; margin-top: 4px;">Your NFT is now listed for sale</p>
+      <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.close(); ProfilePage.activeTab = 'forsale'; Router.navigate('profile')">View My Listing</button>
+    `;
+    
+  } catch (error) {
+    console.error('List NFT failed:', error);
+    statusEl.innerHTML = `
+      <div style="color: var(--error); margin-bottom: 12px;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+      </div>
+      <p style="font-weight: 600; color: var(--text-primary);">Listing Failed</p>
+      <p style="font-size: 13px; margin-top: 4px;">${error.message}</p>
+    `;
+    if (actionsEl) actionsEl.style.display = 'flex';
+  }
+},
 
   /**
    * Show modal to purchase from secondary market
