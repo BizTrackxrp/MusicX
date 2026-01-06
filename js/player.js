@@ -3,6 +3,50 @@
  * Handles playback, queue, progress, and volume
  */
 
+/**
+ * IPFS Gateway fallback list
+ */
+const IPFS_GATEWAYS = [
+  'https://gateway.lighthouse.storage/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://dweb.link/ipfs/'
+];
+
+/**
+ * Try to get a working IPFS URL with fallback gateways
+ */
+async function getWorkingIpfsUrl(cidOrUrl) {
+  // Extract CID from full URL if needed
+  let cid = cidOrUrl;
+  if (cidOrUrl && cidOrUrl.includes('/ipfs/')) {
+    cid = cidOrUrl.split('/ipfs/')[1].split('?')[0]; // Remove query params too
+  }
+  if (!cid) return cidOrUrl;
+  
+  // Try each gateway with a quick timeout
+  for (const gateway of IPFS_GATEWAYS) {
+    try {
+      const url = gateway + cid;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        console.log('✅ Working gateway found:', gateway);
+        return url;
+      }
+    } catch (e) {
+      console.log('❌ Gateway failed:', gateway);
+      continue;
+    }
+  }
+  
+  // Fallback to first gateway if all fail
+  console.warn('⚠️ All gateways failed, using default');
+  return IPFS_GATEWAYS[0] + cid;
+}
+
 const Player = {
   audio: null,
   progressInterval: null,
@@ -147,9 +191,9 @@ const Player = {
   },
   
   /**
-   * Play a track
+   * Play a track (NOW ASYNC with gateway fallback)
    */
-  playTrack(track, queue = null, queueIndex = 0) {
+  async playTrack(track, queue = null, queueIndex = 0) {
     if (!track) return;
     
     // Update state
@@ -158,14 +202,25 @@ const Player = {
       setQueue(queue, queueIndex);
     }
     
-    // Get audio source
-    const src = track.ipfsHash 
-      ? Helpers.getIPFSUrl(track.ipfsHash)
-      : track.audioUrl;
+    // Get audio source - try Helpers.getIPFSUrl if it exists, otherwise build URL
+    let src = track.audioUrl;
+    if (!src && track.ipfsHash) {
+      if (typeof Helpers !== 'undefined' && Helpers.getIPFSUrl) {
+        src = Helpers.getIPFSUrl(track.ipfsHash);
+      } else {
+        src = IPFS_GATEWAYS[0] + track.ipfsHash;
+      }
+    }
     
     if (!src) {
       console.error('No audio source for track:', track);
       return;
+    }
+    
+    // Try fallback gateways if it's an IPFS URL
+    if (src.includes('/ipfs/') || track.ipfsHash) {
+      console.log('🔄 Checking IPFS gateways for audio...');
+      src = await getWorkingIpfsUrl(src);
     }
     
     // Set source and play
