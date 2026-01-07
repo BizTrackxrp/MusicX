@@ -3748,124 +3748,141 @@ showTrackPurchase(release, track, trackIdx) {
         };
         const albumMetadataResult = await API.uploadJSON(albumMetadata, `${releaseTitle}-album-metadata.json`);
         
-        // Step 4: Mint NFTs (pay fee, authorize, then backend mints)
-        const editions = parseInt(document.getElementById('release-editions').value) || 1;
-        const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
-        const transferFee = Math.round(royaltyPercent * 100); // Convert % to basis points (5% = 500)
-        const totalNFTs = uploadedTracks.length * editions;
-        
-        // Show Xaman prep message
-        statusEl.innerHTML = `
-          <div class="mint-status-icon">
-            <div class="spinner"></div>
-          </div>
-          <div class="mint-status-text" style="font-size: 15px; font-weight: 600;">Get ready to sign in Xaman!</div>
-          <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 You'll sign 2 transactions:</p>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">1. Pay mint fee to platform</p>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">2. Authorize NFT creation</p>
-          <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Minting ${totalNFTs} NFTs (${uploadedTracks.length} tracks × ${editions} editions)</p>
-        `;
-        
-        // Pass track URIs for multi-track albums, or single URI for singles
-        const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
-          quantity: editions,
-          transferFee: transferFee,
-          tracks: uploadedTracks.length > 1 ? trackMetadataUris : null,
-          onProgress: (progress) => {
-            if (progress.stage === 'paying') {
-              statusEl.innerHTML = `
-                <div class="mint-status-icon">
-                  <div class="spinner"></div>
-                </div>
-                <div class="mint-status-text">Step 4/5: Sign payment in Xaman</div>
-                <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 1 of 2</p>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Pay mint fee to platform</p>
-              `;
-            } else if (progress.stage === 'authorizing') {
-              statusEl.innerHTML = `
-                <div class="mint-status-icon">
-                  <div class="spinner"></div>
-                </div>
-                <div class="mint-status-text">Step 4/5: Sign authorization in Xaman</div>
-                <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 2 of 2</p>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Authorize XRP Music to mint your NFTs</p>
-              `;
-            } else if (progress.stage === 'minting') {
-              statusEl.innerHTML = `
-                <div class="mint-status-icon">
-                  <div class="spinner"></div>
-                </div>
-                <div class="mint-status-text">Step 5/5: Minting ${progress.quantity} NFTs...</div>
-                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">Saving your music forever to the XRP Ledger ⛓️</p>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Thanks for your patience!</p>
-                <p style="font-size: 12px; color: #f59e0b; margin-top: 8px; font-weight: 500;">⚠️ Please don't close or refresh this page</p>
-              `;
-            }
-          },
-        });
-        
-        if (!mintResult.success) {
-          throw new Error(mintResult.error || 'Minting failed');
-        }
-        
-        showStatus(5, 5, 'Saving release...', 'Almost done!');
-        
-        // Step 5: Save to database
-        const releaseData = {
-          artistAddress: AppState.user.address,
-          artistName: AppState.profile?.name || null,
-          title: releaseTitle,
-          description: releaseDescription,
-          type: releaseType,
-          coverUrl: coverResult.url,
-          coverCid: coverResult.cid,
-          metadataCid: albumMetadataResult.cid,
-          songPrice: parseFloat(document.getElementById('release-price').value),
-          albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) * uploadedTracks.length : null,
-          totalEditions: editions,
-          editionsPerTrack: editions,
-          nftTokenIds: mintResult.nftTokenIds,
-          txHash: mintResult.txHash,
-          tracks: uploadedTracks.map((t, i) => ({
-            ...t,
-            soldEditions: 0,
-            availableEditions: editions,
-          })),
-          sellOfferIndex: 'platform-owned', // Mark as ready to sell
-        };
-        
-        await API.saveRelease(releaseData);
-        
-        // Success - NFTs minted and ready to sell!
-        statusEl.innerHTML = `
-          <div class="mint-success">
-            <div class="mint-success-cover">
-              <img src="${URL.createObjectURL(coverFile)}" alt="Cover">
-            </div>
-            <div class="mint-success-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-            </div>
-            <div class="mint-success-title">${releaseTitle}</div>
-            <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${mintResult.totalMinted} NFTs minted</div>
-            <p class="mint-success-msg">Your music is now live on the XRP Ledger!</p>
-            <div class="mint-success-actions">
-              <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                Share
-              </button>
-              <button type="button" class="btn btn-primary" id="mint-success-done">View Release</button>
-            </div>
-          </div>
-        `;
-        
-        document.getElementById('mint-success-done')?.addEventListener('click', () => {
-          this.close();
-          Router.navigate('profile');
-        });
-        
+       // Step 4: Create release in database FIRST to get IDs
+showStatus(4, 6, 'Creating release...', 'Preparing database records');
+
+const releaseType = document.getElementById('release-type').value;
+const releaseTitle = document.getElementById('release-title').value;
+const releaseDescription = document.getElementById('release-description').value;
+const editions = parseInt(document.getElementById('release-editions').value) || 1;
+const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
+const transferFee = Math.round(royaltyPercent * 100);
+const totalNFTs = uploadedTracks.length * editions;
+
+// Pre-create release to get IDs
+const preReleaseData = {
+  artistAddress: AppState.user.address,
+  artistName: AppState.profile?.name || null,
+  title: releaseTitle,
+  description: releaseDescription,
+  type: releaseType,
+  coverUrl: coverResult.url,
+  coverCid: coverResult.cid,
+  metadataCid: albumMetadataResult.cid,
+  songPrice: parseFloat(document.getElementById('release-price').value),
+  albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) * uploadedTracks.length : null,
+  totalEditions: editions,
+  editionsPerTrack: editions,
+  nftTokenIds: [],
+  txHash: null,
+  tracks: uploadedTracks.map((t, i) => ({
+    ...t,
+    soldEditions: 0,
+    availableEditions: editions,
+  })),
+  sellOfferIndex: null,
+};
+
+const preCreateResult = await API.saveRelease(preReleaseData);
+const releaseId = preCreateResult.releaseId;
+const trackIds = preCreateResult.trackIds;
+
+console.log('Pre-created release:', { releaseId, trackIds });
+
+// Step 5: Mint NFTs
+statusEl.innerHTML = `
+  <div class="mint-status-icon">
+    <div class="spinner"></div>
+  </div>
+  <div class="mint-status-text" style="font-size: 15px; font-weight: 600;">Get ready to sign in Xaman!</div>
+  <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 You'll sign 2 transactions:</p>
+  <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">1. Pay mint fee to platform</p>
+  <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">2. Authorize NFT creation</p>
+  <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Minting ${totalNFTs} NFTs (${uploadedTracks.length} tracks × ${editions} editions)</p>
+`;
+
+const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
+  quantity: editions,
+  transferFee: transferFee,
+  tracks: uploadedTracks.length > 1 ? trackMetadataUris : null,
+  trackIds: trackIds,
+  releaseId: releaseId,
+  onProgress: (progress) => {
+    if (progress.stage === 'paying') {
+      statusEl.innerHTML = `
+        <div class="mint-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="mint-status-text">Step 5/6: Sign payment in Xaman</div>
+        <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 1 of 2</p>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Pay mint fee to platform</p>
+      `;
+    } else if (progress.stage === 'authorizing') {
+      statusEl.innerHTML = `
+        <div class="mint-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="mint-status-text">Step 5/6: Sign authorization in Xaman</div>
+        <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 2 of 2</p>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Authorize XRP Music to mint your NFTs</p>
+      `;
+    } else if (progress.stage === 'minting') {
+      statusEl.innerHTML = `
+        <div class="mint-status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="mint-status-text">Step 6/6: Minting ${progress.quantity} NFTs...</div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">Saving your music forever to the XRP Ledger ⛓️</p>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Thanks for your patience!</p>
+        <p style="font-size: 12px; color: #f59e0b; margin-top: 8px; font-weight: 500;">⚠️ Please don't close or refresh this page</p>
+      `;
+    }
+  },
+});
+
+if (!mintResult.success) {
+  throw new Error(mintResult.error || 'Minting failed');
+}
+
+// Step 6: Update release with NFT token IDs
+showStatus(6, 6, 'Finalizing...', 'Updating release with NFT data');
+
+await API.updateRelease(releaseId, {
+  nftTokenIds: mintResult.nftTokenIds,
+  txHash: mintResult.txHash,
+  sellOfferIndex: 'platform-owned',
+});
+
+// Success - NFTs minted and ready to sell!
+statusEl.innerHTML = `
+  <div class="mint-success">
+    <div class="mint-success-cover">
+      <img src="${URL.createObjectURL(coverFile)}" alt="Cover">
+    </div>
+    <div class="mint-success-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+    </div>
+    <div class="mint-success-title">${releaseTitle}</div>
+    <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${mintResult.totalMinted} NFTs minted</div>
+    <p class="mint-success-msg">Your music is now live on the XRP Ledger!</p>
+    <div class="mint-success-actions">
+      <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share
+      </button>
+      <button type="button" class="btn btn-primary" id="mint-success-done">View Release</button>
+    </div>
+  </div>
+`;
+
+document.getElementById('mint-success-done')?.addEventListener('click', () => {
+  this.close();
+  Router.navigate('profile');
+});
+
       } catch (error) {
         console.error('Mint failed:', error);
         statusEl.innerHTML = `
