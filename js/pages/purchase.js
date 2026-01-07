@@ -112,7 +112,7 @@ const PurchasePage = {
     
     const available = release.totalEditions - release.soldEditions;
     
-    const content = document.getElementById('content');
+    const content = document.getElementById('page-content');
     content.innerHTML = `
       <div class="purchase-page">
         <div class="purchase-container">
@@ -814,7 +814,7 @@ const PurchasePage = {
   },
   
   showError(message) {
-    const content = document.getElementById('content');
+    const content = document.getElementById('page-content');
     content.innerHTML = `
       <div class="purchase-page">
         <div class="purchase-container">
@@ -849,7 +849,7 @@ const PurchasePage = {
   },
   
   showSoldOut(reason) {
-    const content = document.getElementById('content');
+    const content = document.getElementById('page-content');
     content.innerHTML = `
       <div class="purchase-page">
         <div class="purchase-container">
@@ -884,7 +884,7 @@ const PurchasePage = {
   },
   
   showLoginRequired() {
-    const content = document.getElementById('content');
+    const content = document.getElementById('page-content');
     content.innerHTML = `
       <div class="purchase-page">
         <div class="purchase-container">
