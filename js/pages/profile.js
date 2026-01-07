@@ -413,6 +413,36 @@ const ProfilePage = {
           background: var(--accent-hover);
           transform: scale(1.05);
         }
+        
+        /* Listing card action buttons */
+        .listing-card-actions {
+          display: flex;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .listing-card-actions .btn {
+          flex: 1;
+          justify-content: center;
+        }
+        .btn-danger {
+          background: rgba(239, 68, 68, 0.1);
+          color: var(--error);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover {
+          background: rgba(239, 68, 68, 0.2);
+        }
+        .listing-price-badge {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          padding: 4px 10px;
+          background: rgba(34, 197, 94, 0.9);
+          color: white;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
       </style>
     `;
     
@@ -658,10 +688,17 @@ const ProfilePage = {
       container.querySelectorAll('.cancel-listing-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          const listingId = btn.dataset.listingId;
-          if (confirm('Cancel this listing?')) {
-            await this.cancelListing(listingId);
-          }
+          const listingData = JSON.parse(btn.dataset.listing);
+          await this.cancelListing(listingData);
+        });
+      });
+      
+      // Bind edit price buttons
+      container.querySelectorAll('.edit-price-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const listingData = JSON.parse(btn.dataset.listing);
+          await this.showEditPriceModal(listingData);
         });
       });
       
@@ -683,6 +720,18 @@ const ProfilePage = {
   },
   
   renderListingCard(listing) {
+    // Store listing data for buttons
+    const listingData = JSON.stringify({
+      id: listing.id,
+      nftTokenId: listing.nft_token_id,
+      offerIndex: listing.offer_index,
+      price: listing.price,
+      trackTitle: listing.track_title,
+      releaseTitle: listing.release_title,
+      artistName: listing.artist_name,
+      coverUrl: listing.cover_url
+    }).replace(/'/g, "\\'");
+    
     return `
       <div class="collected-nft-card listing-card">
         <div class="collected-nft-cover">
@@ -695,9 +744,20 @@ const ProfilePage = {
         <div class="collected-nft-info">
           <div class="collected-nft-title">${listing.track_title || listing.release_title || 'NFT'}</div>
           <div class="collected-nft-artist">${listing.artist_name || 'Unknown Artist'}</div>
-          <div class="collected-nft-actions">
-            <button class="btn btn-sm btn-secondary cancel-listing-btn" data-listing-id="${listing.id}">
-              Cancel Listing
+          <div class="listing-card-actions">
+            <button class="btn btn-sm btn-secondary edit-price-btn" data-listing='${listingData}'>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              Edit Price
+            </button>
+            <button class="btn btn-sm btn-danger cancel-listing-btn" data-listing='${listingData}'>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              Cancel
             </button>
           </div>
         </div>
@@ -705,23 +765,164 @@ const ProfilePage = {
     `;
   },
   
-  async cancelListing(listingId) {
+  async cancelListing(listing) {
+    if (!listing.offerIndex) {
+      alert('Cannot cancel: No offer index found. The listing may already be cancelled on XRPL.');
+      // Still try to remove from database
+      try {
+        await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
+        this.loadForSaleNFTs();
+      } catch (e) {
+        console.error('Failed to remove from database:', e);
+      }
+      return;
+    }
+    
+    if (!confirm(`Cancel listing for "${listing.trackTitle || listing.releaseTitle}"?\n\nThis will require signing a transaction in Xaman.`)) {
+      return;
+    }
+    
     try {
-      const response = await fetch(`/api/listings?listingId=${listingId}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
+      // Show loading state
+      const btn = document.querySelector(`.cancel-listing-btn[data-listing*="${listing.id}"]`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;"></div> Cancelling...';
+      }
       
-      if (data.success) {
+      // Cancel on XRPL first
+      const result = await XamanWallet.cancelSellOffer(listing.offerIndex);
+      
+      if (result.success) {
+        // Then remove from database
+        await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
+        
         // Refresh the listings
         this.loadForSaleNFTs();
+        this.fetchForSaleCount();
       } else {
-        alert('Failed to cancel listing');
+        throw new Error(result.error || 'Failed to cancel on XRPL');
       }
     } catch (error) {
       console.error('Cancel listing error:', error);
-      alert('Failed to cancel listing');
+      alert('Failed to cancel listing: ' + error.message);
+      // Restore button state
+      const btn = document.querySelector(`.cancel-listing-btn[data-listing*="${listing.id}"]`);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          Cancel
+        `;
+      }
     }
+  },
+  
+  async showEditPriceModal(listing) {
+    const currentPrice = parseFloat(listing.price);
+    
+    // Create a simple modal for editing price
+    const modalHtml = `
+      <div class="modal-overlay" id="edit-price-modal" style="display:flex;">
+        <div class="modal-container" style="max-width: 400px;">
+          <div class="modal-header">
+            <h2>Edit Listing Price</h2>
+            <button class="modal-close" id="close-edit-price">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="text-align: center; margin-bottom: 20px;">
+              ${listing.coverUrl ? `<img src="${listing.coverUrl}" style="width:100px;height:100px;border-radius:8px;object-fit:cover;">` : ''}
+              <h3 style="margin-top:12px;">${listing.trackTitle || listing.releaseTitle}</h3>
+              <p style="color:var(--text-muted);">Current price: ${currentPrice} XRP</p>
+            </div>
+            <div class="form-group">
+              <label>New Price (XRP)</label>
+              <input type="number" id="new-price-input" class="form-input" value="${currentPrice}" min="0.000001" step="0.1">
+            </div>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:12px;">
+              ⚠️ This will require 2 signatures in Xaman: one to cancel the old listing, and one to create the new listing.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancel-edit-price">Cancel</button>
+            <button class="btn btn-primary" id="confirm-edit-price">Update Price</button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    const modal = document.getElementById('edit-price-modal');
+    const closeBtn = document.getElementById('close-edit-price');
+    const cancelBtn = document.getElementById('cancel-edit-price');
+    const confirmBtn = document.getElementById('confirm-edit-price');
+    const priceInput = document.getElementById('new-price-input');
+    
+    // Focus input
+    priceInput.focus();
+    priceInput.select();
+    
+    // Close handlers
+    const closeModal = () => modal.remove();
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+    
+    // Confirm handler
+    confirmBtn.addEventListener('click', async () => {
+      const newPrice = parseFloat(priceInput.value);
+      
+      if (isNaN(newPrice) || newPrice <= 0) {
+        alert('Please enter a valid price');
+        return;
+      }
+      
+      if (newPrice === currentPrice) {
+        alert('New price is the same as current price');
+        return;
+      }
+      
+      try {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;display:inline-block;"></div> Updating...';
+        
+        // Use the editListingPrice function from XamanWallet
+        const result = await XamanWallet.editListingPrice(listing.nftTokenId, listing.offerIndex, newPrice);
+        
+        if (result.success) {
+          // Update database with new offer index
+          await fetch('/api/listings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nftTokenId: listing.nftTokenId,
+              sellerAddress: AppState.user.address,
+              price: newPrice,
+              offerIndex: result.offerIndex,
+              releaseId: listing.releaseId,
+              trackId: listing.trackId
+            })
+          });
+          
+          closeModal();
+          this.loadForSaleNFTs();
+        } else {
+          throw new Error(result.error || 'Failed to update price');
+        }
+      } catch (error) {
+        console.error('Edit price error:', error);
+        alert('Failed to update price: ' + error.message);
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = 'Update Price';
+      }
+    });
   },
 
   renderCollectedNFT(nft) {
