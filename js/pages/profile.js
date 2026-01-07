@@ -134,19 +134,14 @@ const ProfilePage = {
             
             <div class="profile-links">
               ${profile.website ? `
-                <a href="${profile.website}" target="_blank" class="profile-link">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="2" y1="12" x2="22" y2="12"></line>
-                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                  </svg>
-                </a>
+                <a href="${profile.website}" target="_blank" class="profile-website">${profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
               ` : ''}
               ${profile.twitter ? `
-                <a href="https://twitter.com/${profile.twitter}" target="_blank" class="profile-link">
+                <a href="https://twitter.com/${profile.twitter}" target="_blank" class="profile-social-link">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                   </svg>
+                  @${profile.twitter}
                 </a>
               ` : ''}
             </div>
@@ -193,18 +188,20 @@ const ProfilePage = {
           background: linear-gradient(135deg, var(--accent), #8b5cf6);
           border-radius: var(--radius-xl);
           overflow: hidden;
-          margin-bottom: -60px;
+          position: relative;
         }
         .profile-banner img {
           width: 100%;
           height: 100%;
           object-fit: cover;
+          object-position: center center;
         }
         .profile-card {
           display: flex;
-          align-items: flex-end;
-          gap: 20px;
+          align-items: flex-start;
+          gap: 24px;
           padding: 0 24px;
+          margin-top: 20px;
           margin-bottom: 32px;
         }
         @media (max-width: 640px) {
@@ -216,19 +213,20 @@ const ProfilePage = {
           }
         }
         .profile-avatar {
-          width: 120px;
-          height: 120px;
+          width: 156px;
+          height: 156px;
           border-radius: 50%;
-          border: 4px solid var(--bg-primary);
+          border: 5px solid var(--bg-primary);
           background: linear-gradient(135deg, var(--accent), #8b5cf6);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 40px;
+          font-size: 52px;
           font-weight: 700;
           color: white;
           flex-shrink: 0;
           overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
         .profile-avatar img {
           width: 100%;
@@ -238,17 +236,17 @@ const ProfilePage = {
         .profile-info {
           flex: 1;
           min-width: 0;
-          padding-bottom: 16px;
+          padding-top: 8px;
         }
         .profile-name {
-          font-size: 28px;
+          font-size: 32px;
           font-weight: 700;
-          margin-bottom: 8px;
+          margin-bottom: 12px;
         }
         .profile-genres {
           display: flex;
           gap: 8px;
-          margin-bottom: 8px;
+          margin-bottom: 12px;
           flex-wrap: wrap;
         }
         @media (max-width: 640px) {
@@ -272,28 +270,46 @@ const ProfilePage = {
         .profile-address {
           color: var(--text-muted);
           font-size: 14px;
-          margin-bottom: 8px;
+          margin-bottom: 10px;
         }
         .profile-bio {
           color: var(--text-secondary);
           font-size: 14px;
-          margin-bottom: 12px;
+          margin-bottom: 14px;
           line-height: 1.5;
+          max-width: 500px;
         }
         .profile-links {
           display: flex;
-          gap: 12px;
+          align-items: center;
+          gap: 16px;
+          flex-wrap: wrap;
         }
         @media (max-width: 640px) {
           .profile-links {
             justify-content: center;
           }
         }
-        .profile-link {
+        .profile-website {
+          color: var(--accent);
+          font-size: 14px;
+          text-decoration: none;
+          transition: opacity 150ms;
+        }
+        .profile-website:hover {
+          opacity: 0.8;
+          text-decoration: underline;
+        }
+        .profile-social-link {
           color: var(--text-muted);
           transition: color 150ms;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 14px;
+          text-decoration: none;
         }
-        .profile-link:hover {
+        .profile-social-link:hover {
           color: var(--accent);
         }
         .profile-tabs {
