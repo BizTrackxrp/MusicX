@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
@@ -23,6 +23,8 @@ export default async function handler(req, res) {
       return await getReleases(req, res, sql);
     } else if (req.method === 'POST') {
       return await createRelease(req, res, sql);
+    } else if (req.method === 'PUT') {
+      return await updateRelease(req, res, sql);
     }
     
     return res.status(405).json({ error: 'Method not allowed' });
@@ -200,7 +202,8 @@ async function createRelease(req, res, sql) {
     RETURNING *
   `;
   
-  // Insert tracks
+  // Insert tracks and collect their IDs
+  const trackIds = [];
   if (tracks && tracks.length > 0) {
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
@@ -228,10 +231,65 @@ async function createRelease(req, res, sql) {
           0
         )
       `;
+      trackIds.push(trackId);
     }
   }
   
-  return res.json({ success: true, releaseId: release.id });
+  // Return both releaseId and trackIds for NFT minting
+  return res.json({ 
+    success: true, 
+    releaseId: release.id,
+    trackIds: trackIds
+  });
+}
+
+/**
+ * Update an existing release
+ * Used after NFT minting to add nftTokenIds, txHash, etc.
+ */
+async function updateRelease(req, res, sql) {
+  const { id } = req.query;
+  const updates = req.body;
+  
+  if (!id) {
+    return res.status(400).json({ error: 'Missing release ID' });
+  }
+  
+  // Build dynamic update query based on provided fields
+  const allowedFields = {
+    nftTokenIds: 'nft_token_ids',
+    txHash: 'tx_hash',
+    sellOfferIndex: 'sell_offer_index',
+    listedAt: 'listed_at',
+    soldEditions: 'sold_editions',
+  };
+  
+  // Prepare update values
+  const nftTokenIds = updates.nftTokenIds || null;
+  const txHash = updates.txHash || null;
+  const sellOfferIndex = updates.sellOfferIndex || null;
+  const listedAt = updates.sellOfferIndex ? new Date() : null;
+  
+  // Update the release
+  const [updated] = await sql`
+    UPDATE releases
+    SET
+      nft_token_ids = COALESCE(${nftTokenIds ? JSON.stringify(nftTokenIds) : null}, nft_token_ids),
+      tx_hash = COALESCE(${txHash}, tx_hash),
+      sell_offer_index = COALESCE(${sellOfferIndex}, sell_offer_index),
+      listed_at = COALESCE(${listedAt}, listed_at)
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  
+  if (!updated) {
+    return res.status(404).json({ error: 'Release not found' });
+  }
+  
+  return res.json({ 
+    success: true, 
+    release: formatRelease(updated)
+  });
 }
 
 function formatRelease(row) {
@@ -252,6 +310,7 @@ function formatRelease(row) {
     // Calculate sold editions as max of any track's sold count (for accurate album availability)
     soldEditions: calculateSoldEditions(row),
     nftTokenId: row.nft_token_id,
+    nftTokenIds: row.nft_token_ids ? (typeof row.nft_token_ids === 'string' ? JSON.parse(row.nft_token_ids) : row.nft_token_ids) : [],
     sellOfferIndex: row.sell_offer_index,
     listedAt: row.listed_at,
     txHash: row.tx_hash,
