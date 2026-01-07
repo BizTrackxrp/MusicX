@@ -3751,9 +3751,6 @@ showTrackPurchase(release, track, trackIdx) {
        // Step 4: Create release in database FIRST to get IDs
 showStatus(4, 6, 'Creating release...', 'Preparing database records');
 
-const releaseType = document.getElementById('release-type').value;
-const releaseTitle = document.getElementById('release-title').value;
-const releaseDescription = document.getElementById('release-description').value;
 const editions = parseInt(document.getElementById('release-editions').value) || 1;
 const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
 const transferFee = Math.round(royaltyPercent * 100);
