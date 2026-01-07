@@ -222,6 +222,15 @@ const XamanWallet = {
   
   /**
    * Mint NFT
+   * @param {string} metadataUri - Single track metadata URI
+   * @param {object} options - Minting options
+   * @param {number} options.quantity - Number of editions per track
+   * @param {number} options.transferFee - Royalty in basis points (500 = 5%)
+   * @param {number} options.taxon - NFT taxon
+   * @param {function} options.onProgress - Progress callback
+   * @param {string[]} options.tracks - Array of track metadata URIs (for albums)
+   * @param {string[]} options.trackIds - Array of track database IDs (for nfts table)
+   * @param {string} options.releaseId - Release database ID (for nfts table)
    */
   async mintNFT(metadataUri, options = {}) {
     // Flow:
@@ -237,7 +246,15 @@ const XamanWallet = {
       throw new Error('Wallet not connected');
     }
     
-    const { quantity = 1, transferFee = 500, taxon = 0, onProgress, tracks = null } = options;
+    const { 
+      quantity = 1, 
+      transferFee = 500, 
+      taxon = 0, 
+      onProgress, 
+      tracks = null, 
+      trackIds = null,   // NEW: track database IDs
+      releaseId = null   // NEW: release database ID
+    } = options;
     
     // Calculate total NFTs: tracks × editions
     const trackCount = tracks ? tracks.length : 1;
@@ -260,7 +277,7 @@ const XamanWallet = {
       throw new Error('Platform not configured');
     }
     
-    console.log('Starting mint process...', { platformAddress, trackCount, quantity, totalNFTs, mintFee });
+    console.log('Starting mint process...', { platformAddress, trackCount, quantity, totalNFTs, mintFee, trackIds, releaseId });
     
     try {
       // STEP 1: Pay mint fee
@@ -361,7 +378,9 @@ const XamanWallet = {
           action: 'mint',
           artistAddress: AppState.user.address,
           metadataUri: metadataUri,
-          tracks: tracks, // Array of track URIs for albums
+          tracks: tracks,       // Array of track URIs for albums
+          trackIds: trackIds,   // NEW: Array of track database IDs
+          releaseId: releaseId, // NEW: Release database ID
           quantity: quantity,
           transferFee: transferFee,
           taxon: taxon,
