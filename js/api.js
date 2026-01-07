@@ -61,6 +61,16 @@ const API = {
   },
   
   /**
+   * Update an existing release
+   */
+  async updateRelease(releaseId, updates) {
+    return this.fetch(`/api/releases?id=${releaseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  },
+  
+  /**
    * Search releases
    */
   async searchReleases(query) {
