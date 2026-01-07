@@ -1718,48 +1718,77 @@ async processListNFT(nft, price) {
     // Create sell offer via Xaman
     const result = await XamanWallet.createSellOffer(nft.nftTokenId, price);
     
-    // Check if transaction was successful FIRST
+    console.log('Xaman result:', result);
+    
+    // Check if user cancelled or rejected
     if (!result.success) {
       throw new Error(result.error || 'Failed to create sell offer');
     }
     
-    // Verify we got an offer index back
-    if (!result.offerIndex) {
-      throw new Error('No offer index returned from transaction');
+    // Must have txHash to verify on-chain
+    if (!result.txHash) {
+      throw new Error('No transaction hash returned');
     }
     
-    // Pad offer_index to 64 characters (preserves leading zeros)
-    let offerIndex = result.offerIndex;
-    if (offerIndex.length < 64) {
-      console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
-      offerIndex = offerIndex.padStart(64, '0');
-    }
+    // CRITICAL: Wait and verify the transaction actually succeeded on XRPL
+    console.log('Waiting for ledger validation...');
+    statusEl.innerHTML = `
+      <div class="spinner"></div>
+      <p>Verifying transaction on XRPL...</p>
+    `;
     
-    // VERIFY the offer actually exists on XRPL before saving
-    console.log('Verifying offer exists on XRPL...');
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for ledger
+    await new Promise(resolve => setTimeout(resolve, 4000)); // Wait 4 seconds for ledger
     
-    const verifyResponse = await fetch('https://xrplcluster.com', {
+    // Check the transaction result on XRPL
+    const txResponse = await fetch('https://xrplcluster.com', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        method: 'nft_sell_offers',
-        params: [{ nft_id: nft.nftTokenId }]
+        method: 'tx',
+        params: [{ transaction: result.txHash }]
       })
     });
-    const verifyData = await verifyResponse.json();
+    const txData = await txResponse.json();
     
-    const offerExists = verifyData.result?.offers?.some(
-      o => o.nft_offer_index === offerIndex || o.nft_offer_index === result.offerIndex
-    );
+    console.log('Transaction result:', txData);
     
-    if (!offerExists) {
-      throw new Error('Transaction failed on-chain. Check your XRP reserve.');
+    // Check if transaction was validated and successful
+    if (!txData.result?.validated) {
+      throw new Error('Transaction not validated on XRPL');
     }
     
-    console.log('Offer verified on XRPL, saving to database...');
+    // Check the transaction result code - tesSUCCESS means it worked
+    const txResultCode = txData.result?.meta?.TransactionResult;
+    if (txResultCode !== 'tesSUCCESS') {
+      console.error('Transaction failed with code:', txResultCode);
+      throw new Error(`Transaction failed: ${txResultCode || 'Unknown error'}. Check your XRP reserve.`);
+    }
     
-    // NOW save listing to database (only after XRPL verification)
+    // Get the offer index from the transaction metadata
+    let offerIndex = result.offerIndex;
+    
+    // If we don't have offerIndex, try to extract from tx metadata
+    if (!offerIndex && txData.result?.meta?.AffectedNodes) {
+      for (const node of txData.result.meta.AffectedNodes) {
+        if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
+          offerIndex = node.CreatedNode.LedgerIndex;
+          break;
+        }
+      }
+    }
+    
+    if (!offerIndex) {
+      throw new Error('Could not find offer index in transaction');
+    }
+    
+    // Pad offer_index to 64 characters
+    if (offerIndex.length < 64) {
+      offerIndex = offerIndex.padStart(64, '0');
+    }
+    
+    console.log('Offer verified! Index:', offerIndex);
+    
+    // NOW save listing to database
     const response = await fetch('/api/listings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
