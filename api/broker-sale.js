@@ -60,19 +60,26 @@ async function handleConfirmSale(req, res, sql) {
       `;
     }
     
-    // Update track sold_count
+    // Calculate the correct edition number from sales table
     let finalEditionNumber = editionNumber;
-    if (trackId) {
-      const trackUpdate = await sql`
-        UPDATE tracks 
-        SET sold_count = COALESCE(sold_count, 0) + 1
-        WHERE id = ${trackId}
-        RETURNING sold_count
+    
+    if (!finalEditionNumber && trackId) {
+      // Count existing sales for this track to determine edition number
+      const salesCount = await sql`
+        SELECT COUNT(*) as count FROM sales WHERE track_id = ${trackId}
       `;
-      // Use the returned sold_count as edition number if not provided
-      if (!finalEditionNumber) {
-        finalEditionNumber = trackUpdate[0]?.sold_count || 1;
-      }
+      finalEditionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
+    }
+    
+    // Update track sold_count to match sales
+    if (trackId) {
+      await sql`
+        UPDATE tracks 
+        SET sold_count = (
+          SELECT COUNT(*) + 1 FROM sales WHERE track_id = ${trackId}
+        )
+        WHERE id = ${trackId}
+      `;
     }
     
     // Update release sold_editions = MIN of all track sold_counts
@@ -236,11 +243,17 @@ async function handlePurchase(req, res, sql) {
       if (!nftToTransfer) {
         console.log('No NFT in database, searching on-chain...');
         
-        // Check availability first
-        if (targetTrack) {
-          const trackAvailable = release.total_editions - (targetTrack.sold_count || 0);
+        // Check availability based on sales count vs total editions
+        if (targetTrackId) {
+          const salesCount = await sql`
+            SELECT COUNT(*) as count FROM sales WHERE track_id = ${targetTrackId}
+          `;
+          const soldCount = parseInt(salesCount[0]?.count) || 0;
+          const trackAvailable = release.total_editions - soldCount;
+          
           if (trackAvailable <= 0) {
-            return res.status(400).json({ error: `Track "${targetTrack.title}" is sold out` });
+            await client.disconnect();
+            return res.status(400).json({ error: `Track "${targetTrack?.title || 'Unknown'}" is sold out` });
           }
         }
         
@@ -278,6 +291,7 @@ async function handlePurchase(req, res, sql) {
           console.error('No matching NFT found for release:', releaseId);
           // Refund buyer
           await refundBuyer(client, platformWallet, platformAddress, buyerAddress, price, 'NFT unavailable');
+          await client.disconnect();
           return res.status(400).json({ error: 'No NFT available - payment refunded', refunded: true });
         }
       }
@@ -328,6 +342,7 @@ async function handlePurchase(req, res, sql) {
           `;
         }
         await refundBuyer(client, platformWallet, platformAddress, buyerAddress, price, 'Offer creation failed');
+        await client.disconnect();
         return res.status(400).json({ error: 'NFT transfer failed - payment refunded', refunded: true });
       }
       
@@ -362,6 +377,8 @@ async function handlePurchase(req, res, sql) {
         await client.submitAndWait(signedPayment.tx_blob);
       }
       
+      await client.disconnect();
+      
       return res.json({
         success: true,
         sellOfferIndex: offerIndex,
@@ -391,12 +408,12 @@ async function handlePurchase(req, res, sql) {
       }
       try {
         await refundBuyer(client, platformWallet, platformAddress, buyerAddress, price, 'Transaction error');
+        await client.disconnect();
         return res.status(500).json({ error: innerError.message, refunded: true });
       } catch (refundError) {
+        await client.disconnect();
         return res.status(500).json({ error: innerError.message, refunded: false });
       }
-    } finally {
-      await client.disconnect();
     }
     
   } catch (error) {
