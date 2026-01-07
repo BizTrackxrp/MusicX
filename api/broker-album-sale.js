@@ -59,21 +59,22 @@ async function handleConfirmSale(req, res, sql) {
         `;
       }
       
-      // Update track sold_count and get edition number
+      // Calculate edition number from sales table
       let editionNumber = sale.editionNumber;
-      if (sale.trackId && !editionNumber) {
-        const trackUpdate = await sql`
-          UPDATE tracks 
-          SET sold_count = COALESCE(sold_count, 0) + 1
-          WHERE id = ${sale.trackId}
-          RETURNING sold_count
+      if (!editionNumber && sale.trackId) {
+        const salesCount = await sql`
+          SELECT COUNT(*) as count FROM sales WHERE track_id = ${sale.trackId}
         `;
-        editionNumber = trackUpdate[0]?.sold_count || 1;
-      } else if (sale.trackId) {
-        // Still increment sold_count even if we already have edition number
+        editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
+      }
+      
+      // Update track sold_count to match sales
+      if (sale.trackId) {
         await sql`
           UPDATE tracks 
-          SET sold_count = COALESCE(sold_count, 0) + 1
+          SET sold_count = (
+            SELECT COUNT(*) + 1 FROM sales WHERE track_id = ${sale.trackId}
+          )
           WHERE id = ${sale.trackId}
         `;
       }
@@ -165,6 +166,19 @@ async function handleAlbumPurchase(req, res, sql) {
     const totalPrice = trackPrice * tracks.length;
     const artistAddress = release.artist_address;
     
+    // Check availability for all tracks using sales count
+    for (const track of tracks) {
+      const salesCount = await sql`
+        SELECT COUNT(*) as count FROM sales WHERE track_id = ${track.id}
+      `;
+      const soldCount = parseInt(salesCount[0]?.count) || 0;
+      const available = release.total_editions - soldCount;
+      
+      if (available <= 0) {
+        return res.status(400).json({ error: `Track "${track.title}" is sold out` });
+      }
+    }
+    
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
@@ -225,6 +239,7 @@ async function handleAlbumPurchase(req, res, sql) {
               await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftId}`;
             }
             await refundBuyer(client, platformWallet, platformAddress, buyerAddress, totalPrice, 'NFT not found for track: ' + track.title);
+            await client.disconnect();
             return res.status(400).json({ 
               error: `NFT not available for track: ${track.title}`,
               refunded: true 
@@ -279,6 +294,7 @@ async function handleAlbumPurchase(req, res, sql) {
             await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftId}`;
           }
           await refundBuyer(client, platformWallet, platformAddress, buyerAddress, totalPrice, 'Offer creation failed');
+          await client.disconnect();
           return res.status(400).json({ 
             error: 'Failed to create offer for: ' + track.title,
             refunded: true 
@@ -331,6 +347,8 @@ async function handleAlbumPurchase(req, res, sql) {
         await client.submitAndWait(signedPayment.tx_blob);
       }
       
+      await client.disconnect();
+      
       return res.json({
         success: true,
         offerIndexes,
@@ -339,8 +357,11 @@ async function handleAlbumPurchase(req, res, sql) {
         message: `${offerIndexes.length} NFTs ready for transfer`,
       });
       
-    } finally {
+    } catch (innerError) {
+      console.error('Album purchase error:', innerError);
+      // Reset pending NFTs on error
       await client.disconnect();
+      throw innerError;
     }
     
   } catch (error) {
