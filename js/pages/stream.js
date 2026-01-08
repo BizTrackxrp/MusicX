@@ -1,13 +1,15 @@
 /**
  * XRP Music - Stream Page
- * Main discovery page with releases, tracks, sorting, and artists
+ * Main discovery page with top played tracks, all tracks, sorting, and artists
  */
 
 const StreamPage = {
   releases: [],
   artists: [],
+  topTracks: [],
   currentTab: 'tracks', // 'tracks' or 'artists'
   currentSort: 'alphabetical',
+  currentTopPeriod: '7d', // '1d', '7d', '30d', '365d'
   selectedGenre: null,
   
   genres: [
@@ -35,6 +37,9 @@ const StreamPage = {
       setReleases(this.releases);
       this.extractArtists();
       
+      // Load top played tracks
+      await this.loadTopTracks();
+      
       if (this.releases.length === 0) {
         this.renderEmpty();
         return;
@@ -44,6 +49,64 @@ const StreamPage = {
     } catch (error) {
       console.error('Failed to load releases:', error);
       this.renderError();
+    }
+  },
+  
+  /**
+   * Load top played tracks for current period
+   * TODO: Replace with actual API call to /api/tracks/top?period=7d&limit=10
+   */
+  async loadTopTracks() {
+    try {
+      // Try to fetch from API if endpoint exists
+      if (typeof API.getTopTracks === 'function') {
+        this.topTracks = await API.getTopTracks(this.currentTopPeriod, 10);
+        return;
+      }
+    } catch (e) {
+      console.log('Top tracks API not available, using fallback');
+    }
+    
+    // Fallback: Calculate from releases data
+    // In production, this should come from stream_events table aggregated by period
+    const allTracks = this.getAllTracks();
+    
+    // Sort by play count (using soldEditions as proxy for now)
+    // TODO: Replace with actual play counts from stream_events
+    this.topTracks = allTracks
+      .map(track => ({
+        ...track,
+        // Simulated play counts - REPLACE WITH REAL DATA
+        plays: this.getTrackPlays(track, this.currentTopPeriod),
+      }))
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, 10);
+  },
+  
+  /**
+   * Get play count for a track in a given period
+   * TODO: Replace with actual data from stream_events table
+   */
+  getTrackPlays(track, period) {
+    // This is placeholder logic - replace with real stream counts
+    // You'll want columns like: plays_1d, plays_7d, plays_30d, plays_365d
+    // Or query stream_events table with date filters
+    
+    const basePlays = track.release.soldEditions || 0;
+    
+    // Simulate different counts for different periods (REMOVE THIS)
+    // Just for demo - actual implementation should query real data
+    switch (period) {
+      case '1d':
+        return Math.floor(basePlays * 0.1 + Math.random() * 50);
+      case '7d':
+        return Math.floor(basePlays * 0.4 + Math.random() * 200);
+      case '30d':
+        return Math.floor(basePlays * 0.7 + Math.random() * 500);
+      case '365d':
+        return Math.floor(basePlays + Math.random() * 1000);
+      default:
+        return basePlays;
     }
   },
   
@@ -82,19 +145,31 @@ const StreamPage = {
     
     const html = `
       <div class="stream-page animate-fade-in">
-        <!-- Latest Releases -->
+        <!-- Top Played Section -->
         <section class="stream-section">
           <div class="section-header">
-            <h2 class="section-title">Latest Releases</h2>
-            <button class="view-all-btn" onclick="Router.navigate('analytics')">
+            <div class="section-title-with-tabs">
+              <h2 class="section-title">Top Played</h2>
+              <div class="period-tabs">
+                <button class="period-tab ${this.currentTopPeriod === '1d' ? 'active' : ''}" data-period="1d">1D</button>
+                <button class="period-tab ${this.currentTopPeriod === '7d' ? 'active' : ''}" data-period="7d">7D</button>
+                <button class="period-tab ${this.currentTopPeriod === '30d' ? 'active' : ''}" data-period="30d">30D</button>
+                <button class="period-tab ${this.currentTopPeriod === '365d' ? 'active' : ''}" data-period="365d">365D</button>
+              </div>
+            </div>
+            <button class="view-all-btn" onclick="StreamPage.viewAllTopTracks()">
               View All
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
             </button>
           </div>
-          <div class="release-grid">
-            ${this.releases.slice(0, 10).map(release => this.renderReleaseCard(release)).join('')}
+          
+          <div class="top-tracks-list">
+            ${this.topTracks.length > 0 
+              ? this.topTracks.map((track, index) => this.renderTopTrackItem(track, index)).join('')
+              : '<div class="empty-message">No play data available yet</div>'
+            }
           </div>
         </section>
         
@@ -187,6 +262,12 @@ const StreamPage = {
           color: var(--text-primary);
           margin: 0;
         }
+        .section-title-with-tabs {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
         .view-all-btn {
           display: flex;
           align-items: center;
@@ -202,6 +283,122 @@ const StreamPage = {
         }
         .view-all-btn:hover {
           border-color: var(--accent);
+          color: var(--accent);
+        }
+        
+        /* Period Tabs for Top Played */
+        .period-tabs {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 4px;
+        }
+        .period-tab {
+          padding: 6px 12px;
+          border: none;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .period-tab:hover {
+          color: var(--text-primary);
+        }
+        .period-tab.active {
+          background: var(--accent);
+          color: white;
+        }
+        
+        /* Top Tracks List */
+        .top-tracks-list {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+        }
+        .top-track-item {
+          display: grid;
+          grid-template-columns: 40px 56px 1fr auto;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          cursor: pointer;
+          transition: background 150ms;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .top-track-item:last-child {
+          border-bottom: none;
+        }
+        .top-track-item:hover {
+          background: var(--bg-hover);
+        }
+        .top-track-item.playing {
+          background: rgba(59, 130, 246, 0.1);
+        }
+        .top-track-rank {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--text-muted);
+          text-align: center;
+        }
+        .top-track-rank.top-3 {
+          color: var(--accent);
+        }
+        .top-track-cover {
+          width: 56px;
+          height: 56px;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          position: relative;
+          flex-shrink: 0;
+        }
+        .top-track-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .top-track-info {
+          min-width: 0;
+        }
+        .top-track-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-bottom: 2px;
+        }
+        .top-track-item.playing .top-track-title {
+          color: var(--accent);
+        }
+        .top-track-artist {
+          font-size: 13px;
+          color: var(--text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .top-track-meta {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          text-align: right;
+        }
+        .top-track-plays {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-secondary);
+        }
+        .top-track-plays svg {
           color: var(--accent);
         }
         
@@ -388,6 +585,18 @@ const StreamPage = {
             flex-direction: column;
             align-items: stretch;
           }
+          .section-title-with-tabs {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+          .period-tabs {
+            width: 100%;
+          }
+          .period-tab {
+            flex: 1;
+            text-align: center;
+          }
           .tab-toggle {
             width: 100%;
           }
@@ -405,12 +614,42 @@ const StreamPage = {
             flex: 1;
             text-align: center;
           }
+          .top-track-item {
+            grid-template-columns: 32px 48px 1fr auto;
+            gap: 8px;
+            padding: 10px 12px;
+          }
+          .top-track-cover {
+            width: 48px;
+            height: 48px;
+          }
+          .top-track-plays span {
+            display: none;
+          }
         }
       </style>
     `;
     
     UI.renderPage(html);
     this.bindEvents();
+  },
+  
+  /**
+   * View all top tracks (could open a modal or navigate to a page)
+   */
+  viewAllTopTracks() {
+    // Option 1: Show a modal with full leaderboard
+    // Option 2: Navigate to a dedicated page
+    // For now, let's show an alert - you can implement the full page later
+    console.log('View all top tracks for period:', this.currentTopPeriod);
+    
+    // TODO: Implement full leaderboard page or modal
+    // Router.navigate('top-tracks', { period: this.currentTopPeriod });
+    
+    // Temporary: Show the tracks/popular view
+    this.currentTab = 'tracks';
+    this.currentSort = 'popular';
+    this.renderContent();
   },
   
   sortTracks(tracks) {
@@ -505,6 +744,42 @@ const StreamPage = {
     UI.renderPage(html);
   },
   
+  /**
+   * Render a top track item with rank and play count
+   */
+  renderTopTrackItem(track, index) {
+    const rank = index + 1;
+    const isPlaying = AppState.player.currentTrack?.trackId === track.id || 
+                      AppState.player.currentTrack?.id === parseInt(track.id);
+    
+    return `
+      <div class="top-track-item ${isPlaying ? 'playing' : ''}" data-top-track-index="${index}">
+        <div class="top-track-rank ${rank <= 3 ? 'top-3' : ''}">${rank}</div>
+        <div class="top-track-cover">
+          <img src="${track.release.coverUrl || '/placeholder.png'}" alt="${track.displayTitle}">
+          ${isPlaying && AppState.player.isPlaying ? `
+            <div class="track-playing-indicator">
+              <div class="track-playing-bars"><span></span><span></span><span></span></div>
+            </div>
+          ` : ''}
+        </div>
+        <div class="top-track-info">
+          <div class="top-track-title">${track.displayTitle}</div>
+          <div class="top-track-artist">${track.release.artistName || Helpers.truncateAddress(track.release.artistAddress)}</div>
+        </div>
+        <div class="top-track-meta">
+          <div class="top-track-plays">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            ${Helpers.formatNumber ? Helpers.formatNumber(track.plays) : track.plays.toLocaleString()}
+            <span>plays</span>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+  
   renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
@@ -593,6 +868,18 @@ const StreamPage = {
   },
   
   bindEvents() {
+    // Period tabs for Top Played
+    document.querySelectorAll('.period-tab').forEach(tab => {
+      tab.addEventListener('click', async () => {
+        const newPeriod = tab.dataset.period;
+        if (newPeriod !== this.currentTopPeriod) {
+          this.currentTopPeriod = newPeriod;
+          await this.loadTopTracks();
+          this.renderContent();
+        }
+      });
+    });
+    
     // Tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -625,7 +912,7 @@ const StreamPage = {
       });
     });
     
-    // Release cards
+    // Release cards (if any exist on page)
     document.querySelectorAll('.release-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.release-play-btn')) return;
@@ -635,13 +922,22 @@ const StreamPage = {
       });
     });
     
-    // Play buttons
+    // Play buttons on release cards
     document.querySelectorAll('.release-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const releaseId = btn.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
         if (release?.tracks?.length > 0) this.playRelease(release);
+      });
+    });
+    
+    // Top track items
+    document.querySelectorAll('.top-track-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const index = parseInt(item.dataset.topTrackIndex, 10);
+        const track = this.topTracks[index];
+        if (track) this.playTrack(track, this.topTracks, index);
       });
     });
     
