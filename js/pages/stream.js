@@ -6,6 +6,7 @@
 const StreamPage = {
   releases: [],
   artists: [],
+  currentTab: 'tracks', // 'tracks' or 'artists'
   currentSort: 'alphabetical',
   selectedGenre: null,
   
@@ -26,7 +27,6 @@ const StreamPage = {
     UI.showLoading();
     
     try {
-      // Add timeout to prevent infinite loading
       const timeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
@@ -58,11 +58,16 @@ const StreamPage = {
           avatar: release.artistAvatar || null,
           releaseCount: 1,
           trackCount: release.tracks?.length || 0,
+          totalSold: release.soldEditions || 0,
+          // TODO: Replace with actual stream count from stream_events table
+          totalStreams: release.soldEditions || 0,
         });
       } else {
         const artist = artistMap.get(release.artistAddress);
         artist.releaseCount++;
         artist.trackCount += release.tracks?.length || 0;
+        artist.totalSold += release.soldEditions || 0;
+        artist.totalStreams += release.soldEditions || 0;
       }
     });
     
@@ -72,69 +77,77 @@ const StreamPage = {
   renderContent() {
     const allTracks = this.getAllTracks();
     const sortedTracks = this.sortTracks(allTracks);
+    const sortedArtists = this.sortArtists();
     const stats = this.getStats();
     
     const html = `
       <div class="stream-page animate-fade-in">
         <!-- Latest Releases -->
-        <section style="margin-bottom: 32px;">
-          <h2 class="section-title">Latest Releases</h2>
+        <section class="stream-section">
+          <div class="section-header">
+            <h2 class="section-title">Latest Releases</h2>
+            <button class="view-all-btn" onclick="Router.navigate('analytics')">
+              View All
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
           <div class="release-grid">
-            ${this.releases.slice(0, 12).map(release => this.renderReleaseCard(release)).join('')}
+            ${this.releases.slice(0, 10).map(release => this.renderReleaseCard(release)).join('')}
           </div>
         </section>
         
-        <!-- All Tracks with Sorting -->
-        ${allTracks.length > 0 ? `
-          <section style="margin-bottom: 32px;">
-            <div class="section-header">
-              <h2 class="section-title" style="margin-bottom: 0;">All Tracks</h2>
-              <div class="sort-controls">
-                <span class="sort-label">Sort by:</span>
-                <div class="sort-buttons">
-                  <button class="sort-btn ${this.currentSort === 'alphabetical' ? 'active' : ''}" data-sort="alphabetical">A-Z</button>
-                  <button class="sort-btn ${this.currentSort === 'mostPlayed' ? 'active' : ''}" data-sort="mostPlayed">Popular</button>
-                  <button class="sort-btn ${this.currentSort === 'genre' ? 'active' : ''}" data-sort="genre">Genre</button>
-                </div>
+        <!-- Tracks / Artists Tabbed Section -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="tab-toggle">
+              <button class="tab-btn ${this.currentTab === 'tracks' ? 'active' : ''}" data-tab="tracks">
+                All Tracks
+                <span class="tab-count">${allTracks.length}</span>
+              </button>
+              <button class="tab-btn ${this.currentTab === 'artists' ? 'active' : ''}" data-tab="artists">
+                All Artists
+                <span class="tab-count">${this.artists.length}</span>
+              </button>
+            </div>
+            <div class="sort-controls">
+              <div class="sort-buttons">
+                <button class="sort-btn ${this.currentSort === 'alphabetical' ? 'active' : ''}" data-sort="alphabetical">A-Z</button>
+                <button class="sort-btn ${this.currentSort === 'genre' ? 'active' : ''}" data-sort="genre">Genre</button>
+                <button class="sort-btn ${this.currentSort === 'popular' ? 'active' : ''}" data-sort="popular">Popular</button>
               </div>
             </div>
-            
-            ${this.currentSort === 'genre' ? `
-              <div class="genre-filter">
-                ${this.genres.map(genre => `
-                  <button class="genre-box ${this.selectedGenre === genre.id ? 'active' : ''}" 
-                          data-genre="${genre.id}"
-                          style="--genre-color: ${genre.color}">
-                    <span class="genre-name">${genre.name}</span>
-                  </button>
-                `).join('')}
-              </div>
-            ` : ''}
-            
+          </div>
+          
+          ${this.currentSort === 'genre' ? `
+            <div class="genre-filter">
+              ${this.genres.map(genre => `
+                <button class="genre-chip ${this.selectedGenre === genre.id ? 'active' : ''}" 
+                        data-genre="${genre.id}"
+                        style="--genre-color: ${genre.color}">
+                  ${genre.name}
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+          
+          ${this.currentTab === 'tracks' ? `
             <div class="track-list">
               ${sortedTracks.length > 0 
                 ? sortedTracks.map((track, index) => this.renderTrackItem(track, index)).join('')
-                : '<div style="padding: 32px; text-align: center; color: var(--text-muted);">No tracks found for this genre yet</div>'
+                : '<div class="empty-message">No tracks found for this genre yet</div>'
               }
             </div>
-          </section>
-        ` : ''}
-        
-        <!-- All Artists -->
-        ${this.artists.length > 0 ? `
-          <section style="margin-bottom: 32px;">
-            <div class="section-header">
-              <h2 class="section-title" style="margin-bottom: 0;">All Artists</h2>
-              <span class="artist-count">${this.artists.length} artist${this.artists.length !== 1 ? 's' : ''}</span>
-            </div>
+          ` : `
             <div class="artists-grid">
-              ${this.artists.map(artist => this.renderArtistCard(artist)).join('')}
+              ${sortedArtists.map(artist => this.renderArtistCard(artist)).join('')}
             </div>
-          </section>
-        ` : ''}
+          `}
+        </section>
         
         <!-- Stats -->
-        <section>
+        <section class="stream-section">
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-value" style="color: var(--accent);">${stats.releases}</div>
@@ -157,6 +170,9 @@ const StreamPage = {
       </div>
       
       <style>
+        .stream-section {
+          margin-bottom: 32px;
+        }
         .section-header {
           display: flex;
           align-items: center;
@@ -165,14 +181,77 @@ const StreamPage = {
           gap: 16px;
           margin-bottom: 16px;
         }
+        .section-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0;
+        }
+        .view-all-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 8px 12px;
+          background: transparent;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-secondary);
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .view-all-btn:hover {
+          border-color: var(--accent);
+          color: var(--accent);
+        }
+        
+        /* Tab Toggle */
+        .tab-toggle {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 4px;
+        }
+        .tab-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 20px;
+          border: none;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .tab-btn:hover {
+          color: var(--text-primary);
+        }
+        .tab-btn.active {
+          background: var(--accent);
+          color: white;
+        }
+        .tab-count {
+          padding: 2px 8px;
+          background: rgba(255,255,255,0.2);
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+        .tab-btn:not(.active) .tab-count {
+          background: var(--bg-hover);
+          color: var(--text-muted);
+        }
+        
+        /* Sort Controls */
         .sort-controls {
           display: flex;
           align-items: center;
           gap: 12px;
-        }
-        .sort-label {
-          font-size: 13px;
-          color: var(--text-muted);
         }
         .sort-buttons {
           display: flex;
@@ -200,60 +279,48 @@ const StreamPage = {
           background: var(--accent);
           color: white;
         }
+        
+        /* Genre Filter */
         .genre-filter {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-          gap: 10px;
-          margin-bottom: 20px;
-          padding: 16px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 16px;
+          padding: 12px;
           background: var(--bg-card);
           border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-        }
-        @media (min-width: 640px) {
-          .genre-filter {
-            grid-template-columns: repeat(5, 1fr);
-          }
-        }
-        .genre-box {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 12px 8px;
-          border: 2px solid var(--border-color);
           border-radius: var(--radius-lg);
-          background: var(--bg-hover);
+        }
+        .genre-chip {
+          padding: 6px 14px;
+          border: 1px solid var(--border-color);
+          border-radius: 20px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 13px;
+          font-weight: 500;
           cursor: pointer;
           transition: all 150ms;
         }
-        .genre-box:hover {
+        .genre-chip:hover {
           border-color: var(--genre-color);
-          transform: translateY(-2px);
-        }
-        .genre-box.active {
-          border-color: var(--genre-color);
-          background: color-mix(in srgb, var(--genre-color) 20%, var(--bg-hover));
-        }
-        .genre-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-        .genre-box.active .genre-name {
           color: var(--genre-color);
         }
-        .artist-count {
-          font-size: 13px;
-          color: var(--text-muted);
+        .genre-chip.active {
+          background: var(--genre-color);
+          border-color: var(--genre-color);
+          color: white;
         }
+        
+        /* Artists Grid */
         .artists-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
           gap: 16px;
         }
         @media (min-width: 640px) {
           .artists-grid {
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 20px;
           }
         }
@@ -307,6 +374,38 @@ const StreamPage = {
           font-size: 12px;
           color: var(--text-muted);
         }
+        
+        /* Empty Message */
+        .empty-message {
+          padding: 32px;
+          text-align: center;
+          color: var(--text-muted);
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+          .section-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .tab-toggle {
+            width: 100%;
+          }
+          .tab-btn {
+            flex: 1;
+            justify-content: center;
+          }
+          .sort-controls {
+            width: 100%;
+          }
+          .sort-buttons {
+            width: 100%;
+          }
+          .sort-btn {
+            flex: 1;
+            text-align: center;
+          }
+        }
       </style>
     `;
     
@@ -321,7 +420,8 @@ const StreamPage = {
       case 'alphabetical':
         sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
         break;
-      case 'mostPlayed':
+      case 'popular':
+        // TODO: Replace with actual stream count from stream_events table
         sorted.sort((a, b) => (b.release.soldEditions || 0) - (a.release.soldEditions || 0));
         break;
       case 'genre':
@@ -332,6 +432,27 @@ const StreamPage = {
           });
         }
         sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
+        break;
+    }
+    
+    return sorted;
+  },
+  
+  sortArtists() {
+    let sorted = [...this.artists];
+    
+    switch (this.currentSort) {
+      case 'alphabetical':
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'popular':
+        // Sort by total streams (or sold as proxy for now)
+        sorted.sort((a, b) => b.totalStreams - a.totalStreams);
+        break;
+      case 'genre':
+        // For genre filter on artists, we'd need to filter by releases with that genre
+        // For now, just sort alphabetically
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
         break;
     }
     
@@ -391,27 +512,25 @@ const StreamPage = {
     
     return `
       <div class="release-card" data-release-id="${release.id}">
-        <div class="release-card-cover" style="${isSoldOut ? 'opacity: 0.5;' : ''}">
+        <div class="release-card-cover">
           ${release.coverUrl 
             ? `<img src="${release.coverUrl}" alt="${release.title}">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
-          <span class="release-availability">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
-          ${!isSoldOut ? `
-            <div class="release-play-overlay">
-              <button class="release-play-btn" data-release-id="${release.id}">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              </button>
-            </div>
-          ` : ''}
+          <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
+          <div class="release-play-overlay">
+            <button class="release-play-btn" data-release-id="${release.id}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+          </div>
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${release.title}</div>
           <div class="release-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
           <div class="release-card-footer">
             <span class="release-card-price">${price} XRP</span>
-            <span class="release-card-tracks">${release.tracks?.length || 0} track${release.tracks?.length !== 1 ? 's' : ''}</span>
+            ${release.type !== 'single' ? `<span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>` : ''}
           </div>
         </div>
       </div>
@@ -422,6 +541,7 @@ const StreamPage = {
     const isPlaying = AppState.player.currentTrack?.trackId === track.id || 
                       AppState.player.currentTrack?.id === parseInt(track.id);
     const available = track.release.totalEditions - track.release.soldEditions;
+    const isSoldOut = available <= 0;
     
     return `
       <div class="track-item ${isPlaying ? 'playing' : ''}" data-track-index="${index}">
@@ -440,7 +560,7 @@ const StreamPage = {
         <div class="track-meta">
           <div>
             <div class="track-price">${track.release.songPrice} XRP</div>
-            <div class="track-availability ${available < 10 ? 'low' : ''}">${available} left</div>
+            <div class="track-availability ${isSoldOut ? 'sold-out' : ''} ${available < 10 && !isSoldOut ? 'low' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </div>
@@ -473,6 +593,17 @@ const StreamPage = {
   },
   
   bindEvents() {
+    // Tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newTab = btn.dataset.tab;
+        if (newTab !== this.currentTab) {
+          this.currentTab = newTab;
+          this.renderContent();
+        }
+      });
+    });
+    
     // Sort buttons
     document.querySelectorAll('.sort-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -485,10 +616,10 @@ const StreamPage = {
       });
     });
     
-    // Genre boxes
-    document.querySelectorAll('.genre-box').forEach(box => {
-      box.addEventListener('click', () => {
-        const genre = box.dataset.genre;
+    // Genre chips
+    document.querySelectorAll('.genre-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const genre = chip.dataset.genre;
         this.selectedGenre = this.selectedGenre === genre ? null : genre;
         this.renderContent();
       });
