@@ -9,6 +9,7 @@ const XamanWallet = {
   sdk: null,
   initialized: false,
   isConnecting: false,
+  mintProgressInterval: null,
   
   /**
    * Open Xaman URL in a popup window instead of a tab
@@ -221,6 +222,46 @@ const XamanWallet = {
   },
   
   /**
+   * Start animated progress during minting
+   */
+  startMintProgress(totalNFTs, onProgress) {
+    // Estimate ~1.5 seconds per NFT
+    const estimatedTotalTime = totalNFTs * 1.5 * 1000; // in ms
+    const startTime = Date.now();
+    let currentEstimate = 0;
+    
+    this.mintProgressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      // Progress goes up to 95% based on time estimate, never hits 100 until actually done
+      const timeProgress = Math.min(elapsed / estimatedTotalTime, 0.95);
+      const estimatedMinted = Math.floor(timeProgress * totalNFTs);
+      
+      if (estimatedMinted > currentEstimate) {
+        currentEstimate = estimatedMinted;
+        if (onProgress) {
+          onProgress({
+            stage: 'minting',
+            message: `Minting NFTs... ~${currentEstimate}/${totalNFTs} complete`,
+            quantity: totalNFTs,
+            progress: Math.round(timeProgress * 100),
+            estimatedMinted: currentEstimate,
+          });
+        }
+      }
+    }, 500);
+  },
+  
+  /**
+   * Stop the progress animation
+   */
+  stopMintProgress() {
+    if (this.mintProgressInterval) {
+      clearInterval(this.mintProgressInterval);
+      this.mintProgressInterval = null;
+    }
+  },
+  
+  /**
    * Mint NFT
    * @param {string} metadataUri - Single track metadata URI
    * @param {object} options - Minting options
@@ -252,8 +293,8 @@ const XamanWallet = {
       taxon = 0, 
       onProgress, 
       tracks = null, 
-      trackIds = null,   // NEW: track database IDs
-      releaseId = null   // NEW: release database ID
+      trackIds = null,
+      releaseId = null
     } = options;
     
     // Calculate total NFTs: tracks × editions
@@ -284,8 +325,9 @@ const XamanWallet = {
       if (onProgress) {
         onProgress({
           stage: 'paying',
-          message: `Paying mint fee (${mintFee.toFixed(6)} XRP)...`,
+          message: `Step 1/3: Pay mint fee (${mintFee.toFixed(6)} XRP)`,
           quantity: quantity,
+          progress: 0,
         });
       }
       
@@ -296,7 +338,7 @@ const XamanWallet = {
           Amount: mintFeeDrops,
         },
         custom_meta: {
-          instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${quantity} NFT editions`,
+          instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${totalNFTs} NFT editions`,
         },
       });
       
@@ -325,8 +367,9 @@ const XamanWallet = {
       if (onProgress) {
         onProgress({
           stage: 'authorizing',
-          message: 'Authorize minting in Xaman...',
+          message: 'Step 2/3: Authorize minting in Xaman',
           quantity: quantity,
+          progress: 10,
         });
       }
       
@@ -337,7 +380,7 @@ const XamanWallet = {
           SetFlag: 10, // asfAuthorizedNFTokenMinter
         },
         custom_meta: {
-          instruction: `Authorize XRP Music to mint ${quantity} NFT copies for you`,
+          instruction: `Authorize XRP Music to mint ${totalNFTs} NFT editions for you`,
         },
       });
       
@@ -362,43 +405,60 @@ const XamanWallet = {
       
       console.log('Authorization successful:', authResult.txHash);
       
-      // STEP 3: Backend batch mints
+      // STEP 3: Backend batch mints with animated progress
       if (onProgress) {
         onProgress({
           stage: 'minting',
-          message: `Minting ${totalNFTs} NFTs... Please don't refresh!`,
+          message: `Step 3/3: Minting ${totalNFTs} NFTs... Please wait!`,
           quantity: totalNFTs,
+          progress: 15,
         });
       }
       
+      // Start the animated progress bar
+      this.startMintProgress(totalNFTs, onProgress);
+      
       const mintResponse = await fetch('/api/batch-mint', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'mint',
-    artistAddress: AppState.user.address,
-    metadataUri: metadataUri,
-    tracks: tracks,
-    trackIds: trackIds,
-    releaseId: releaseId,
-    quantity: quantity,
-    transferFee: transferFee,
-    taxon: taxon,
-  }),
-});
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mint',
+          artistAddress: AppState.user.address,
+          metadataUri: metadataUri,
+          tracks: tracks,
+          trackIds: trackIds,
+          releaseId: releaseId,
+          quantity: quantity,
+          transferFee: transferFee,
+          taxon: taxon,
+        }),
+      });
+      
+      // Stop the animated progress
+      this.stopMintProgress();
 
-// Handle non-JSON responses
-const mintText = await mintResponse.text();
-let mintData;
-try {
-  mintData = JSON.parse(mintText);
-} catch {
-  console.error('Batch mint response not JSON:', mintText);
-  throw new Error(mintText || 'Minting failed - server error');
-}
+      // Handle non-JSON responses
+      const mintText = await mintResponse.text();
+      let mintData;
+      try {
+        mintData = JSON.parse(mintText);
+      } catch {
+        console.error('Batch mint response not JSON:', mintText);
+        throw new Error(mintText || 'Minting failed - server error');
+      }
       
       if (!mintData.success) {
         throw new Error(mintData.error || 'Batch minting failed');
+      }
+      
+      // Final progress update
+      if (onProgress) {
+        onProgress({
+          stage: 'complete',
+          message: `Successfully minted ${mintData.totalMinted} NFTs!`,
+          quantity: mintData.totalMinted,
+          progress: 100,
+        });
       }
       
       return {
@@ -411,6 +471,8 @@ try {
       };
       
     } catch (error) {
+      // Make sure to stop progress on error
+      this.stopMintProgress();
       console.error('mintNFT error:', error);
       throw error;
     }
