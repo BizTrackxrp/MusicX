@@ -6,6 +6,7 @@
 const Modals = {
   activeModal: null,
   nowPlayingInterval: null,
+  mintingInProgress: false,
   
   genres: [
     { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
@@ -28,7 +29,7 @@ const Modals = {
       container.querySelector('.modal-overlay')?.classList.add('visible');
     });
     container.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) this.close();
+      if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress) this.close();
     });
     container.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
       btn.addEventListener('click', () => this.close());
@@ -53,7 +54,7 @@ const Modals = {
   },
   
   handleEsc(e) {
-    if (e.key === 'Escape') Modals.close();
+    if (e.key === 'Escape' && !Modals.mintingInProgress) Modals.close();
   },
   
   async showNowPlaying() {
@@ -3233,9 +3234,20 @@ showTrackPurchase(release, track, trackIdx) {
                     <label class="form-label">Price (XRP) *</label>
                     <input type="number" class="form-input" name="price" id="release-price" placeholder="0.5" step="0.01" min="0" required>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label">Editions *</label>
-                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="200" value="100" required>
+                 <div class="form-group">
+                    <label class="form-label">
+                      Editions *
+                      <span class="edition-info-badge" title="Maximum 30 editions during beta. We're upgrading our servers to support more!">ℹ️</span>
+                    </label>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="30" min="1" max="30" value="30" required>
+                    <p class="form-hint edition-limit-hint">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                      </svg>
+                      Max 30 editions during beta — higher limits coming soon!
+                    </p>
                   </div>
                 </div>
                 
@@ -3422,6 +3434,68 @@ showTrackPurchase(release, track, trackIdx) {
         .mint-status-icon .spinner { width: 40px; height: 40px; margin: 0 auto; }
         .mint-status-text { font-size: 14px; color: var(--text-secondary); }
         .btn-mint { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-mint { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .edition-info-badge { cursor: help; margin-left: 4px; }
+        .edition-limit-hint { color: var(--accent); margin-top: 8px; font-size: 12px; }
+        .mint-progress-container {
+          margin: 20px 0;
+          padding: 20px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-lg);
+        }
+        .mint-progress-bar {
+          height: 12px;
+          background: var(--bg-card);
+          border-radius: 6px;
+          overflow: hidden;
+          margin-bottom: 12px;
+        }
+        .mint-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--accent), #a855f7);
+          border-radius: 6px;
+          transition: width 300ms ease;
+        }
+        .mint-progress-stats {
+          display: flex;
+          justify-content: space-between;
+          font-size: 13px;
+          color: var(--text-secondary);
+        }
+        .mint-progress-percent {
+          font-weight: 600;
+          color: var(--accent);
+        }
+        .mint-progress-time {
+          color: var(--text-muted);
+        }
+        .mint-status-centered {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 1001;
+          background: var(--bg-card);
+          padding: 40px;
+          border-radius: var(--radius-xl);
+          box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+          text-align: center;
+          min-width: 350px;
+          max-width: 450px;
+        }
+        .mint-warning {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 16px;
+          padding: 10px 16px;
+          background: rgba(245, 158, 11, 0.1);
+          border: 1px solid rgba(245, 158, 11, 0.3);
+          border-radius: var(--radius-md);
+          font-size: 12px;
+          color: #f59e0b;
+        }
         .mint-success { text-align: center; }
         .mint-success-cover { width: 120px; height: 120px; margin: 0 auto 16px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); position: relative; }
         .mint-success-cover img { width: 100%; height: 100%; object-fit: cover; }
@@ -3493,6 +3567,14 @@ showTrackPurchase(release, track, trackIdx) {
     document.getElementById('create-next-2')?.addEventListener('click', () => {
       if (!coverFile) { alert('Please upload cover art'); return; }
       if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
+      
+      // Validate edition limit
+      const editions = parseInt(document.getElementById('release-editions').value) || 1;
+      if (editions > 30) {
+        alert('Maximum 30 editions during beta. We\'re upgrading our servers to support more!');
+        document.getElementById('release-editions').value = 30;
+        return;
+      }
       
       const editions = parseInt(document.getElementById('release-editions').value) || 1;
       const royalty = document.getElementById('release-royalty').value;
@@ -3804,8 +3886,9 @@ const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
   tracks: uploadedTracks.length > 1 ? trackMetadataUris : null,
   trackIds: trackIds,
   releaseId: releaseId,
-  onProgress: (progress) => {
+onProgress: (progress) => {
     if (progress.stage === 'paying') {
+      Modals.mintingInProgress = true;
       statusEl.innerHTML = `
         <div class="mint-status-icon">
           <div class="spinner"></div>
@@ -3813,6 +3896,14 @@ const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
         <div class="mint-status-text">Step 5/6: Sign payment in Xaman</div>
         <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 1 of 2</p>
         <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Pay mint fee to platform</p>
+        <div class="mint-warning">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Don't close this page
+        </div>
       `;
     } else if (progress.stage === 'authorizing') {
       statusEl.innerHTML = `
@@ -3822,16 +3913,50 @@ const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
         <div class="mint-status-text">Step 5/6: Sign authorization in Xaman</div>
         <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 2 of 2</p>
         <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Authorize XRP Music to mint your NFTs</p>
+        <div class="mint-warning">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Don't close this page
+        </div>
       `;
     } else if (progress.stage === 'minting') {
+      const minted = progress.minted || 0;
+      const total = progress.quantity || totalNFTs;
+      const percent = total > 0 ? Math.round((minted / total) * 100) : 0;
+      const elapsed = progress.elapsed || 0;
+      const perNft = minted > 0 ? elapsed / minted : 8.5;
+      const remaining = Math.max(0, (total - minted) * perNft);
+      const remainingText = remaining > 60 
+        ? `~${Math.ceil(remaining / 60)} min remaining`
+        : `~${Math.ceil(remaining)} sec remaining`;
+      
       statusEl.innerHTML = `
-        <div class="mint-status-icon">
-          <div class="spinner"></div>
+        <div class="mint-status-text" style="font-size: 18px; font-weight: 700; margin-bottom: 20px;">
+          Minting Your NFTs ⛓️
         </div>
-        <div class="mint-status-text">Step 6/6: Minting ${progress.quantity} NFTs...</div>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">Saving your music forever to the XRP Ledger ⛓️</p>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Thanks for your patience!</p>
-        <p style="font-size: 12px; color: #f59e0b; margin-top: 8px; font-weight: 500;">⚠️ Please don't close or refresh this page</p>
+        <div class="mint-progress-container">
+          <div class="mint-progress-bar">
+            <div class="mint-progress-fill" style="width: ${percent}%"></div>
+          </div>
+          <div class="mint-progress-stats">
+            <span class="mint-progress-percent">${percent}% (${minted}/${total})</span>
+            <span class="mint-progress-time">${remainingText}</span>
+          </div>
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary);">
+          Saving your music forever to the XRP Ledger
+        </p>
+        <div class="mint-warning">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Please don't close or refresh this page
+        </div>
       `;
     }
   },
@@ -3851,26 +3976,33 @@ await API.updateRelease(releaseId, {
 });
 
 // Success - NFTs minted and ready to sell!
+Modals.mintingInProgress = false;
 statusEl.innerHTML = `
   <div class="mint-success">
     <div class="mint-success-cover">
       <img src="${URL.createObjectURL(coverFile)}" alt="Cover">
+      <div class="mint-success-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      </div>
     </div>
-    <div class="mint-success-icon">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-      </svg>
-    </div>
-    <div class="mint-success-title">${releaseTitle}</div>
+    <div class="mint-success-title">🎉 ${releaseTitle}</div>
     <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${mintResult.totalMinted} NFTs minted</div>
-    <p class="mint-success-msg">Your music is now live on the XRP Ledger!</p>
+    <p class="mint-success-msg">Your music is now live on the XRP Ledger and ready for fans to collect!</p>
     <div class="mint-success-actions">
       <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-        Share
+        Share on X
       </button>
-      <button type="button" class="btn btn-primary" id="mint-success-done">View Release</button>
+      <button type="button" class="btn btn-primary" id="mint-success-done">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        View Release
+      </button>
     </div>
   </div>
 `;
@@ -3880,8 +4012,14 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
   Router.navigate('profile');
 });
 
+document.getElementById('mint-success-done')?.addEventListener('click', () => {
+  this.close();
+  Router.navigate('profile');
+});
+
       } catch (error) {
         console.error('Mint failed:', error);
+        Modals.mintingInProgress = false;
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--error);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
