@@ -3,14 +3,16 @@
  * Upload files to IPFS via Lighthouse
  */
 
+import formidable from 'formidable';
+import fs from 'fs';
+
 export const config = {
   api: {
-    bodyParser: false, // Required for file uploads
+    bodyParser: false,
   },
 };
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -24,27 +26,20 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Parse multipart form data
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
+    // Use formidable for proper multipart parsing (streams to disk, not memory)
+    const form = formidable({ 
+      maxFileSize: 50 * 1024 * 1024, // 50MB max
+      keepExtensions: true,
+    });
     
-    // Extract boundary from content-type
-    const contentType = req.headers['content-type'];
-    const boundaryMatch = contentType.match(/boundary=(.+)$/);
-    if (!boundaryMatch) {
-      return res.status(400).json({ error: 'Invalid content type' });
-    }
+    const [fields, files] = await form.parse(req);
+    const file = files.file?.[0];
     
-    const boundary = boundaryMatch[1];
-    const parts = parseMultipart(buffer, boundary);
-    
-    const filePart = parts.find(p => p.name === 'file');
-    if (!filePart) {
+    if (!file) {
       return res.status(400).json({ error: 'No file provided' });
     }
+    
+    console.log('Uploading:', file.originalFilename, Math.round(file.size / 1024), 'KB');
     
     // Upload to Lighthouse
     const lighthouseApiKey = process.env.LIGHTHOUSE_API_KEY;
@@ -52,10 +47,11 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Lighthouse not configured' });
     }
     
-    // Create form data for Lighthouse
+    // Read file and create FormData for Lighthouse
+    const fileBuffer = fs.readFileSync(file.filepath);
     const formData = new FormData();
-    const blob = new Blob([filePart.data], { type: filePart.contentType });
-    formData.append('file', blob, filePart.filename);
+    const blob = new Blob([fileBuffer], { type: file.mimetype });
+    formData.append('file', blob, file.originalFilename);
     
     const lighthouseResponse = await fetch('https://upload.lighthouse.storage/api/v0/add', {
       method: 'POST',
@@ -65,6 +61,9 @@ export default async function handler(req, res) {
       body: formData,
     });
     
+    // Clean up temp file
+    fs.unlink(file.filepath, () => {});
+    
     if (!lighthouseResponse.ok) {
       const error = await lighthouseResponse.text();
       console.error('Lighthouse error:', error);
@@ -72,8 +71,6 @@ export default async function handler(req, res) {
     }
     
     const lighthouseData = await lighthouseResponse.json();
-    
-    // Lighthouse returns { Name, Hash, Size }
     const cid = lighthouseData.Hash;
     
     return res.json({
@@ -85,64 +82,6 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('Upload error:', error);
-    return res.status(500).json({ error: 'Upload failed' });
+    return res.status(500).json({ error: error.message || 'Upload failed' });
   }
-}
-
-/**
- * Parse multipart form data
- */
-function parseMultipart(buffer, boundary) {
-  const parts = [];
-  const boundaryBuffer = Buffer.from(`--${boundary}`);
-  const endBoundary = Buffer.from(`--${boundary}--`);
-  
-  let start = buffer.indexOf(boundaryBuffer) + boundaryBuffer.length + 2; // Skip \r\n
-  
-  while (start < buffer.length) {
-    let end = buffer.indexOf(boundaryBuffer, start);
-    if (end === -1) break;
-    
-    const partBuffer = buffer.slice(start, end - 2); // Remove trailing \r\n
-    
-    // Find headers end
-    const headerEnd = partBuffer.indexOf('\r\n\r\n');
-    if (headerEnd === -1) {
-      start = end + boundaryBuffer.length + 2;
-      continue;
-    }
-    
-    const headerStr = partBuffer.slice(0, headerEnd).toString();
-    const data = partBuffer.slice(headerEnd + 4);
-    
-    // Parse headers
-    const headers = {};
-    headerStr.split('\r\n').forEach(line => {
-      const [key, ...valueParts] = line.split(':');
-      if (key && valueParts.length) {
-        headers[key.toLowerCase().trim()] = valueParts.join(':').trim();
-      }
-    });
-    
-    // Extract name and filename from Content-Disposition
-    const disposition = headers['content-disposition'] || '';
-    const nameMatch = disposition.match(/name="([^"]+)"/);
-    const filenameMatch = disposition.match(/filename="([^"]+)"/);
-    
-    parts.push({
-      name: nameMatch ? nameMatch[1] : null,
-      filename: filenameMatch ? filenameMatch[1] : null,
-      contentType: headers['content-type'] || 'application/octet-stream',
-      data: data,
-    });
-    
-    start = end + boundaryBuffer.length + 2;
-    
-    // Check for end boundary
-    if (buffer.slice(end, end + endBoundary.length).equals(endBoundary)) {
-      break;
-    }
-  }
-  
-  return parts;
 }
