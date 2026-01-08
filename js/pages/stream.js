@@ -730,15 +730,18 @@ const StreamPage = {
    */
   renderTopTrackCard(track, index) {
     const rank = index + 1;
-    const available = track.release.totalEditions - track.release.soldEditions;
+    const release = track.release || {};
+    const available = (release.totalEditions || 0) - (release.soldEditions || 0);
     const isSoldOut = available <= 0;
-    const price = track.release.songPrice || track.release.albumPrice;
+    const price = release.songPrice || release.albumPrice || 0;
+    // Defensive: check for actual valid URL
+    const hasCover = release.coverUrl && release.coverUrl.length > 0 && release.coverUrl !== 'null';
     
     return `
       <div class="release-card top-track-card" data-top-track-index="${index}">
         <div class="release-card-cover">
-          ${track.release.coverUrl 
-            ? `<img src="${track.release.coverUrl}" alt="${track.displayTitle}">`
+          ${hasCover 
+            ? `<img src="${release.coverUrl}" alt="${track.displayTitle || 'Track'}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="rank-badge rank-${rank}">#${rank}</span>
@@ -750,13 +753,13 @@ const StreamPage = {
           </div>
         </div>
         <div class="release-card-info">
-          <div class="release-card-title">${track.displayTitle}</div>
-          <div class="release-card-artist">${track.release.artistName || Helpers.truncateAddress(track.release.artistAddress)}</div>
+          <div class="release-card-title">${track.displayTitle || 'Untitled'}</div>
+          <div class="release-card-artist">${release.artistName || (typeof Helpers !== 'undefined' ? Helpers.truncateAddress(release.artistAddress) : 'Unknown Artist')}</div>
           <div class="release-card-footer">
             <span class="release-card-price">${price} XRP</span>
             <span class="release-card-plays">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              ${Helpers.formatNumber ? Helpers.formatNumber(track.plays) : track.plays.toLocaleString()}
+              ${typeof Helpers !== 'undefined' && Helpers.formatNumber ? Helpers.formatNumber(track.plays || 0) : (track.plays || 0).toLocaleString()}
             </span>
           </div>
         </div>
@@ -804,15 +807,17 @@ const StreamPage = {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
     const price = release.albumPrice || release.songPrice;
+    // Defensive: check for actual valid URL, not just truthy
+    const hasCover = release.coverUrl && release.coverUrl.length > 0 && release.coverUrl !== 'null';
     
     return `
       <div class="release-card" data-release-id="${release.id}">
         <div class="release-card-cover">
-          ${release.coverUrl 
-            ? `<img src="${release.coverUrl}" alt="${release.title}">`
+          ${hasCover 
+            ? `<img src="${release.coverUrl}" alt="${release.title || 'Release'}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
-          <span class="release-type-badge ${release.type}">${release.type}</span>
+          <span class="release-type-badge ${release.type || 'single'}">${release.type || 'single'}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
           <div class="release-play-overlay">
             <button class="release-play-btn" data-release-id="${release.id}">
@@ -821,10 +826,10 @@ const StreamPage = {
           </div>
         </div>
         <div class="release-card-info">
-          <div class="release-card-title">${release.title}</div>
+          <div class="release-card-title">${release.title || 'Untitled'}</div>
           <div class="release-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
           <div class="release-card-footer">
-            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-price">${price || 0} XRP</span>
             ${release.type !== 'single' ? `<span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>` : ''}
           </div>
         </div>
