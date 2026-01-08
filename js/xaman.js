@@ -372,22 +372,30 @@ const XamanWallet = {
       }
       
       const mintResponse = await fetch('/api/batch-mint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'mint',
-          artistAddress: AppState.user.address,
-          metadataUri: metadataUri,
-          tracks: tracks,       // Array of track URIs for albums
-          trackIds: trackIds,   // NEW: Array of track database IDs
-          releaseId: releaseId, // NEW: Release database ID
-          quantity: quantity,
-          transferFee: transferFee,
-          taxon: taxon,
-        }),
-      });
-      
-      const mintData = await mintResponse.json();
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'mint',
+    artistAddress: AppState.user.address,
+    metadataUri: metadataUri,
+    tracks: tracks,
+    trackIds: trackIds,
+    releaseId: releaseId,
+    quantity: quantity,
+    transferFee: transferFee,
+    taxon: taxon,
+  }),
+});
+
+// Handle non-JSON responses
+const mintText = await mintResponse.text();
+let mintData;
+try {
+  mintData = JSON.parse(mintText);
+} catch {
+  console.error('Batch mint response not JSON:', mintText);
+  throw new Error(mintText || 'Minting failed - server error');
+}
       
       if (!mintData.success) {
         throw new Error(mintData.error || 'Batch minting failed');
