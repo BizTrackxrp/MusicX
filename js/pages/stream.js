@@ -145,7 +145,7 @@ const StreamPage = {
     
     const html = `
       <div class="stream-page animate-fade-in">
-        <!-- Top Played Section -->
+        <!-- Top Played Section - 2 ROWS OF 5 CARDS -->
         <section class="stream-section">
           <div class="section-header">
             <div class="section-title-with-tabs">
@@ -165,10 +165,10 @@ const StreamPage = {
             </button>
           </div>
           
-          <div class="top-tracks-list">
+          <div class="top-tracks-grid">
             ${this.topTracks.length > 0 
-              ? this.topTracks.map((track, index) => this.renderTopTrackItem(track, index)).join('')
-              : '<div class="empty-message">No play data available yet</div>'
+              ? this.topTracks.map((track, index) => this.renderTopTrackCard(track, index)).join('')
+              : '<div class="empty-message" style="grid-column: 1/-1;">No play data available yet</div>'
             }
           </div>
         </section>
@@ -286,6 +286,75 @@ const StreamPage = {
           color: var(--accent);
         }
         
+        /* Top Tracks Grid - 2 rows of 5 cards */
+        .top-tracks-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 16px;
+        }
+        @media (max-width: 1200px) {
+          .top-tracks-grid {
+            grid-template-columns: repeat(4, 1fr);
+          }
+        }
+        @media (max-width: 900px) {
+          .top-tracks-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+        }
+        @media (max-width: 640px) {
+          .top-tracks-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+          }
+        }
+        
+        /* Rank Badge */
+        .rank-badge {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          padding: 4px 10px;
+          font-size: 12px;
+          font-weight: 800;
+          border-radius: 6px;
+          color: white;
+          z-index: 2;
+        }
+        .rank-badge.rank-1 {
+          background: linear-gradient(135deg, #ffd700, #ffaa00);
+          box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4);
+        }
+        .rank-badge.rank-2 {
+          background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+          box-shadow: 0 2px 8px rgba(192, 192, 192, 0.4);
+        }
+        .rank-badge.rank-3 {
+          background: linear-gradient(135deg, #cd7f32, #b87333);
+          box-shadow: 0 2px 8px rgba(205, 127, 50, 0.4);
+        }
+        .rank-badge.rank-4,
+        .rank-badge.rank-5,
+        .rank-badge.rank-6,
+        .rank-badge.rank-7,
+        .rank-badge.rank-8,
+        .rank-badge.rank-9,
+        .rank-badge.rank-10 {
+          background: rgba(59, 130, 246, 0.9);
+        }
+        
+        /* Play count in card footer */
+        .release-card-plays {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .release-card-plays svg {
+          color: var(--accent);
+        }
+        
         /* Period Tabs for Top Played */
         .period-tabs {
           display: flex;
@@ -312,94 +381,6 @@ const StreamPage = {
         .period-tab.active {
           background: var(--accent);
           color: white;
-        }
-        
-        /* Top Tracks List */
-        .top-tracks-list {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-          overflow: hidden;
-        }
-        .top-track-item {
-          display: grid;
-          grid-template-columns: 40px 56px 1fr auto;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          cursor: pointer;
-          transition: background 150ms;
-          border-bottom: 1px solid var(--border-color);
-        }
-        .top-track-item:last-child {
-          border-bottom: none;
-        }
-        .top-track-item:hover {
-          background: var(--bg-hover);
-        }
-        .top-track-item.playing {
-          background: rgba(59, 130, 246, 0.1);
-        }
-        .top-track-rank {
-          font-size: 16px;
-          font-weight: 700;
-          color: var(--text-muted);
-          text-align: center;
-        }
-        .top-track-rank.top-3 {
-          color: var(--accent);
-        }
-        .top-track-cover {
-          width: 56px;
-          height: 56px;
-          border-radius: var(--radius-md);
-          overflow: hidden;
-          position: relative;
-          flex-shrink: 0;
-        }
-        .top-track-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .top-track-info {
-          min-width: 0;
-        }
-        .top-track-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          margin-bottom: 2px;
-        }
-        .top-track-item.playing .top-track-title {
-          color: var(--accent);
-        }
-        .top-track-artist {
-          font-size: 13px;
-          color: var(--text-muted);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .top-track-meta {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          text-align: right;
-        }
-        .top-track-plays {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-secondary);
-        }
-        .top-track-plays svg {
-          color: var(--accent);
         }
         
         /* Tab Toggle */
@@ -745,7 +726,46 @@ const StreamPage = {
   },
   
   /**
-   * Render a top track item with rank and play count
+   * Render a top track as a CARD with rank badge (like release cards)
+   */
+  renderTopTrackCard(track, index) {
+    const rank = index + 1;
+    const available = track.release.totalEditions - track.release.soldEditions;
+    const isSoldOut = available <= 0;
+    const price = track.release.songPrice || track.release.albumPrice;
+    
+    return `
+      <div class="release-card top-track-card" data-top-track-index="${index}">
+        <div class="release-card-cover">
+          ${track.release.coverUrl 
+            ? `<img src="${track.release.coverUrl}" alt="${track.displayTitle}">`
+            : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+          }
+          <span class="rank-badge rank-${rank}">#${rank}</span>
+          <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
+          <div class="release-play-overlay">
+            <button class="release-play-btn" data-top-track-index="${index}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+          </div>
+        </div>
+        <div class="release-card-info">
+          <div class="release-card-title">${track.displayTitle}</div>
+          <div class="release-card-artist">${track.release.artistName || Helpers.truncateAddress(track.release.artistAddress)}</div>
+          <div class="release-card-footer">
+            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-plays">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              ${Helpers.formatNumber ? Helpers.formatNumber(track.plays) : track.plays.toLocaleString()}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * Render a top track item with rank and play count (list view - kept for View All page)
    */
   renderTopTrackItem(track, index) {
     const rank = index + 1;
@@ -932,16 +952,29 @@ const StreamPage = {
       });
     });
     
-    // Top track items
-    document.querySelectorAll('.top-track-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const index = parseInt(item.dataset.topTrackIndex, 10);
+    // Top track cards (click card to open release modal)
+    document.querySelectorAll('.top-track-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.release-play-btn')) return;
+        const index = parseInt(card.dataset.topTrackIndex, 10);
+        const track = this.topTracks[index];
+        if (track?.release) {
+          Modals.showRelease(track.release);
+        }
+      });
+    });
+    
+    // Play buttons on top track cards
+    document.querySelectorAll('.top-track-card .release-play-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const index = parseInt(btn.dataset.topTrackIndex, 10);
         const track = this.topTracks[index];
         if (track) this.playTrack(track, this.topTracks, index);
       });
     });
     
-    // Track items
+    // Track items (list view)
     document.querySelectorAll('.track-item').forEach(item => {
       item.addEventListener('click', () => {
         const index = parseInt(item.dataset.trackIndex, 10);
