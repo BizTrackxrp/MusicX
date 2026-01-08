@@ -3658,9 +3658,19 @@ showTrackPurchase(release, track, trackIdx) {
       Array.from(audioInput.files).forEach(handleAudioFile);
     });
     
-    function handleAudioFile(file) {
+   function handleAudioFile(file) {
       if (!file.type.startsWith('audio/')) { alert('Please upload an audio file'); return; }
-      if (file.size > 50 * 1024 * 1024) { alert('File too large (max 50MB)'); return; }
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      if (file.size > 20 * 1024 * 1024) { 
+        alert(`File "${file.name}" is ${sizeMB}MB which exceeds the 20MB limit.\n\nPlease convert to MP3 for smaller file sizes.\n\nTip: WAV files are typically 10x larger than MP3s.`); 
+        return; 
+      }
+      if (file.type === 'audio/wav' || file.type === 'audio/x-wav') {
+        if (file.size > 10 * 1024 * 1024) {
+          const proceed = confirm(`WAV file "${file.name}" is ${sizeMB}MB.\n\nLarge WAV files may fail to upload. We strongly recommend converting to MP3 for better reliability.\n\nContinue anyway?`);
+          if (!proceed) return;
+        }
+      }
       
       const trackNum = tracks.length + 1;
       const track = {
