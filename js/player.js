@@ -1,6 +1,13 @@
 /**
  * XRP Music - Audio Player
  * Handles playback, queue, progress, and volume
+ * 
+ * SHUFFLE BEHAVIOR:
+ * - Shuffle is ALWAYS ON by default (no toggle)
+ * - When a song ends, a random song from the queue plays next
+ * - Skip/Next button plays a random song
+ * - Repeat overrides shuffle (replays current track)
+ * - Playlists will have their own queue logic (future feature)
  */
 
 /**
@@ -50,6 +57,7 @@ async function getWorkingIpfsUrl(cidOrUrl) {
 const Player = {
   audio: null,
   progressInterval: null,
+  allTracksCache: [], // Cache of all available tracks for shuffle
   
   /**
    * Initialize player
@@ -197,20 +205,100 @@ const Player = {
   },
   
   /**
+   * Build queue from all available tracks in AppState
+   * ALWAYS SHUFFLED - fresh random order each time site loads
+   */
+  buildGlobalQueue() {
+    const releases = AppState.releases || [];
+    const allTracks = [];
+    
+    releases.forEach(release => {
+      (release.tracks || []).forEach((track, idx) => {
+        allTracks.push({
+          id: parseInt(track.id) || idx,
+          trackId: track.id,
+          title: release.type === 'single' ? release.title : track.title,
+          artist: release.artistName || (typeof Helpers !== 'undefined' ? Helpers.truncateAddress(release.artistAddress) : release.artistAddress),
+          cover: release.coverUrl,
+          ipfsHash: track.audioCid,
+          releaseId: release.id,
+          duration: track.duration,
+        });
+      });
+    });
+    
+    // SHUFFLE the tracks so it's different every time!
+    const shuffledTracks = typeof Helpers !== 'undefined' && Helpers.shuffle
+      ? Helpers.shuffle([...allTracks])
+      : this.shuffleArray([...allTracks]);
+    
+    this.allTracksCache = shuffledTracks;
+    console.log('🎲 Global queue built & shuffled:', shuffledTracks.length, 'tracks');
+    return shuffledTracks;
+  },
+  
+  /**
+   * Get a random track from all available tracks (excluding current)
+   */
+  getRandomTrack(excludeTrackId = null) {
+    // Make sure we have tracks cached
+    if (this.allTracksCache.length === 0) {
+      this.buildGlobalQueue();
+    }
+    
+    const tracks = this.allTracksCache;
+    if (tracks.length === 0) return null;
+    if (tracks.length === 1) return tracks[0];
+    
+    // Filter out current track if specified
+    const available = excludeTrackId 
+      ? tracks.filter(t => t.trackId !== excludeTrackId && t.id !== excludeTrackId)
+      : tracks;
+    
+    if (available.length === 0) return tracks[0]; // Fallback to any track
+    
+    const randomIndex = Math.floor(Math.random() * available.length);
+    return available[randomIndex];
+  },
+  
+  /**
    * Play a track (NOW ASYNC with gateway fallback)
+   * @param {Object} track - Track to play
+   * @param {Array} queue - Optional queue (if null, uses global shuffle)
+   * @param {Number} queueIndex - Index in queue
    */
   async playTrack(track, queue = null, queueIndex = 0) {
     if (!track) return;
     
+    console.log('🎵 Playing track:', track.title);
+    
     // Update state
     setCurrentTrack(track);
-    if (queue) {
-      // ALWAYS SHUFFLE the queue (except current track stays first)
+    
+    // If queue provided, set it up
+    if (queue && queue.length > 0) {
+      // Shuffle the queue, keeping current track at position 0
       const currentTrack = queue[queueIndex];
       const otherTracks = queue.filter((_, i) => i !== queueIndex);
-      const shuffledOthers = Helpers.shuffle([...otherTracks]);
+      const shuffledOthers = typeof Helpers !== 'undefined' && Helpers.shuffle 
+        ? Helpers.shuffle([...otherTracks])
+        : this.shuffleArray([...otherTracks]);
       const shuffledQueue = [currentTrack, ...shuffledOthers];
       setQueue(shuffledQueue, 0);
+      
+      // Also update our cache with these tracks
+      this.allTracksCache = shuffledQueue;
+    } else {
+      // No queue provided - build global queue if needed
+      if (this.allTracksCache.length === 0) {
+        this.buildGlobalQueue();
+      }
+      // Set queue to all tracks with current at front
+      const otherTracks = this.allTracksCache.filter(t => t.trackId !== track.trackId && t.id !== track.id);
+      const shuffledOthers = typeof Helpers !== 'undefined' && Helpers.shuffle
+        ? Helpers.shuffle([...otherTracks])
+        : this.shuffleArray([...otherTracks]);
+      setQueue([track, ...shuffledOthers], 0);
     }
     
     // Get audio source - try Helpers.getIPFSUrl if it exists, otherwise build URL
@@ -241,6 +329,18 @@ const Player = {
     // Update UI
     this.updateTrackInfo(track);
     this.showPlayerBar();
+  },
+  
+  /**
+   * Simple array shuffle (Fisher-Yates) as fallback
+   */
+  shuffleArray(array) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   },
   
   /**
@@ -278,35 +378,50 @@ const Player = {
   },
   
   /**
-   * Play next track - ALWAYS RANDOM (shuffle is default)
+   * Play next track - ALWAYS RANDOM from global library
+   * (unless in a playlist - future feature)
    */
   next() {
     const { queue, queueIndex } = AppState.player;
-    if (queue.length === 0) return;
+    const currentTrack = AppState.player.currentTrack;
     
-    // Always pick a random next track (shuffle is always on)
-    // But avoid playing the same track unless it's the only one
-    let nextIndex;
-    if (queue.length === 1) {
-      nextIndex = 0;
-    } else {
-      // Pick random index that's not the current one
+    console.log('⏭️ Next track requested. Queue length:', queue.length);
+    
+    // If we have a queue with more than just current track
+    if (queue.length > 1) {
+      // Pick a random track from queue that's not current
+      let nextIndex;
+      let attempts = 0;
       do {
         nextIndex = Math.floor(Math.random() * queue.length);
-      } while (nextIndex === queueIndex && queue.length > 1);
+        attempts++;
+      } while (nextIndex === queueIndex && attempts < 10);
+      
+      const nextTrack = queue[nextIndex];
+      console.log('🎵 Playing random from queue:', nextTrack?.title);
+      updatePlayer({ queueIndex: nextIndex });
+      this.playTrack(nextTrack);
+    } else {
+      // No queue or single item - get random from all tracks
+      const currentId = currentTrack?.trackId || currentTrack?.id;
+      const randomTrack = this.getRandomTrack(currentId);
+      
+      if (randomTrack) {
+        console.log('🎵 Playing random from library:', randomTrack.title);
+        this.playTrack(randomTrack);
+      } else {
+        console.log('⚠️ No tracks available to play');
+      }
     }
-    
-    const nextTrack = queue[nextIndex];
-    updatePlayer({ queueIndex: nextIndex });
-    this.playTrack(nextTrack);
   },
   
   /**
    * Play previous track
+   * - If > 3 seconds into song, restart it
+   * - Otherwise go to previous in history (or random)
    */
   previous() {
     const { queue, queueIndex } = AppState.player;
-    if (queue.length === 0) return;
     
     // If more than 3 seconds in, restart current track
     if (this.audio.currentTime > 3) {
@@ -314,12 +429,16 @@ const Player = {
       return;
     }
     
-    // Go to previous in queue order (or random if you prefer)
-    const prevIndex = queueIndex === 0 ? queue.length - 1 : queueIndex - 1;
-    const prevTrack = queue[prevIndex];
-    
-    updatePlayer({ queueIndex: prevIndex });
-    this.playTrack(prevTrack);
+    // If we have a queue, go to previous index
+    if (queue.length > 1) {
+      const prevIndex = queueIndex === 0 ? queue.length - 1 : queueIndex - 1;
+      const prevTrack = queue[prevIndex];
+      updatePlayer({ queueIndex: prevIndex });
+      this.playTrack(prevTrack);
+    } else {
+      // No queue history - just restart current
+      this.audio.currentTime = 0;
+    }
   },
   
   /**
@@ -466,12 +585,14 @@ const Player = {
   },
   
   onEnded() {
+    console.log('🎵 Track ended. Repeat:', AppState.player.isRepeat);
+    
     if (AppState.player.isRepeat) {
       // Repeat is ON - replay current track
       this.audio.currentTime = 0;
       this.play();
     } else {
-      // Repeat is OFF - play random next track (shuffle is always on)
+      // Repeat is OFF - play random next track
       this.next();
     }
   },
@@ -493,8 +614,12 @@ const Player = {
     const currentTimeEl = document.getElementById('expanded-current-time');
     const durationEl = document.getElementById('expanded-duration');
     
-    if (currentTimeEl) currentTimeEl.textContent = Helpers.formatDuration(this.audio.currentTime);
-    if (durationEl) durationEl.textContent = Helpers.formatDuration(this.audio.duration);
+    if (currentTimeEl && typeof Helpers !== 'undefined') {
+      currentTimeEl.textContent = Helpers.formatDuration(this.audio.currentTime);
+    }
+    if (durationEl && typeof Helpers !== 'undefined') {
+      durationEl.textContent = Helpers.formatDuration(this.audio.duration);
+    }
   },
   
   onLoadedMetadata() {
@@ -582,7 +707,7 @@ const Player = {
     if (!track) return;
     
     const trackId = track.trackId || track.id?.toString();
-    const isLiked = isTrackLiked(trackId);
+    const isLiked = typeof isTrackLiked === 'function' ? isTrackLiked(trackId) : false;
     
     const likeBtn = document.getElementById('player-like-btn');
     const expLikeBtn = document.getElementById('expanded-like-btn');
@@ -607,5 +732,13 @@ const Player = {
     if (expVolumeSlider) {
       expVolumeSlider.value = AppState.player.isMuted ? 0 : AppState.player.volume;
     }
+  },
+  
+  /**
+   * Refresh the all tracks cache (call when releases are loaded)
+   */
+  refreshTrackCache() {
+    this.buildGlobalQueue();
+    console.log('🔄 Track cache refreshed:', this.allTracksCache.length, 'tracks');
   },
 };
