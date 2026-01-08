@@ -3577,7 +3577,7 @@ if (totalNFTs > 1000) {
 }
       
       const royalty = document.getElementById('release-royalty').value;
-      const totalNFTs = tracks.length * editions;
+      
       const mintFee = calculateMintFee(editions, tracks.length);
       
       // Auto-detect type based on track count
