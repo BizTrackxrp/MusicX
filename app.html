@@ -226,7 +226,7 @@
     </div>
   </main>
 
-  <!-- Player Bar -->
+  <!-- Player Bar - RESTRUCTURED FOR CENTERED CONTROLS -->
   <div id="player-bar" class="player-bar hidden">
     <!-- Progress Bar (clickable) -->
     <div class="player-progress" id="player-progress">
@@ -234,23 +234,52 @@
     </div>
 
     <div class="player-content">
-      <!-- Track Info -->
-      <div class="player-track" id="player-track-info">
-        <img id="player-cover" class="player-cover" src="" alt="">
-        <div class="player-track-details">
-          <span class="player-title" id="player-title">Select a track to play</span>
-          <span class="player-artist" id="player-artist">Browse the marketplace</span>
+      <!-- LEFT: Track Info -->
+      <div class="player-left">
+        <div class="player-track" id="player-track-info">
+          <img id="player-cover" class="player-cover" src="" alt="">
+          <div class="player-track-details">
+            <span class="player-title" id="player-title">Select a track to play</span>
+            <span class="player-artist" id="player-artist">Browse the marketplace</span>
+          </div>
+          <!-- Mobile expand button -->
+          <button class="player-expand-btn" id="player-expand-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </button>
         </div>
-        <!-- Mobile expand button -->
-        <button class="player-expand-btn" id="player-expand-btn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="18 15 12 9 6 15"></polyline>
-          </svg>
-        </button>
       </div>
 
-      <!-- Like & Add buttons (desktop) -->
-      <div class="player-actions desktop-only" id="player-actions">
+      <!-- CENTER: Controls (desktop) - NO SHUFFLE BUTTON -->
+      <div class="player-center desktop-only">
+        <div class="player-controls">
+          <button class="control-btn" id="prev-btn" title="Previous">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="19 20 9 12 19 4 19 20"></polygon>
+              <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+          </button>
+          <button class="control-btn play-btn" id="play-btn">
+            <svg id="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <svg id="pause-icon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          </button>
+          <button class="control-btn" id="next-btn" title="Next">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"></polygon>
+              <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT: Like, Add, Repeat, Volume (desktop) -->
+      <div class="player-right desktop-only">
         <button class="player-action-btn" id="player-like-btn" title="Like">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
@@ -262,40 +291,6 @@
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
-      </div>
-
-      <!-- Controls (desktop) -->
-      <div class="player-controls desktop-only">
-        <button class="control-btn" id="shuffle-btn" title="Shuffle">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="16 3 21 3 21 8"></polyline>
-            <line x1="4" y1="20" x2="21" y2="3"></line>
-            <polyline points="21 16 21 21 16 21"></polyline>
-            <line x1="15" y1="15" x2="21" y2="21"></line>
-            <line x1="4" y1="4" x2="9" y2="9"></line>
-          </svg>
-        </button>
-        <button class="control-btn" id="prev-btn" title="Previous">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="19 20 9 12 19 4 19 20"></polygon>
-            <line x1="5" y1="19" x2="5" y2="5"></line>
-          </svg>
-        </button>
-        <button class="control-btn play-btn" id="play-btn">
-          <svg id="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          <svg id="pause-icon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
-        </button>
-        <button class="control-btn" id="next-btn" title="Next">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 4 15 12 5 20 5 4"></polygon>
-            <line x1="19" y1="5" x2="19" y2="19"></line>
-          </svg>
-        </button>
         <button class="control-btn" id="repeat-btn" title="Repeat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="17 1 21 5 17 9"></polyline>
@@ -304,6 +299,20 @@
             <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
           </svg>
         </button>
+        <div class="player-volume">
+          <button class="control-btn" id="volume-btn">
+            <svg id="volume-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <svg id="volume-mute-icon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+          </button>
+          <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80">
+        </div>
       </div>
 
       <!-- Mobile Play Button -->
@@ -316,26 +325,10 @@
           <rect x="14" y="4" width="4" height="16"></rect>
         </svg>
       </button>
-
-      <!-- Volume (desktop) -->
-      <div class="player-volume desktop-only">
-        <button class="control-btn" id="volume-btn">
-          <svg id="volume-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-          <svg id="volume-mute-icon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
-          </svg>
-        </button>
-        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80">
-      </div>
     </div>
   </div>
 
-  <!-- Expanded Mobile Player (hidden by default) -->
+  <!-- Expanded Mobile Player (hidden by default) - NO SHUFFLE BUTTON -->
   <div id="expanded-player" class="expanded-player hidden">
     <div class="expanded-player-header">
       <button id="collapse-player-btn" class="collapse-btn">
@@ -382,15 +375,6 @@
     </div>
 
     <div class="expanded-player-controls">
-      <button class="expanded-control-btn" id="expanded-shuffle-btn">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="16 3 21 3 21 8"></polyline>
-          <line x1="4" y1="20" x2="21" y2="3"></line>
-          <polyline points="21 16 21 21 16 21"></polyline>
-          <line x1="15" y1="15" x2="21" y2="21"></line>
-          <line x1="4" y1="4" x2="9" y2="9"></line>
-        </svg>
-      </button>
       <button class="expanded-control-btn" id="expanded-prev-btn">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -412,7 +396,7 @@
           <line x1="19" y1="5" x2="19" y2="19"></line>
         </svg>
       </button>
-      <button class="expanded-control-btn" id="expanded-repeat-btn">
+      <button class="expanded-control-btn" id="expanded-repeat-btn" title="Repeat">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="17 1 21 5 17 9"></polyline>
           <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
