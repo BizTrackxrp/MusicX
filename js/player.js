@@ -649,7 +649,16 @@ const Player = {
     const title = document.getElementById('player-title');
     const artist = document.getElementById('player-artist');
     
-    if (cover) cover.src = track.cover || '/placeholder.png';
+    // Defensive: handle missing/broken cover images
+    const coverUrl = track.cover || track.coverUrl || '/placeholder.png';
+    
+    if (cover) {
+      cover.onerror = () => {
+        cover.src = '/placeholder.png';
+        console.warn('⚠️ Cover image failed to load:', coverUrl);
+      };
+      cover.src = coverUrl;
+    }
     if (title) title.textContent = track.title || 'Unknown Track';
     if (artist) artist.textContent = track.artist || 'Unknown Artist';
     
@@ -658,7 +667,12 @@ const Player = {
     const expTitle = document.getElementById('expanded-title');
     const expArtist = document.getElementById('expanded-artist');
     
-    if (expCover) expCover.src = track.cover || '/placeholder.png';
+    if (expCover) {
+      expCover.onerror = () => {
+        expCover.src = '/placeholder.png';
+      };
+      expCover.src = coverUrl;
+    }
     if (expTitle) expTitle.textContent = track.title || 'Unknown Track';
     if (expArtist) expArtist.textContent = track.artist || 'Unknown Artist';
     
@@ -666,7 +680,7 @@ const Player = {
     this.updateLikeButton();
     
     // Update document title
-    document.title = `${track.title} - ${track.artist} | XRP Music`;
+    document.title = `${track.title || 'Unknown'} - ${track.artist || 'Unknown'} | XRP Music`;
   },
   
   updatePlayButton(isPlaying) {
