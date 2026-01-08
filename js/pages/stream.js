@@ -833,8 +833,17 @@ const StreamPage = {
   },
   
   renderTrackItem(track, index) {
-    const isPlaying = AppState.player.currentTrack?.trackId === track.id || 
-                      AppState.player.currentTrack?.id === parseInt(track.id);
+    // More robust playing check - compare multiple possible ID fields
+    const currentTrack = AppState.player.currentTrack;
+    const trackId = track.trackId || track.id;
+    const isPlaying = currentTrack && (
+      currentTrack.trackId === trackId ||
+      currentTrack.trackId === track.id ||
+      String(currentTrack.trackId) === String(trackId) ||
+      String(currentTrack.id) === String(track.id) ||
+      // Also check by title + releaseId as fallback
+      (currentTrack.title === track.displayTitle && currentTrack.releaseId === track.release?.id)
+    );
     const available = track.release.totalEditions - track.release.soldEditions;
     const isSoldOut = available <= 0;
     
