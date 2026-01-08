@@ -3576,7 +3576,6 @@ showTrackPurchase(release, track, trackIdx) {
         return;
       }
       
-      const editions = parseInt(document.getElementById('release-editions').value) || 1;
       const royalty = document.getElementById('release-royalty').value;
       const totalNFTs = tracks.length * editions;
       const mintFee = calculateMintFee(editions, tracks.length);
