@@ -3239,15 +3239,10 @@ showTrackPurchase(release, track, trackIdx) {
                       Editions *
                       <span class="edition-info-badge" title="Maximum 30 editions during beta. We're upgrading our servers to support more!">ℹ️</span>
                     </label>
-                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="30" min="1" max="30" value="30" required>
-                    <p class="form-hint edition-limit-hint">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                      </svg>
-                      Max 30 editions during beta — higher limits coming soon!
-                    </p>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="1000" value="100" required>
+                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">
+  Max 1000 NFTs total (tracks × editions)
+</p>
                   </div>
                 </div>
                 
@@ -3542,6 +3537,13 @@ showTrackPurchase(release, track, trackIdx) {
           feeDisplay.textContent = `~${fee} XRP (${totalNFTs} NFTs)`;
         }
       }
+      
+      // Update the hint with max editions for current track count
+      const hintEl = document.getElementById('edition-limit-hint');
+      if (hintEl && trackCount > 0) {
+        const maxEditions = Math.floor(1000 / trackCount);
+        hintEl.textContent = `Max ${maxEditions} editions (${trackCount} track${trackCount > 1 ? 's' : ''} × editions ≤ 1000 NFTs)`;
+      }
     }
     
     // Editions input - update mint fee
@@ -3569,13 +3571,15 @@ showTrackPurchase(release, track, trackIdx) {
       if (!coverFile) { alert('Please upload cover art'); return; }
       if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
       
-      // Validate edition limit
-      const editions = parseInt(document.getElementById('release-editions').value) || 1;
-      if (editions > 30) {
-        alert('Maximum 30 editions during beta. We\'re upgrading our servers to support more!');
-        document.getElementById('release-editions').value = 30;
-        return;
-      }
+     // Validate edition limit (1000 NFTs max)
+const editions = parseInt(document.getElementById('release-editions').value) || 1;
+const totalNFTs = tracks.length * editions;
+if (totalNFTs > 1000) {
+  const maxEditions = Math.floor(1000 / tracks.length);
+  alert(`Maximum 1000 NFTs total. With ${tracks.length} track(s), you can mint up to ${maxEditions} editions each.`);
+  document.getElementById('release-editions').value = maxEditions;
+  return;
+}
       
       const royalty = document.getElementById('release-royalty').value;
       const totalNFTs = tracks.length * editions;
