@@ -46,6 +46,6 @@ export default async function handler(req, res) {
   
   return res.json({
     key: lighthouseApiKey,
-    endpoint: 'https://node.lighthouse.storage/api/v0/add',
+    endpoint: 'https://upload.lighthouse.storage/api/v0/add',
   });
 }
