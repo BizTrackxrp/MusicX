@@ -1611,6 +1611,7 @@ body:not(.light) .toggle-knob {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  padding-bottom: calc(16px + var(--player-height) + 16px); /* Account for player bar */
   opacity: 0;
   visibility: hidden;
   transition: all var(--transition-normal);
@@ -1670,6 +1671,17 @@ body:not(.light) .toggle-knob {
   padding: 24px;
   overflow-y: auto;
   max-height: calc(90vh - 80px);
+  padding-bottom: calc(24px + var(--player-height) + 16px); /* Extra padding for player bar */
+}
+
+/* When player is visible, ensure modals have enough bottom space */
+body:has(#player-bar:not(.hidden)) .modal-body {
+  padding-bottom: calc(24px + var(--player-height) + 16px);
+}
+
+/* Fallback for browsers without :has() support */
+.modal-body.player-active {
+  padding-bottom: calc(24px + var(--player-height) + 16px);
 }
 
 /* Auth Modal */
