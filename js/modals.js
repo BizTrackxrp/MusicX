@@ -3965,14 +3965,41 @@ if (!mintResult.success) {
   throw new Error(mintResult.error || 'Minting failed');
 }
 
-// Step 6: Update release with NFT token IDs
+// Step 6: Update release with NFT token IDs (CRITICAL - must succeed for listing)
 showStatus(6, 6, 'Finalizing...', 'Updating release with NFT data');
 
-await API.updateRelease(releaseId, {
-  nftTokenIds: mintResult.nftTokenIds,
-  txHash: mintResult.txHash,
-  sellOfferIndex: 'platform-owned',
-});
+try {
+  await API.updateRelease(releaseId, {
+    nftTokenIds: mintResult.nftTokenIds,
+    txHash: mintResult.txHash,
+    sellOfferIndex: 'platform-owned',
+  });
+  console.log('✓ Release updated with platform-owned status');
+} catch (updateError) {
+  console.error('⚠ CRITICAL: Failed to update release after minting:', updateError);
+  // NFTs are minted but not marked for sale - show warning but don't fail
+  Modals.mintingInProgress = false;
+  statusEl.innerHTML = `
+    <div class="mint-status-icon" style="color: var(--warning);">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    </div>
+    <div class="mint-status-text" style="color: var(--warning);">NFTs Minted - Action Required</div>
+    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">
+      Your ${mintResult.totalMinted} NFTs were minted successfully, but there was an issue marking them for sale.
+    </p>
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+      Please contact support with Release ID: <code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${releaseId}</code>
+    </p>
+    <div class="mint-success-actions" style="margin-top: 20px;">
+      <button type="button" class="btn btn-primary" onclick="Modals.close(); Router.navigate('profile');">Go to Profile</button>
+    </div>
+  `;
+  return; // Exit early - don't show success screen
+}
 
 // Success - NFTs minted and ready to sell!
 Modals.mintingInProgress = false;
