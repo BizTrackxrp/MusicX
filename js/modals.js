@@ -3280,7 +3280,7 @@ showTrackPurchase(release, track, trackIdx) {
                         <polyline points="21 15 16 10 5 21"></polyline>
                       </svg>
                       <span>Click to upload cover art</span>
-                      <span class="upload-hint">JPG, PNG, or GIF (max 10MB)</span>
+                      <span class="upload-hint">3000×3000px recommended • JPG, PNG, GIF (max 10MB)</span>
                     </div>
                     <div class="upload-preview hidden" id="cover-preview">
                       <img id="cover-preview-img" src="" alt="Cover preview">
