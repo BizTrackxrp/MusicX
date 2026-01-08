@@ -193,6 +193,7 @@ async function handleMint(req, res) {
                         ${editionNumber}, 'available', ${platformAddress},
                         ${result.result.hash}, NOW()
                       )
+                      ON CONFLICT (nft_token_id) DO NOTHING
                     `;
                     console.log(`    ✓ Stored in database: ${nftId}`);
                   } catch (dbError) {
