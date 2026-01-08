@@ -295,37 +295,52 @@ const API = {
   },
 
   // ============================================
-  // UPLOADS (IPFS)
+  // UPLOADS (IPFS via Lighthouse - Direct)
   // ============================================
   
   /**
-   * Upload file to IPFS
+   * Upload file directly to Lighthouse (bypasses Vercel size limits)
    */
   async uploadFile(file) {
+    // Step 1: Get Lighthouse config from our secure endpoint
+    const configResponse = await fetch('/api/upload-config');
+    if (!configResponse.ok) {
+      const error = await configResponse.text();
+      throw new Error(error || 'Failed to get upload configuration');
+    }
+    const config = await configResponse.json();
+    
+    // Step 2: Upload directly to Lighthouse
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetch('/api/upload', {
+    console.log(`📤 Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) directly to Lighthouse...`);
+    
+    const response = await fetch(config.endpoint, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.key}`,
+      },
       body: formData,
     });
     
-    // Handle non-JSON responses (like "Forbidden" text)
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      // Response wasn't JSON - likely an error message
-      console.error('Upload response not JSON:', text);
-      throw new Error(text || 'Upload failed - server returned invalid response');
-    }
-    
     if (!response.ok) {
-      throw new Error(data.error || 'Upload failed');
+      const errorText = await response.text();
+      console.error('Lighthouse upload error:', errorText);
+      throw new Error(errorText || 'Upload to IPFS failed');
     }
     
-    return data;
+    const data = await response.json();
+    const cid = data.Hash;
+    
+    console.log(`✅ Uploaded to IPFS: ${cid}`);
+    
+    return {
+      success: true,
+      cid: cid,
+      url: `https://gateway.lighthouse.storage/ipfs/${cid}`,
+      ipfsUrl: `ipfs://${cid}`,
+    };
   },
   
   /**
