@@ -3234,15 +3234,10 @@ showTrackPurchase(release, track, trackIdx) {
                     <label class="form-label">Price (XRP) *</label>
                     <input type="number" class="form-input" name="price" id="release-price" placeholder="0.5" step="0.01" min="0" required>
                   </div>
-                 <div class="form-group">
-                    <label class="form-label">
-                      Editions *
-                      <span class="edition-info-badge" title="Maximum 30 editions during beta. We're upgrading our servers to support more!">ℹ️</span>
-                    </label>
+                  <div class="form-group">
+                    <label class="form-label">Editions *</label>
                     <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="1000" value="100" required>
-                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">
-  Max 1000 NFTs total (tracks × editions)
-</p>
+                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 1000 NFTs total (tracks × editions)</p>
                   </div>
                 </div>
                 
