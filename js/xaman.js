@@ -15,20 +15,17 @@ const XamanWallet = {
    * Open Xaman URL in a popup window instead of a tab
    */
   openXamanPopup(url) {
-    // Calculate popup position (centered)
     const width = 420;
     const height = 700;
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
     
-    // Open as popup window
     const popup = window.open(
       url,
       'XamanSign',
       `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
     );
     
-    // Focus the popup if it opened
     if (popup) {
       popup.focus();
     }
@@ -43,14 +40,12 @@ const XamanWallet = {
     if (this.initialized) return;
     
     try {
-      // Load Xumm SDK from CDN if not loaded
       if (typeof Xumm === 'undefined') {
         await this.loadSDK();
       }
       
       this.sdk = new Xumm(XAMAN_API_KEY);
       
-      // Set up event listeners
       this.sdk.on('success', async () => {
         try {
           const account = await this.sdk.user.account;
@@ -77,7 +72,6 @@ const XamanWallet = {
         this.isConnecting = false;
       });
       
-      // Wait for SDK to be ready (with timeout)
       const readyTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
       );
@@ -88,7 +82,6 @@ const XamanWallet = {
         console.warn('SDK ready timeout, continuing anyway');
       }
       
-      // Check for existing session (don't block on this)
       this.checkSession().catch(err => {
         console.warn('Session check failed:', err);
       });
@@ -109,7 +102,6 @@ const XamanWallet = {
         return;
       }
       
-      // Timeout after 10 seconds
       const timeout = setTimeout(() => {
         reject(new Error('Xumm SDK load timeout'));
       }, 10000);
@@ -133,14 +125,12 @@ const XamanWallet = {
    * Check for existing session
    */
   async checkSession() {
-    // First check our local storage
     if (AppState.user?.address) {
       await this.loadUserData(AppState.user.address);
       UI.updateAuthUI();
       return;
     }
     
-    // Then check SDK
     try {
       const account = await this.sdk.user.account;
       if (account) {
@@ -158,17 +148,14 @@ const XamanWallet = {
    */
   async loadUserData(address) {
     try {
-      // Load profile
       const profile = await API.getProfile(address);
       if (profile) {
         setProfile(profile);
       }
       
-      // Load liked track IDs
       const likedIds = await API.getLikedTrackIds(address);
       AppState.likedTrackIds = new Set(likedIds);
       
-      // Load playlists
       const playlists = await API.getPlaylists(address);
       setPlaylists(playlists);
       
@@ -187,8 +174,6 @@ const XamanWallet = {
     
     try {
       await this.sdk.authorize();
-      // For desktop, the success event will fire
-      // For mobile, we need to wait for redirect back
     } catch (err) {
       console.error('Failed to connect wallet:', err);
       this.isConnecting = false;
@@ -225,14 +210,12 @@ const XamanWallet = {
    * Start animated progress during minting
    */
   startMintProgress(totalNFTs, onProgress) {
-    // Estimate ~1.5 seconds per NFT
-    const estimatedTotalTime = totalNFTs * 1.5 * 1000; // in ms
+    const estimatedTotalTime = totalNFTs * 1.5 * 1000;
     const startTime = Date.now();
     let currentEstimate = 0;
     
     this.mintProgressInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      // Progress goes up to 95% based on time estimate, never hits 100 until actually done
       const timeProgress = Math.min(elapsed / estimatedTotalTime, 0.95);
       const estimatedMinted = Math.floor(timeProgress * totalNFTs);
       
@@ -243,8 +226,9 @@ const XamanWallet = {
             stage: 'minting',
             message: `Minting NFTs... ~${currentEstimate}/${totalNFTs} complete`,
             quantity: totalNFTs,
+            minted: currentEstimate,
+            elapsed: Math.floor(elapsed / 1000),
             progress: Math.round(timeProgress * 100),
-            estimatedMinted: currentEstimate,
           });
         }
       }
@@ -263,21 +247,8 @@ const XamanWallet = {
   
   /**
    * Mint NFT
-   * @param {string} metadataUri - Single track metadata URI
-   * @param {object} options - Minting options
-   * @param {number} options.quantity - Number of editions per track
-   * @param {number} options.transferFee - Royalty in basis points (500 = 5%)
-   * @param {number} options.taxon - NFT taxon
-   * @param {function} options.onProgress - Progress callback
-   * @param {string[]} options.tracks - Array of track metadata URIs (for albums)
-   * @param {string[]} options.trackIds - Array of track database IDs (for nfts table)
-   * @param {string} options.releaseId - Release database ID (for nfts table)
    */
   async mintNFT(metadataUri, options = {}) {
-    // Flow:
-    // 1. Artist pays mint fee to platform
-    // 2. Artist authorizes platform as minter
-    // 3. Backend batch mints NFTs
     if (!this.sdk) {
       console.error('mintNFT: SDK not initialized');
       throw new Error('SDK not initialized');
@@ -297,13 +268,10 @@ const XamanWallet = {
       releaseId = null
     } = options;
     
-    // Calculate total NFTs: tracks × editions
     const trackCount = tracks ? tracks.length : 1;
     const totalNFTs = trackCount * quantity;
-    
-    // Calculate mint fee: (totalNFTs × 0.000012) + 0.001 buffer
     const mintFee = (totalNFTs * 0.000012) + 0.001;
-    const mintFeeDrops = Math.ceil(mintFee * 1000000).toString(); // Convert to drops
+    const mintFeeDrops = Math.ceil(mintFee * 1000000).toString();
     
     // Get platform address from API
     const configResponse = await fetch('/api/batch-mint', {
@@ -331,7 +299,17 @@ const XamanWallet = {
         });
       }
       
-      const paymentPayload = await this.sdk.payload?.create({
+      // Make sure SDK payload is available
+      if (!this.sdk.payload) {
+        console.error('SDK payload not available, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (!this.sdk.payload) {
+          throw new Error('Xaman SDK not fully loaded. Please refresh and try again.');
+        }
+      }
+      
+      console.log('Creating payment payload...');
+      const paymentPayload = await this.sdk.payload.create({
         txjson: {
           TransactionType: 'Payment',
           Destination: platformAddress,
@@ -341,6 +319,8 @@ const XamanWallet = {
           instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${totalNFTs} NFT editions`,
         },
       });
+      
+      console.log('Payment payload created:', paymentPayload);
       
       if (!paymentPayload) {
         throw new Error('Failed to create payment payload');
@@ -373,16 +353,19 @@ const XamanWallet = {
         });
       }
       
-      const authPayload = await this.sdk.payload?.create({
+      console.log('Creating authorization payload...');
+      const authPayload = await this.sdk.payload.create({
         txjson: {
           TransactionType: 'AccountSet',
           NFTokenMinter: platformAddress,
-          SetFlag: 10, // asfAuthorizedNFTokenMinter
+          SetFlag: 10,
         },
         custom_meta: {
           instruction: `Authorize XRP Music to mint ${totalNFTs} NFT editions for you`,
         },
       });
+      
+      console.log('Auth payload created:', authPayload);
       
       if (!authPayload) {
         throw new Error('Failed to create authorization payload');
@@ -471,7 +454,6 @@ const XamanWallet = {
       };
       
     } catch (error) {
-      // Make sure to stop progress on error
       this.stopMintProgress();
       console.error('mintNFT error:', error);
       throw error;
@@ -490,7 +472,7 @@ const XamanWallet = {
         attempts++;
         
         try {
-          const status = await this.sdk.payload?.get(uuid);
+          const status = await this.sdk.payload.get(uuid);
           
           if (status?.meta?.resolved) {
             if (status.meta.signed) {
@@ -567,14 +549,12 @@ const XamanWallet = {
     
     console.log(`Creating payment: ${amountXRP} XRP to ${destination}`);
     
-    // Build transaction
     const txJson = {
       TransactionType: 'Payment',
       Destination: destination,
       Amount: this.xrpToDrops(amountXRP),
     };
     
-    // Add memo if provided
     if (memo) {
       txJson.Memos = [{
         Memo: {
@@ -584,7 +564,7 @@ const XamanWallet = {
       }];
     }
     
-    const payload = await this.sdk.payload?.create({
+    const payload = await this.sdk.payload.create({
       txjson: txJson,
       custom_meta: {
         instruction: `Pay ${amountXRP} XRP for music NFT`,
@@ -595,18 +575,13 @@ const XamanWallet = {
       throw new Error('Failed to create payment payload');
     }
     
-    // Push notification is sent to user's Xaman app automatically
-    // No need to open browser popup - user checks their phone
     console.log('Payment payload created, push notification sent:', payload.uuid);
     
-    // Wait for result
     return this.waitForPayload(payload.uuid);
   },
   
   /**
    * Create NFT transfer offer (Amount: 0) to transfer NFT to platform
-   * @param {string} nftTokenId - The NFT token ID
-   * @param {string} destination - Platform wallet address to receive NFT
    */
   async createTransferOffer(nftTokenId, destination) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -614,13 +589,13 @@ const XamanWallet = {
     
     console.log('Creating transfer offer:', { nftTokenId, destination });
     
-    const payload = await this.sdk.payload?.create({
+    const payload = await this.sdk.payload.create({
       txjson: {
         TransactionType: 'NFTokenCreateOffer',
         NFTokenID: nftTokenId,
-        Amount: '0', // Free transfer
-        Flags: 1, // tfSellNFToken
-        Destination: destination, // Only platform can accept this offer
+        Amount: '0',
+        Flags: 1,
+        Destination: destination,
       },
       custom_meta: {
         instruction: 'Sign to transfer your NFT to XRP Music for listing',
@@ -633,18 +608,15 @@ const XamanWallet = {
     
     console.log('Transfer offer payload:', payload);
     
-    // Open Xaman for signing
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
     
-    // Wait for result
     const result = await this.waitForPayload(payload.uuid);
     
     if (result.success && result.txHash) {
-      // Try to get the actual offer index
       try {
         const offerIndex = await this.getOfferIndexFromTx(result.txHash);
         if (offerIndex) {
@@ -665,7 +637,6 @@ const XamanWallet = {
   
   /**
    * Accept a sell offer to receive an NFT
-   * @param {string} offerIndex - The sell offer index to accept
    */
   async acceptSellOffer(offerIndex) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -673,7 +644,7 @@ const XamanWallet = {
     
     console.log('Accepting sell offer:', offerIndex);
     
-    const payload = await this.sdk.payload?.create({
+    const payload = await this.sdk.payload.create({
       txjson: {
         TransactionType: 'NFTokenAcceptOffer',
         NFTokenSellOffer: offerIndex,
@@ -689,17 +660,11 @@ const XamanWallet = {
     
     console.log('Accept offer payload:', payload);
     
-    // Push notification is sent to user's Xaman app automatically
-    // No need to open browser popup - user checks their phone
-    
-    // Wait for result
     return this.waitForPayload(payload.uuid);
   },
   
   /**
    * Create a sell offer for an NFT (secondary market listing)
-   * @param {string} nftTokenId - The NFT token ID to sell
-   * @param {number} price - Price in XRP
    */
   async createSellOffer(nftTokenId, price) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -707,15 +672,14 @@ const XamanWallet = {
     
     console.log('Creating sell offer for:', nftTokenId, 'at', price, 'XRP');
     
-    // Convert XRP to drops
     const amountInDrops = Math.floor(price * 1000000).toString();
     
-    const payload = await this.sdk.payload?.create({
+    const payload = await this.sdk.payload.create({
       txjson: {
         TransactionType: 'NFTokenCreateOffer',
         NFTokenID: nftTokenId,
         Amount: amountInDrops,
-        Flags: 1, // tfSellNFToken
+        Flags: 1,
       },
       custom_meta: {
         instruction: `List your NFT for sale at ${price} XRP`,
@@ -728,17 +692,14 @@ const XamanWallet = {
     
     console.log('Create sell offer payload:', payload);
     
-    // Open Xaman for signing
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
     
-    // Wait for result
     const result = await this.waitForPayload(payload.uuid);
     
-    // If successful, fetch the actual offer index from XRPL
     if (result.success && result.txHash) {
       try {
         const offerIndex = await this.getOfferIndexFromTx(result.txHash);
@@ -746,7 +707,6 @@ const XamanWallet = {
           result.offerIndex = offerIndex;
           console.log('Got offer index from transaction:', offerIndex);
         } else {
-          // Fallback: look up sell offers for this NFT
           const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
           if (fallbackIndex) {
             result.offerIndex = fallbackIndex;
@@ -771,7 +731,6 @@ const XamanWallet = {
   
   /**
    * Cancel a sell offer on XRPL
-   * @param {string} offerIndex - The offer index to cancel
    */
   async cancelSellOffer(offerIndex) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -779,7 +738,7 @@ const XamanWallet = {
     
     console.log('Cancelling sell offer:', offerIndex);
     
-    const payload = await this.sdk.payload?.create({
+    const payload = await this.sdk.payload.create({
       txjson: {
         TransactionType: 'NFTokenCancelOffer',
         NFTokenOffers: [offerIndex],
@@ -795,22 +754,17 @@ const XamanWallet = {
     
     console.log('Cancel offer payload:', payload);
     
-    // Open Xaman for signing
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
       throw new Error('No sign URL returned from Xaman');
     }
     
-    // Wait for result
     return this.waitForPayload(payload.uuid);
   },
   
   /**
    * Edit listing price (cancel old offer + create new one)
-   * @param {string} nftTokenId - The NFT token ID
-   * @param {string} oldOfferIndex - The existing offer to cancel
-   * @param {number} newPrice - New price in XRP
    */
   async editListingPrice(nftTokenId, oldOfferIndex, newPrice) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -818,7 +772,6 @@ const XamanWallet = {
     
     console.log('Editing listing price:', { nftTokenId, oldOfferIndex, newPrice });
     
-    // Step 1: Cancel old offer
     const cancelResult = await this.cancelSellOffer(oldOfferIndex);
     
     if (!cancelResult.success) {
@@ -827,7 +780,6 @@ const XamanWallet = {
     
     console.log('Old offer cancelled, creating new offer...');
     
-    // Step 2: Create new offer at new price
     const newOfferResult = await this.createSellOffer(nftTokenId, newPrice);
     
     return newOfferResult;
@@ -837,7 +789,6 @@ const XamanWallet = {
    * Get offer index from transaction metadata
    */
   async getOfferIndexFromTx(txHash) {
-    // Wait a moment for transaction to be fully validated
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     try {
@@ -857,7 +808,6 @@ const XamanWallet = {
         for (const node of data.result.meta.AffectedNodes) {
           if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
             let offerIndex = node.CreatedNode.LedgerIndex;
-            // Pad to 64 characters to preserve leading zeros
             if (offerIndex && offerIndex.length < 64) {
               console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
               offerIndex = offerIndex.padStart(64, '0');
@@ -895,9 +845,7 @@ const XamanWallet = {
       if (data.result?.offers) {
         const ownerOffers = data.result.offers.filter(o => o.owner === ownerAddress);
         if (ownerOffers.length > 0) {
-          // Get the LAST offer (most recent), not the first
           let offerIndex = ownerOffers[ownerOffers.length - 1].nft_offer_index;
-          // Pad to 64 characters to preserve leading zeros
           if (offerIndex && offerIndex.length < 64) {
             console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
             offerIndex = offerIndex.padStart(64, '0');
