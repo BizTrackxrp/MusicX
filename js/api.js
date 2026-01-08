@@ -310,7 +310,16 @@ const API = {
       body: formData,
     });
     
-    const data = await response.json();
+    // Handle non-JSON responses (like "Forbidden" text)
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Response wasn't JSON - likely an error message
+      console.error('Upload response not JSON:', text);
+      throw new Error(text || 'Upload failed - server returned invalid response');
+    }
     
     if (!response.ok) {
       throw new Error(data.error || 'Upload failed');
