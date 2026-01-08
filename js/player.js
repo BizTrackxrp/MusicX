@@ -65,6 +65,11 @@ const Player = {
     // Set initial volume
     this.audio.volume = AppState.player.volume / 100;
     
+    // SHUFFLE IS NOW DEFAULT - always on
+    if (!AppState.player.isShuffled) {
+      updatePlayer({ isShuffled: true });
+    }
+    
     // Event listeners
     this.audio.addEventListener('ended', () => this.onEnded());
     this.audio.addEventListener('timeupdate', () => this.onTimeUpdate());
@@ -74,6 +79,9 @@ const Player = {
     
     // Bind controls
     this.bindControls();
+    
+    // Initialize repeat button state
+    this.updateRepeatButton();
   },
   
   /**
@@ -84,7 +92,7 @@ const Player = {
     const playBtn = document.getElementById('play-btn');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
-    const shuffleBtn = document.getElementById('shuffle-btn');
+    // REMOVED: shuffleBtn - shuffle is now always on
     const repeatBtn = document.getElementById('repeat-btn');
     const volumeBtn = document.getElementById('volume-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -99,7 +107,7 @@ const Player = {
     const expPlayBtn = document.getElementById('expanded-play-btn');
     const expPrevBtn = document.getElementById('expanded-prev-btn');
     const expNextBtn = document.getElementById('expanded-next-btn');
-    const expShuffleBtn = document.getElementById('expanded-shuffle-btn');
+    // REMOVED: expShuffleBtn - shuffle is now always on
     const expRepeatBtn = document.getElementById('expanded-repeat-btn');
     const expVolumeSlider = document.getElementById('expanded-volume-slider');
     const expProgressBar = document.getElementById('expanded-progress');
@@ -115,10 +123,8 @@ const Player = {
     if (expPrevBtn) expPrevBtn.addEventListener('click', () => this.previous());
     if (expNextBtn) expNextBtn.addEventListener('click', () => this.next());
     
-    // Shuffle/Repeat
-    if (shuffleBtn) shuffleBtn.addEventListener('click', () => this.toggleShuffle());
+    // Repeat only (shuffle removed)
     if (repeatBtn) repeatBtn.addEventListener('click', () => this.toggleRepeat());
-    if (expShuffleBtn) expShuffleBtn.addEventListener('click', () => this.toggleShuffle());
     if (expRepeatBtn) expRepeatBtn.addEventListener('click', () => this.toggleRepeat());
     
     // Volume
@@ -199,7 +205,12 @@ const Player = {
     // Update state
     setCurrentTrack(track);
     if (queue) {
-      setQueue(queue, queueIndex);
+      // ALWAYS SHUFFLE the queue (except current track stays first)
+      const currentTrack = queue[queueIndex];
+      const otherTracks = queue.filter((_, i) => i !== queueIndex);
+      const shuffledOthers = Helpers.shuffle([...otherTracks]);
+      const shuffledQueue = [currentTrack, ...shuffledOthers];
+      setQueue(shuffledQueue, 0);
     }
     
     // Get audio source - try Helpers.getIPFSUrl if it exists, otherwise build URL
@@ -267,15 +278,25 @@ const Player = {
   },
   
   /**
-   * Play next track
+   * Play next track - ALWAYS RANDOM (shuffle is default)
    */
   next() {
     const { queue, queueIndex } = AppState.player;
     if (queue.length === 0) return;
     
-    const nextIndex = (queueIndex + 1) % queue.length;
-    const nextTrack = queue[nextIndex];
+    // Always pick a random next track (shuffle is always on)
+    // But avoid playing the same track unless it's the only one
+    let nextIndex;
+    if (queue.length === 1) {
+      nextIndex = 0;
+    } else {
+      // Pick random index that's not the current one
+      do {
+        nextIndex = Math.floor(Math.random() * queue.length);
+      } while (nextIndex === queueIndex && queue.length > 1);
+    }
     
+    const nextTrack = queue[nextIndex];
     updatePlayer({ queueIndex: nextIndex });
     this.playTrack(nextTrack);
   },
@@ -293,6 +314,7 @@ const Player = {
       return;
     }
     
+    // Go to previous in queue order (or random if you prefer)
     const prevIndex = queueIndex === 0 ? queue.length - 1 : queueIndex - 1;
     const prevTrack = queue[prevIndex];
     
@@ -301,41 +323,32 @@ const Player = {
   },
   
   /**
-   * Toggle shuffle
-   */
-  toggleShuffle() {
-    const isShuffled = !AppState.player.isShuffled;
-    updatePlayer({ isShuffled });
-    
-    // Update UI
-    const shuffleBtn = document.getElementById('shuffle-btn');
-    const expShuffleBtn = document.getElementById('expanded-shuffle-btn');
-    
-    if (shuffleBtn) shuffleBtn.classList.toggle('active', isShuffled);
-    if (expShuffleBtn) expShuffleBtn.classList.toggle('active', isShuffled);
-    
-    // If enabling shuffle, shuffle the remaining queue
-    if (isShuffled && AppState.player.queue.length > 1) {
-      const currentTrack = AppState.player.queue[AppState.player.queueIndex];
-      const remaining = AppState.player.queue.filter((_, i) => i !== AppState.player.queueIndex);
-      const shuffled = Helpers.shuffle(remaining);
-      setQueue([currentTrack, ...shuffled], 0);
-    }
-  },
-  
-  /**
-   * Toggle repeat
+   * Toggle repeat - blue when ON, default when OFF
    */
   toggleRepeat() {
     const isRepeat = !AppState.player.isRepeat;
     updatePlayer({ isRepeat });
-    
-    // Update UI
+    this.updateRepeatButton();
+  },
+  
+  /**
+   * Update repeat button styling
+   */
+  updateRepeatButton() {
+    const isRepeat = AppState.player.isRepeat;
     const repeatBtn = document.getElementById('repeat-btn');
     const expRepeatBtn = document.getElementById('expanded-repeat-btn');
     
-    if (repeatBtn) repeatBtn.classList.toggle('active', isRepeat);
-    if (expRepeatBtn) expRepeatBtn.classList.toggle('active', isRepeat);
+    // Toggle active class for blue highlight
+    if (repeatBtn) {
+      repeatBtn.classList.toggle('active', isRepeat);
+      // Also update the color directly for immediate feedback
+      repeatBtn.style.color = isRepeat ? 'var(--accent)' : '';
+    }
+    if (expRepeatBtn) {
+      expRepeatBtn.classList.toggle('active', isRepeat);
+      expRepeatBtn.style.color = isRepeat ? 'var(--accent)' : '';
+    }
   },
   
   /**
@@ -454,9 +467,11 @@ const Player = {
   
   onEnded() {
     if (AppState.player.isRepeat) {
+      // Repeat is ON - replay current track
       this.audio.currentTime = 0;
       this.play();
     } else {
+      // Repeat is OFF - play random next track (shuffle is always on)
       this.next();
     }
   },
@@ -585,6 +600,7 @@ const Player = {
     this.updatePlayButton(AppState.player.isPlaying);
     this.updateVolumeIcon();
     this.updateLikeButton();
+    this.updateRepeatButton();
     
     // Sync volume slider
     const expVolumeSlider = document.getElementById('expanded-volume-slider');
