@@ -750,7 +750,7 @@ body:not(.light) .toggle-knob {
 }
 
 /* ============================================
-   Player Bar
+   Player Bar - ENHANCED WITH 3-COLUMN LAYOUT
    ============================================ */
 .player-bar {
   position: fixed;
@@ -789,9 +789,11 @@ body:not(.light) .toggle-knob {
   transition: width 100ms linear;
 }
 
+/* 3-COLUMN LAYOUT for player content */
 .player-content {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   height: calc(100% - 4px);
   padding: 0 16px;
@@ -803,11 +805,17 @@ body:not(.light) .toggle-knob {
   }
 }
 
+/* LEFT COLUMN: Track Info */
+.player-left {
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+}
+
 .player-track {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
   min-width: 0;
 }
 
@@ -817,6 +825,7 @@ body:not(.light) .toggle-knob {
   border-radius: var(--radius-md);
   object-fit: cover;
   background: var(--bg-hover);
+  flex-shrink: 0;
 }
 
 @media (max-width: 1024px) {
@@ -865,6 +874,32 @@ body:not(.light) .toggle-knob {
   }
 }
 
+/* CENTER COLUMN: Main Controls (prev, play, next) */
+.player-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* RIGHT COLUMN: Like, Add, Repeat, Volume */
+.player-right {
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
 .player-actions {
   display: flex;
   align-items: center;
@@ -893,13 +928,7 @@ body:not(.light) .toggle-knob {
   fill: currentColor;
 }
 
-/* Player Controls */
-.player-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+/* Control Buttons */
 .control-btn {
   padding: 8px;
   border: none;
@@ -908,6 +937,9 @@ body:not(.light) .toggle-knob {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .control-btn:hover {
@@ -918,6 +950,7 @@ body:not(.light) .toggle-knob {
   color: var(--accent);
 }
 
+/* Play button - larger and prominent */
 .control-btn.play-btn {
   width: 40px;
   height: 40px;
@@ -926,11 +959,30 @@ body:not(.light) .toggle-knob {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0 8px;
 }
 
 .control-btn.play-btn:hover {
   background: var(--accent-hover);
   color: white;
+  transform: scale(1.05);
+}
+
+/* REPEAT BUTTON: Blue when active, muted when inactive */
+#repeat-btn,
+#expanded-repeat-btn {
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+#repeat-btn:hover,
+#expanded-repeat-btn:hover {
+  color: var(--text-primary);
+}
+
+#repeat-btn.active,
+#expanded-repeat-btn.active {
+  color: var(--accent) !important;
 }
 
 /* Mobile play button - ONLY show on mobile */
@@ -944,6 +996,11 @@ body:not(.light) .toggle-knob {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-play-btn:hover {
+  background: var(--accent-hover);
 }
 
 /* Volume */
@@ -971,6 +1028,11 @@ body:not(.light) .toggle-knob {
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
 }
 
 .volume-slider::-moz-range-thumb {
@@ -1109,6 +1171,7 @@ body:not(.light) .toggle-knob {
   color: var(--text-muted);
 }
 
+/* Expanded player controls - centered, no shuffle */
 .expanded-player-controls {
   display: flex;
   align-items: center;
@@ -1123,6 +1186,11 @@ body:not(.light) .toggle-knob {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.expanded-control-btn:hover {
+  color: var(--text-primary);
 }
 
 .expanded-control-btn.active {
@@ -1140,6 +1208,11 @@ body:not(.light) .toggle-knob {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.expanded-play-btn:hover {
+  transform: scale(1.05);
 }
 
 .expanded-player-volume {
