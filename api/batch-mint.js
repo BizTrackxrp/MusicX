@@ -107,8 +107,10 @@ async function handleMint(req, res) {
     }
     
     const totalNFTs = trackUris.length * quantity;
-    if (totalNFTs > 500) {
-      return res.status(400).json({ error: 'Maximum 500 NFTs per batch (reduce editions or tracks)' });
+    
+    // Allow up to 1000 NFTs per batch
+    if (totalNFTs > 1000) {
+      return res.status(400).json({ error: 'Maximum 1000 NFTs per batch (reduce editions or tracks)' });
     }
     
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
@@ -250,6 +252,21 @@ async function handleMint(req, res) {
       
       console.log(`Batch mint complete: ${totalMinted}/${totalNFTs} successful`);
       
+      // Update release with minted NFT token IDs
+      if (releaseId && allNftTokenIds.length > 0) {
+        try {
+          await sql`
+            UPDATE releases 
+            SET nft_token_ids = ${JSON.stringify(allNftTokenIds)},
+                is_minted = true
+            WHERE id = ${releaseId}
+          `;
+          console.log(`Updated release ${releaseId} with ${allNftTokenIds.length} NFT token IDs`);
+        } catch (updateError) {
+          console.error('Failed to update release:', updateError.message);
+        }
+      }
+      
       return res.json({
         success: true,
         totalRequested: totalNFTs,
@@ -257,7 +274,6 @@ async function handleMint(req, res) {
         trackCount: trackUris.length,
         editionsPerTrack: quantity,
         tracks: mintedTracks,
-        // All NFT Token IDs (for reference)
         nftTokenIds: allNftTokenIds,
       });
       
