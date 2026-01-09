@@ -100,14 +100,15 @@ const Player = {
     const playBtn = document.getElementById('play-btn');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
-    // REMOVED: shuffleBtn - shuffle is now always on
     const repeatBtn = document.getElementById('repeat-btn');
     const volumeBtn = document.getElementById('volume-btn');
     const volumeSlider = document.getElementById('volume-slider');
     const progressBar = document.getElementById('player-progress');
     
-    // Mobile controls
+    // Mobile controls (mini player)
     const mobilePlayBtn = document.getElementById('mobile-play-btn');
+    const mobilePrevBtn = document.getElementById('mobile-prev-btn');
+    const mobileNextBtn = document.getElementById('mobile-next-btn');
     const expandBtn = document.getElementById('player-expand-btn');
     const collapseBtn = document.getElementById('collapse-player-btn');
     
@@ -115,23 +116,26 @@ const Player = {
     const expPlayBtn = document.getElementById('expanded-play-btn');
     const expPrevBtn = document.getElementById('expanded-prev-btn');
     const expNextBtn = document.getElementById('expanded-next-btn');
-    // REMOVED: expShuffleBtn - shuffle is now always on
     const expRepeatBtn = document.getElementById('expanded-repeat-btn');
     const expVolumeSlider = document.getElementById('expanded-volume-slider');
     const expProgressBar = document.getElementById('expanded-progress');
     
-    // Play/Pause
+    // Play/Pause - all buttons
     if (playBtn) playBtn.addEventListener('click', () => this.togglePlay());
     if (mobilePlayBtn) mobilePlayBtn.addEventListener('click', () => this.togglePlay());
     if (expPlayBtn) expPlayBtn.addEventListener('click', () => this.togglePlay());
     
-    // Previous/Next
+    // Previous - all buttons
     if (prevBtn) prevBtn.addEventListener('click', () => this.previous());
-    if (nextBtn) nextBtn.addEventListener('click', () => this.next());
+    if (mobilePrevBtn) mobilePrevBtn.addEventListener('click', () => this.previous());
     if (expPrevBtn) expPrevBtn.addEventListener('click', () => this.previous());
+    
+    // Next - all buttons
+    if (nextBtn) nextBtn.addEventListener('click', () => this.next());
+    if (mobileNextBtn) mobileNextBtn.addEventListener('click', () => this.next());
     if (expNextBtn) expNextBtn.addEventListener('click', () => this.next());
     
-    // Repeat only (shuffle removed)
+    // Repeat
     if (repeatBtn) repeatBtn.addEventListener('click', () => this.toggleRepeat());
     if (expRepeatBtn) expRepeatBtn.addEventListener('click', () => this.toggleRepeat());
     
@@ -156,18 +160,24 @@ const Player = {
     if (expandBtn) expandBtn.addEventListener('click', () => this.openReleaseModal());
     if (collapseBtn) collapseBtn.addEventListener('click', () => this.collapsePlayer());
     
-    // Like button
+    // Like buttons - desktop player bar and expanded player
     const likeBtn = document.getElementById('player-like-btn');
     const expLikeBtn = document.getElementById('expanded-like-btn');
-    if (likeBtn) likeBtn.addEventListener('click', () => this.toggleLike());
-    if (expLikeBtn) expLikeBtn.addEventListener('click', () => this.toggleLike());
+    if (likeBtn) likeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleLike();
+    });
+    if (expLikeBtn) expLikeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleLike();
+    });
     
     // Click on track info to open release modal (not expanded player)
     const playerTrack = document.getElementById('player-track-info');
     if (playerTrack) {
       playerTrack.addEventListener('click', async (e) => {
-        // Don't trigger if clicking on the expand button
-        if (e.target.closest('.player-expand-btn')) return;
+        // Don't trigger if clicking on the expand button or controls
+        if (e.target.closest('.player-expand-btn') || e.target.closest('button')) return;
         await this.openReleaseModal();
       });
       playerTrack.style.cursor = 'pointer';
@@ -461,7 +471,6 @@ const Player = {
     // Toggle active class for blue highlight
     if (repeatBtn) {
       repeatBtn.classList.toggle('active', isRepeat);
-      // Also update the color directly for immediate feedback
       repeatBtn.style.color = isRepeat ? 'var(--accent)' : '';
     }
     if (expRepeatBtn) {
@@ -532,26 +541,43 @@ const Player = {
   
   /**
    * Toggle like for current track
+   * Uses the toggleTrackLike from state.js for optimistic updates
    */
   async toggleLike() {
     const track = AppState.player.currentTrack;
-    if (!track || !AppState.user?.address) return;
+    if (!track) return;
+    
+    // Check if user is logged in
+    if (!AppState.user?.address) {
+      if (typeof Modals !== 'undefined' && Modals.showAuth) {
+        Modals.showAuth();
+      }
+      return;
+    }
     
     const trackId = track.trackId || track.id?.toString();
-    const isLiked = isTrackLiked(trackId);
+    const releaseId = track.releaseId;
     
-    try {
-      if (isLiked) {
-        await API.unlikeTrack(AppState.user.address, trackId);
-        removeLikedTrack(trackId);
-      } else {
-        await API.likeTrack(AppState.user.address, trackId, track.releaseId);
-        addLikedTrack(trackId);
-      }
+    // Use the state.js toggleTrackLike which handles optimistic updates
+    if (typeof toggleTrackLike === 'function') {
+      await toggleTrackLike(trackId, releaseId);
+    } else {
+      // Fallback to manual toggle if state function not available
+      const isLiked = isTrackLiked(trackId);
       
-      this.updateLikeButton();
-    } catch (error) {
-      console.error('Failed to toggle like:', error);
+      try {
+        if (isLiked) {
+          await API.unlikeTrack(AppState.user.address, trackId);
+          removeLikedTrack(trackId);
+        } else {
+          await API.likeTrack(AppState.user.address, trackId, releaseId);
+          addLikedTrack(trackId);
+        }
+        
+        this.updateLikeButton();
+      } catch (error) {
+        console.error('Failed to toggle like:', error);
+      }
     }
   },
   
@@ -676,8 +702,13 @@ const Player = {
     if (expTitle) expTitle.textContent = track.title || 'Unknown Track';
     if (expArtist) expArtist.textContent = track.artist || 'Unknown Artist';
     
-    // Update like button
+    // Update like button state
     this.updateLikeButton();
+    
+    // Sync like button if syncPlayerLikeButton exists in state.js
+    if (typeof syncPlayerLikeButton === 'function') {
+      syncPlayerLikeButton();
+    }
     
     // Update document title
     document.title = `${track.title || 'Unknown'} - ${track.artist || 'Unknown'} | XRP Music`;
@@ -723,11 +754,22 @@ const Player = {
     const trackId = track.trackId || track.id?.toString();
     const isLiked = typeof isTrackLiked === 'function' ? isTrackLiked(trackId) : false;
     
+    // Desktop player like button
     const likeBtn = document.getElementById('player-like-btn');
-    const expLikeBtn = document.getElementById('expanded-like-btn');
+    if (likeBtn) {
+      likeBtn.classList.toggle('liked', isLiked);
+      likeBtn.setAttribute('title', isLiked ? 'Unlike' : 'Like');
+      const svg = likeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
     
-    if (likeBtn) likeBtn.classList.toggle('liked', isLiked);
-    if (expLikeBtn) expLikeBtn.classList.toggle('liked', isLiked);
+    // Expanded player like button
+    const expLikeBtn = document.getElementById('expanded-like-btn');
+    if (expLikeBtn) {
+      expLikeBtn.classList.toggle('liked', isLiked);
+      const svg = expLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
   },
   
   updateExpandedPlayer() {
