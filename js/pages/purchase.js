@@ -61,39 +61,31 @@ const PurchasePage = {
     }
   },
   
-  async checkAvailability() {
-    const release = this.release;
-    
-    if (this.isAlbum) {
-      // Check all tracks have availability
-      const trackCount = release.tracks?.length || 1;
-      const available = release.totalEditions - release.soldEditions;
+async checkAvailability() {
+    try {
+      const response = await fetch('/api/broker-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'check',
+          releaseId: this.release.id,
+          trackId: this.track?.id,
+        }),
+      });
       
-      if (available < 1) {
-        return { available: false, reason: 'This album is sold out' };
-      }
+      const result = await response.json();
       
-      // TODO: Check each track individually if they have separate counts
-      return { available: true };
-      
-    } else if (this.track) {
-      // Single track purchase
-      const trackSold = this.track.soldCount || 0;
-      const trackRemaining = release.totalEditions - trackSold;
-      
-      if (trackRemaining < 1) {
-        return { available: false, reason: `"${this.track.title}" is sold out` };
+      if (!response.ok || !result.available) {
+        return { 
+          available: false, 
+          reason: result.error || 'Not available' 
+        };
       }
       
       return { available: true };
-      
-    } else {
-      // Single release (1 track)
-      const available = release.totalEditions - release.soldEditions;
-      if (available < 1) {
-        return { available: false, reason: 'This release is sold out' };
-      }
-      return { available: true };
+    } catch (error) {
+      console.error('Availability check failed:', error);
+      return { available: false, reason: 'Failed to check availability' };
     }
   },
   
