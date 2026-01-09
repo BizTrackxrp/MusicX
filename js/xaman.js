@@ -309,21 +309,28 @@ const XamanWallet = {
       }
       
       console.log('Creating payment payload...');
-      const paymentPayload = await this.sdk.payload.create({
-        txjson: {
-          TransactionType: 'Payment',
-          Destination: platformAddress,
-          Amount: mintFeeDrops,
-        },
-        custom_meta: {
-          instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${totalNFTs} NFT editions`,
-        },
-      });
+      
+      let paymentPayload;
+      try {
+        paymentPayload = await this.sdk.payload.create({
+          txjson: {
+            TransactionType: 'Payment',
+            Destination: platformAddress,
+            Amount: mintFeeDrops,
+          },
+          custom_meta: {
+            instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${totalNFTs} NFT editions`,
+          },
+        });
+      } catch (payloadError) {
+        console.error('Failed to create payment payload:', payloadError);
+        throw new Error('Session expired - please refresh the page and reconnect your wallet');
+      }
       
       console.log('Payment payload created:', paymentPayload);
       
-      if (!paymentPayload) {
-        throw new Error('Failed to create payment payload');
+      if (!paymentPayload || !paymentPayload.uuid) {
+        throw new Error('Failed to create Xaman request - please refresh and reconnect your wallet');
       }
       
       // Open Xaman for fee payment
@@ -354,21 +361,28 @@ const XamanWallet = {
       }
       
       console.log('Creating authorization payload...');
-      const authPayload = await this.sdk.payload.create({
-        txjson: {
-          TransactionType: 'AccountSet',
-          NFTokenMinter: platformAddress,
-          SetFlag: 10,
-        },
-        custom_meta: {
-          instruction: `Authorize XRP Music to mint ${totalNFTs} NFT editions for you`,
-        },
-      });
+      
+      let authPayload;
+      try {
+        authPayload = await this.sdk.payload.create({
+          txjson: {
+            TransactionType: 'AccountSet',
+            NFTokenMinter: platformAddress,
+            SetFlag: 10,
+          },
+          custom_meta: {
+            instruction: `Authorize XRP Music to mint ${totalNFTs} NFT editions for you`,
+          },
+        });
+      } catch (authError) {
+        console.error('Failed to create auth payload:', authError);
+        throw new Error('Session expired - please refresh the page and reconnect your wallet');
+      }
       
       console.log('Auth payload created:', authPayload);
       
-      if (!authPayload) {
-        throw new Error('Failed to create authorization payload');
+      if (!authPayload || !authPayload.uuid) {
+        throw new Error('Failed to create Xaman request - please refresh and reconnect your wallet');
       }
       
       // Open Xaman for authorization
@@ -564,15 +578,21 @@ const XamanWallet = {
       }];
     }
     
-    const payload = await this.sdk.payload.create({
-      txjson: txJson,
-      custom_meta: {
-        instruction: `Pay ${amountXRP} XRP for music NFT`,
-      },
-    });
+    let payload;
+    try {
+      payload = await this.sdk.payload.create({
+        txjson: txJson,
+        custom_meta: {
+          instruction: `Pay ${amountXRP} XRP for music NFT`,
+        },
+      });
+    } catch (payloadError) {
+      console.error('Failed to create payment payload:', payloadError);
+      throw new Error('Session expired - please refresh the page and reconnect your wallet');
+    }
     
-    if (!payload) {
-      throw new Error('Failed to create payment payload');
+    if (!payload || !payload.uuid) {
+      throw new Error('Failed to create payment payload - please refresh and reconnect your wallet');
     }
     
     console.log('Payment payload created, push notification sent:', payload.uuid);
@@ -589,21 +609,27 @@ const XamanWallet = {
     
     console.log('Creating transfer offer:', { nftTokenId, destination });
     
-    const payload = await this.sdk.payload.create({
-      txjson: {
-        TransactionType: 'NFTokenCreateOffer',
-        NFTokenID: nftTokenId,
-        Amount: '0',
-        Flags: 1,
-        Destination: destination,
-      },
-      custom_meta: {
-        instruction: 'Sign to transfer your NFT to XRP Music for listing',
-      },
-    });
+    let payload;
+    try {
+      payload = await this.sdk.payload.create({
+        txjson: {
+          TransactionType: 'NFTokenCreateOffer',
+          NFTokenID: nftTokenId,
+          Amount: '0',
+          Flags: 1,
+          Destination: destination,
+        },
+        custom_meta: {
+          instruction: 'Sign to transfer your NFT to XRP Music for listing',
+        },
+      });
+    } catch (payloadError) {
+      console.error('Failed to create transfer payload:', payloadError);
+      throw new Error('Session expired - please refresh the page and reconnect your wallet');
+    }
     
-    if (!payload) {
-      throw new Error('Failed to create transfer payload');
+    if (!payload || !payload.uuid) {
+      throw new Error('Failed to create transfer payload - please refresh and reconnect your wallet');
     }
     
     console.log('Transfer offer payload:', payload);
@@ -644,18 +670,24 @@ const XamanWallet = {
     
     console.log('Accepting sell offer:', offerIndex);
     
-    const payload = await this.sdk.payload.create({
-      txjson: {
-        TransactionType: 'NFTokenAcceptOffer',
-        NFTokenSellOffer: offerIndex,
-      },
-      custom_meta: {
-        instruction: 'Sign to receive your music NFT',
-      },
-    });
+    let payload;
+    try {
+      payload = await this.sdk.payload.create({
+        txjson: {
+          TransactionType: 'NFTokenAcceptOffer',
+          NFTokenSellOffer: offerIndex,
+        },
+        custom_meta: {
+          instruction: 'Sign to receive your music NFT',
+        },
+      });
+    } catch (payloadError) {
+      console.error('Failed to create accept offer payload:', payloadError);
+      throw new Error('Session expired - please refresh the page and reconnect your wallet');
+    }
     
-    if (!payload) {
-      throw new Error('Failed to create accept offer payload');
+    if (!payload || !payload.uuid) {
+      throw new Error('Failed to create accept offer payload - please refresh and reconnect your wallet');
     }
     
     console.log('Accept offer payload:', payload);
@@ -674,20 +706,26 @@ const XamanWallet = {
     
     const amountInDrops = Math.floor(price * 1000000).toString();
     
-    const payload = await this.sdk.payload.create({
-      txjson: {
-        TransactionType: 'NFTokenCreateOffer',
-        NFTokenID: nftTokenId,
-        Amount: amountInDrops,
-        Flags: 1,
-      },
-      custom_meta: {
-        instruction: `List your NFT for sale at ${price} XRP`,
-      },
-    });
+    let payload;
+    try {
+      payload = await this.sdk.payload.create({
+        txjson: {
+          TransactionType: 'NFTokenCreateOffer',
+          NFTokenID: nftTokenId,
+          Amount: amountInDrops,
+          Flags: 1,
+        },
+        custom_meta: {
+          instruction: `List your NFT for sale at ${price} XRP`,
+        },
+      });
+    } catch (payloadError) {
+      console.error('Failed to create sell offer payload:', payloadError);
+      throw new Error('Session expired - please refresh the page and reconnect your wallet');
+    }
     
-    if (!payload) {
-      throw new Error('Failed to create sell offer payload');
+    if (!payload || !payload.uuid) {
+      throw new Error('Failed to create sell offer payload - please refresh and reconnect your wallet');
     }
     
     console.log('Create sell offer payload:', payload);
@@ -738,18 +776,24 @@ const XamanWallet = {
     
     console.log('Cancelling sell offer:', offerIndex);
     
-    const payload = await this.sdk.payload.create({
-      txjson: {
-        TransactionType: 'NFTokenCancelOffer',
-        NFTokenOffers: [offerIndex],
-      },
-      custom_meta: {
-        instruction: 'Cancel your NFT listing',
-      },
-    });
+    let payload;
+    try {
+      payload = await this.sdk.payload.create({
+        txjson: {
+          TransactionType: 'NFTokenCancelOffer',
+          NFTokenOffers: [offerIndex],
+        },
+        custom_meta: {
+          instruction: 'Cancel your NFT listing',
+        },
+      });
+    } catch (payloadError) {
+      console.error('Failed to create cancel offer payload:', payloadError);
+      throw new Error('Session expired - please refresh the page and reconnect your wallet');
+    }
     
-    if (!payload) {
-      throw new Error('Failed to create cancel offer payload');
+    if (!payload || !payload.uuid) {
+      throw new Error('Failed to create cancel offer payload - please refresh and reconnect your wallet');
     }
     
     console.log('Cancel offer payload:', payload);
