@@ -95,7 +95,12 @@ const Router = {
         PurchasePage.init();
         break;
       case 'liked':
-        this.renderLikedPage();
+        // Use new Spotify-style LikedSongsPage
+        if (typeof LikedSongsPage !== 'undefined') {
+          LikedSongsPage.render();
+        } else {
+          this.renderLikedPageFallback();
+        }
         break;
       case 'playlists':
         this.renderPlaylistsPage();
@@ -119,9 +124,9 @@ const Router = {
   },
   
   /**
-   * Render liked songs page
+   * Fallback liked songs page (if LikedSongsPage not loaded)
    */
-  async renderLikedPage() {
+  async renderLikedPageFallback() {
     if (!AppState.user?.address) {
       UI.renderPage(`
         <div class="empty-state" style="min-height: 60vh;">
@@ -225,7 +230,7 @@ const Router = {
           try {
             await API.unlikeTrack(AppState.user.address, trackId);
             removeLikedTrack(trackId);
-            this.renderLikedPage();
+            this.renderLikedPageFallback();
           } catch (error) {
             console.error('Failed to unlike:', error);
           }
