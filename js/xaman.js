@@ -595,7 +595,15 @@ const XamanWallet = {
       throw new Error('Failed to create payment payload - please refresh and reconnect your wallet');
     }
     
-    console.log('Payment payload created, push notification sent:', payload.uuid);
+    console.log('Payment payload created:', payload.uuid);
+    
+    // Open Xaman for payment signing
+    if (payload.next?.always) {
+      console.log('Opening Xaman for payment:', payload.next.always);
+      this.openXamanPopup(payload.next.always);
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
     
     return this.waitForPayload(payload.uuid);
   },
@@ -691,6 +699,14 @@ const XamanWallet = {
     }
     
     console.log('Accept offer payload:', payload);
+    
+    // FIX: Open Xaman for the user to sign (this was missing!)
+    if (payload.next?.always) {
+      console.log('Opening Xaman for accept offer:', payload.next.always);
+      this.openXamanPopup(payload.next.always);
+    } else {
+      throw new Error('No sign URL returned from Xaman');
+    }
     
     return this.waitForPayload(payload.uuid);
   },
