@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
@@ -25,6 +25,8 @@ export default async function handler(req, res) {
       return await createRelease(req, res, sql);
     } else if (req.method === 'PUT') {
       return await updateRelease(req, res, sql);
+    } else if (req.method === 'DELETE') {
+      return await deleteRelease(req, res, sql);
     }
     
     return res.status(405).json({ error: 'Method not allowed' });
@@ -290,6 +292,62 @@ async function updateRelease(req, res, sql) {
     success: true, 
     release: formatRelease(updated)
   });
+}
+
+/**
+ * Delete a release and all associated data
+ * Used for cleanup when minting fails (e.g., user rejects Xaman signature)
+ */
+async function deleteRelease(req, res, sql) {
+  const { id } = req.query;
+  
+  if (!id) {
+    return res.status(400).json({ error: 'Missing release ID' });
+  }
+  
+  console.log('Deleting release:', id);
+  
+  try {
+    // Delete in order due to foreign key constraints:
+    // 1. Delete from nfts table (references tracks and releases)
+    const deletedNfts = await sql`
+      DELETE FROM nfts WHERE release_id = ${id}
+      RETURNING id
+    `;
+    console.log(`Deleted ${deletedNfts.length} NFT records`);
+    
+    // 2. Delete from tracks table (references releases)
+    const deletedTracks = await sql`
+      DELETE FROM tracks WHERE release_id = ${id}
+      RETURNING id
+    `;
+    console.log(`Deleted ${deletedTracks.length} track records`);
+    
+    // 3. Delete the release itself
+    const deletedRelease = await sql`
+      DELETE FROM releases WHERE id = ${id}
+      RETURNING id
+    `;
+    
+    if (deletedRelease.length === 0) {
+      return res.status(404).json({ error: 'Release not found' });
+    }
+    
+    console.log('Successfully deleted release:', id);
+    
+    return res.json({ 
+      success: true, 
+      deleted: {
+        releaseId: id,
+        nfts: deletedNfts.length,
+        tracks: deletedTracks.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('Delete release error:', error);
+    return res.status(500).json({ error: 'Failed to delete release' });
+  }
 }
 
 function formatRelease(row) {
