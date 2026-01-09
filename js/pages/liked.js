@@ -8,7 +8,7 @@ const LikedSongsPage = {
   isLoading: true,
   
   async render() {
-    const container = document.getElementById('main-content');
+    const container = document.getElementById('page-content');
     if (!container) return;
     
     // Check if logged in
@@ -44,7 +44,7 @@ const LikedSongsPage = {
                 <img class="liked-user-avatar" src="${AppState.profile?.avatarUrl || ''}" alt="" onerror="this.style.display='none'">
                 <span class="liked-user-name">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</span>
                 <span class="liked-dot">•</span>
-                <span class="liked-count" id="liked-count">Loading...</span>
+                <span class="liked-count" id="liked-count">0 songs</span>
               </div>
             </div>
           </div>
@@ -502,10 +502,23 @@ const LikedSongsPage = {
       this.tracks = data.tracks || [];
       this.isLoading = false;
       
-      // Update count
+      // Calculate total duration
+      const totalSeconds = this.tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      
+      let durationText = '';
+      if (hours > 0) {
+        durationText = `${hours} hr ${minutes} min`;
+      } else if (minutes > 0) {
+        durationText = `${minutes} min`;
+      }
+      
+      // Update count with duration
       const countEl = document.getElementById('liked-count');
       if (countEl) {
-        countEl.textContent = `${this.tracks.length} song${this.tracks.length !== 1 ? 's' : ''}`;
+        const songText = `${this.tracks.length} song${this.tracks.length !== 1 ? 's' : ''}`;
+        countEl.textContent = durationText ? `${songText}, ${durationText}` : songText;
       }
       
       // Enable buttons if we have tracks
@@ -890,9 +903,21 @@ const LikedSongsPage = {
           if (trackIdx > -1) AppState.likes.trackIds.splice(trackIdx, 1);
         }
         
-        // Update UI
-        document.getElementById('liked-count').textContent = 
-          `${this.tracks.length} song${this.tracks.length !== 1 ? 's' : ''}`;
+        // Recalculate total duration
+        const totalSeconds = this.tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        
+        let durationText = '';
+        if (hours > 0) {
+          durationText = `${hours} hr ${minutes} min`;
+        } else if (minutes > 0) {
+          durationText = `${minutes} min`;
+        }
+        
+        // Update UI with count and duration
+        const songText = `${this.tracks.length} song${this.tracks.length !== 1 ? 's' : ''}`;
+        document.getElementById('liked-count').textContent = durationText ? `${songText}, ${durationText}` : songText;
         
         this.renderTracks();
         this.bindEvents();
