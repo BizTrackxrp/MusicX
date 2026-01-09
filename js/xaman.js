@@ -1,9 +1,16 @@
 /**
  * XRP Music - Xaman Wallet Integration
  * Handles wallet connection, authentication, and signing
+ * 
+ * IMPORTANT: Sessions are NOT persisted across page closes.
+ * Users must re-authenticate with Xaman each time they visit.
+ * This prevents stale session issues and ensures fresh wallet connections.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
+
+// Session key for this browser tab only
+const SESSION_KEY = 'xrpmusic_session';
 
 const XamanWallet = {
   sdk: null,
@@ -46,10 +53,15 @@ const XamanWallet = {
       
       this.sdk = new Xumm(XAMAN_API_KEY);
       
+      // Set up page unload handler to clear session
+      this.setupAutoLogout();
+      
       this.sdk.on('success', async () => {
         try {
           const account = await this.sdk.user.account;
           if (account) {
+            // Use sessionStorage - dies when tab closes
+            this.saveSessionToTab(account);
             saveSession(account);
             await this.loadUserData(account);
             UI.updateAuthUI();
@@ -62,6 +74,7 @@ const XamanWallet = {
       });
       
       this.sdk.on('logout', () => {
+        this.clearTabSession();
         clearSession();
         UI.updateAuthUI();
         UI.showLoggedOutState();
@@ -82,14 +95,84 @@ const XamanWallet = {
         console.warn('SDK ready timeout, continuing anyway');
       }
       
-      this.checkSession().catch(err => {
-        console.warn('Session check failed:', err);
-      });
+      // Clear any persisted localStorage sessions on fresh page load
+      // Only restore if we have a valid sessionStorage session (same tab)
+      this.handlePageLoad();
       
       this.initialized = true;
     } catch (error) {
       console.error('Failed to initialize Xaman:', error);
     }
+  },
+  
+  /**
+   * Set up automatic logout on page close/unload
+   */
+  setupAutoLogout() {
+    // Clear session when page is being unloaded (closed, refreshed, navigated away)
+    window.addEventListener('beforeunload', () => {
+      // Clear localStorage session so it doesn't persist
+      localStorage.removeItem('xrpmusic_user');
+      localStorage.removeItem('xrpmusic_profile');
+    });
+    
+    // Also handle visibility change (tab hidden for too long)
+    let hiddenTime = null;
+    const MAX_HIDDEN_TIME = 30 * 60 * 1000; // 30 minutes
+    
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        hiddenTime = Date.now();
+      } else if (hiddenTime) {
+        const elapsed = Date.now() - hiddenTime;
+        if (elapsed > MAX_HIDDEN_TIME && AppState.user?.address) {
+          console.log('Session expired due to inactivity, logging out...');
+          this.disconnect();
+        }
+        hiddenTime = null;
+      }
+    });
+  },
+  
+  /**
+   * Handle page load - only restore session if it's a same-tab session
+   */
+  handlePageLoad() {
+    // Check if this is a fresh page load or same-tab navigation
+    const tabSession = sessionStorage.getItem(SESSION_KEY);
+    
+    if (!tabSession) {
+      // Fresh page load (new tab or browser reopened) - clear any old sessions
+      console.log('Fresh page load detected - clearing any stale sessions');
+      localStorage.removeItem('xrpmusic_user');
+      localStorage.removeItem('xrpmusic_profile');
+      clearSession();
+      UI.updateAuthUI();
+      UI.showLoggedOutState();
+    } else {
+      // Same tab navigation - restore session
+      console.log('Same-tab session found, restoring...');
+      this.checkSession().catch(err => {
+        console.warn('Session check failed:', err);
+      });
+    }
+  },
+  
+  /**
+   * Save session marker to sessionStorage (tab-specific)
+   */
+  saveSessionToTab(address) {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      address: address,
+      timestamp: Date.now()
+    }));
+  },
+  
+  /**
+   * Clear tab session
+   */
+  clearTabSession() {
+    sessionStorage.removeItem(SESSION_KEY);
   },
   
   /**
@@ -125,6 +208,13 @@ const XamanWallet = {
    * Check for existing session
    */
   async checkSession() {
+    // Only check if we have a tab session marker
+    const tabSession = sessionStorage.getItem(SESSION_KEY);
+    if (!tabSession) {
+      console.log('No tab session, skipping session check');
+      return;
+    }
+    
     if (AppState.user?.address) {
       await this.loadUserData(AppState.user.address);
       UI.updateAuthUI();
@@ -134,12 +224,15 @@ const XamanWallet = {
     try {
       const account = await this.sdk.user.account;
       if (account) {
+        this.saveSessionToTab(account);
         saveSession(account);
         await this.loadUserData(account);
         UI.updateAuthUI();
       }
     } catch (err) {
       console.log('No existing SDK session');
+      // Clear stale tab session if SDK session is gone
+      this.clearTabSession();
     }
   },
   
@@ -187,6 +280,7 @@ const XamanWallet = {
     if (this.sdk) {
       this.sdk.logout();
     }
+    this.clearTabSession();
     clearSession();
     UI.updateAuthUI();
     UI.showLoggedOutState();
