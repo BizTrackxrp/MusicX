@@ -37,8 +37,110 @@ export default async function handler(req, res) {
     return handleConfirmSale(req, res, sql);
   }
   
+  if (action === 'check') {
+    return handleAvailabilityCheck(req, res, sql);
+  }
+  
   // Default: handle purchase
   return handlePurchase(req, res, sql);
+}
+
+/**
+ * PRE-CHECK: Verify NFT availability BEFORE payment
+ * This prevents users from paying for sold-out items
+ */
+async function handleAvailabilityCheck(req, res, sql) {
+  try {
+    const { releaseId, trackId } = req.body;
+    
+    if (!releaseId) {
+      return res.status(400).json({ error: 'Release ID required' });
+    }
+    
+    // Get release details
+    const releases = await sql`
+      SELECT r.*, 
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', t.id,
+              'title', t.title,
+              'sold_count', COALESCE(t.sold_count, 0)
+            )
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as tracks
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      WHERE r.id = ${releaseId}
+      GROUP BY r.id
+    `;
+    
+    const release = releases[0];
+    
+    if (!release) {
+      return res.status(404).json({ 
+        available: false, 
+        error: 'Release not found' 
+      });
+    }
+    
+    // Determine which track to check
+    let targetTrackId = trackId;
+    let targetTrack = null;
+    
+    if (trackId && release.tracks) {
+      targetTrack = release.tracks.find(t => t.id === trackId);
+      if (!targetTrack) {
+        return res.status(404).json({ 
+          available: false, 
+          error: 'Track not found in release' 
+        });
+      }
+    } else if (release.tracks?.length > 0) {
+      targetTrack = release.tracks[0];
+      targetTrackId = targetTrack.id;
+    }
+    
+    // Check ACTUAL NFT availability in database
+    if (targetTrackId) {
+      const availableNfts = await sql`
+        SELECT COUNT(*) as count FROM nfts 
+        WHERE track_id = ${targetTrackId} 
+          AND status = 'available'
+      `;
+      
+      const availableCount = parseInt(availableNfts[0]?.count) || 0;
+      
+      if (availableCount === 0) {
+        return res.json({ 
+          available: false, 
+          error: `"${targetTrack?.title || 'This track'}" is sold out`,
+          soldOut: true
+        });
+      }
+      
+      return res.json({ 
+        available: true, 
+        availableCount,
+        trackTitle: targetTrack?.title,
+        price: parseFloat(release.song_price) || parseFloat(release.album_price) || 0
+      });
+    }
+    
+    // No track found
+    return res.status(400).json({ 
+      available: false, 
+      error: 'No tracks found for this release' 
+    });
+    
+  } catch (error) {
+    console.error('Availability check error:', error);
+    return res.status(500).json({ 
+      available: false, 
+      error: error.message || 'Failed to check availability' 
+    });
+  }
 }
 
 // Confirm sale after buyer successfully accepts NFT
