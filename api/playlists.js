@@ -1,114 +1,349 @@
 /**
  * XRP Music - Playlists API
- * Vercel Serverless Function
+ * /api/playlists
+ * 
+ * Handles playlist CRUD, track management, and playlist likes
  */
 
 import { neon } from '@neondatabase/serverless';
 
+const sql = neon(process.env.DATABASE_URL);
+
 export default async function handler(req, res) {
-  const sql = neon(process.env.DATABASE_URL);
-  
-  // CORS headers
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   try {
-    const { user, action } = req.query;
-    
+    // GET - Fetch playlists
     if (req.method === 'GET') {
-      // Get user's playlists
-      if (!user) {
-        return res.status(400).json({ error: 'User address required' });
+      const { id, user, public: isPublic, sort, withTracks, checkLiked } = req.query;
+      
+      // Get single playlist by ID
+      if (id) {
+        const playlists = await sql`
+          SELECT 
+            p.*,
+            pr.name as owner_name,
+            pr.avatar_url as owner_avatar,
+            (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count,
+            (SELECT COUNT(*) FROM playlist_likes WHERE playlist_id = p.id) as like_count
+          FROM playlists p
+          LEFT JOIN profiles pr ON p.owner_address = pr.address
+          WHERE p.id = ${id}
+        `;
+        
+        if (playlists.length === 0) {
+          return res.status(404).json({ error: 'Playlist not found' });
+        }
+        
+        const playlist = playlists[0];
+        
+        // Check if user has liked this playlist
+        if (checkLiked) {
+          const liked = await sql`
+            SELECT id FROM playlist_likes 
+            WHERE playlist_id = ${id} AND user_address = ${checkLiked}
+            LIMIT 1
+          `;
+          playlist.isLiked = liked.length > 0;
+        }
+        
+        // Get tracks if requested
+        if (withTracks === 'true') {
+          const tracks = await sql`
+            SELECT 
+              pt.id as playlist_track_id,
+              pt.position,
+              pt.added_at,
+              t.id as track_id,
+              t.title,
+              t.duration,
+              t.audio_cid,
+              t.audio_url,
+              r.id as release_id,
+              r.title as release_title,
+              r.cover_url,
+              r.artist_name,
+              r.artist_address,
+              r.type as release_type
+            FROM playlist_tracks pt
+            JOIN tracks t ON pt.track_id = t.id
+            JOIN releases r ON pt.release_id = r.id
+            WHERE pt.playlist_id = ${id}
+            ORDER BY pt.position ASC
+          `;
+          playlist.tracks = tracks;
+        }
+        
+        return res.json({ playlist });
       }
       
-      const playlists = await sql`
-        SELECT * FROM playlists 
-        WHERE owner_address = ${user}
-        ORDER BY created_at DESC
-      `;
+      // Get user's playlists
+      if (user) {
+        const playlists = await sql`
+          SELECT 
+            p.*,
+            (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count,
+            (SELECT COUNT(*) FROM playlist_likes WHERE playlist_id = p.id) as like_count
+          FROM playlists p
+          WHERE p.owner_address = ${user}
+          ORDER BY p.is_system DESC, p.created_at DESC
+        `;
+        
+        return res.json({ playlists });
+      }
       
-      return res.json({ playlists: playlists.map(formatPlaylist) });
+      // Get public playlists (for discovery)
+      if (isPublic === 'true') {
+        const orderBy = sort === 'popular' ? 'like_count DESC' : 'p.created_at DESC';
+        
+        const playlists = await sql`
+          SELECT 
+            p.*,
+            pr.name as owner_name,
+            pr.avatar_url as owner_avatar,
+            (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count,
+            (SELECT COUNT(*) FROM playlist_likes WHERE playlist_id = p.id) as like_count
+          FROM playlists p
+          LEFT JOIN profiles pr ON p.owner_address = pr.address
+          WHERE p.is_public = true AND p.is_system = false
+          ORDER BY ${sort === 'popular' ? sql`like_count DESC` : sql`p.created_at DESC`}
+          LIMIT 50
+        `;
+        
+        return res.json({ playlists });
+      }
       
-    } else if (req.method === 'POST') {
-      const { name, ownerAddress, action: bodyAction, playlistId, trackId } = req.body;
+      return res.status(400).json({ error: 'Provide id, user, or public=true' });
+    }
+    
+    // POST - Create playlist or manage tracks/likes
+    if (req.method === 'POST') {
+      const { action, name, ownerAddress, playlistId, trackId, releaseId, playlistTrackId, trackIds, userAddress } = req.body;
       
       // Create new playlist
-      if (bodyAction === 'create' || (!bodyAction && name)) {
+      if (action === 'create') {
         if (!name || !ownerAddress) {
           return res.status(400).json({ error: 'Name and owner address required' });
         }
         
-        const [playlist] = await sql`
-          INSERT INTO playlists (name, owner_address, track_ids, created_at)
-          VALUES (${name}, ${ownerAddress}, '[]', NOW())
-          RETURNING *
+        const id = `pl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        await sql`
+          INSERT INTO playlists (id, name, owner_address, is_public, is_system, created_at, updated_at)
+          VALUES (${id}, ${name}, ${ownerAddress}, false, false, NOW(), NOW())
         `;
         
-        return res.json({ success: true, playlist: formatPlaylist(playlist) });
+        return res.json({ success: true, playlistId: id });
       }
       
       // Add track to playlist
-      if (bodyAction === 'addTrack') {
-        if (!playlistId || !trackId) {
-          return res.status(400).json({ error: 'Playlist ID and track ID required' });
+      if (action === 'addTrack') {
+        if (!playlistId || !ownerAddress || !trackId || !releaseId) {
+          return res.status(400).json({ error: 'Playlist ID, owner, track ID, and release ID required' });
+        }
+        
+        // Verify ownership
+        const playlist = await sql`
+          SELECT id FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
+        `;
+        if (playlist.length === 0) {
+          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+        }
+        
+        // Check if track already in playlist
+        const existing = await sql`
+          SELECT id FROM playlist_tracks 
+          WHERE playlist_id = ${playlistId} AND track_id = ${trackId}
+        `;
+        if (existing.length > 0) {
+          return res.json({ success: true, message: 'Track already in playlist' });
+        }
+        
+        // Get next position
+        const maxPos = await sql`
+          SELECT COALESCE(MAX(position), 0) as max_pos FROM playlist_tracks WHERE playlist_id = ${playlistId}
+        `;
+        const nextPosition = (maxPos[0]?.max_pos || 0) + 1;
+        
+        const id = `pt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        await sql`
+          INSERT INTO playlist_tracks (id, playlist_id, track_id, release_id, position, added_at)
+          VALUES (${id}, ${playlistId}, ${trackId}, ${releaseId}, ${nextPosition}, NOW())
+        `;
+        
+        // Update playlist updated_at
+        await sql`UPDATE playlists SET updated_at = NOW() WHERE id = ${playlistId}`;
+        
+        return res.json({ success: true, playlistTrackId: id });
+      }
+      
+      // Remove track from playlist
+      if (action === 'removeTrack') {
+        if (!playlistId || !ownerAddress || !playlistTrackId) {
+          return res.status(400).json({ error: 'Playlist ID, owner, and playlist track ID required' });
+        }
+        
+        // Verify ownership
+        const playlist = await sql`
+          SELECT id, is_system FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
+        `;
+        if (playlist.length === 0) {
+          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
         }
         
         await sql`
-          UPDATE playlists 
-          SET track_ids = track_ids || ${JSON.stringify([trackId])}::jsonb
-          WHERE id = ${playlistId}
+          DELETE FROM playlist_tracks WHERE id = ${playlistTrackId} AND playlist_id = ${playlistId}
+        `;
+        
+        // Update playlist updated_at
+        await sql`UPDATE playlists SET updated_at = NOW() WHERE id = ${playlistId}`;
+        
+        return res.json({ success: true });
+      }
+      
+      // Reorder tracks
+      if (action === 'reorder') {
+        if (!playlistId || !ownerAddress || !trackIds || !Array.isArray(trackIds)) {
+          return res.status(400).json({ error: 'Playlist ID, owner, and track IDs array required' });
+        }
+        
+        // Verify ownership
+        const playlist = await sql`
+          SELECT id FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
+        `;
+        if (playlist.length === 0) {
+          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+        }
+        
+        // Update positions
+        for (let i = 0; i < trackIds.length; i++) {
+          await sql`
+            UPDATE playlist_tracks SET position = ${i + 1}
+            WHERE id = ${trackIds[i]} AND playlist_id = ${playlistId}
+          `;
+        }
+        
+        return res.json({ success: true });
+      }
+      
+      // Like playlist
+      if (action === 'like') {
+        if (!playlistId || !userAddress) {
+          return res.status(400).json({ error: 'Playlist ID and user address required' });
+        }
+        
+        const existing = await sql`
+          SELECT id FROM playlist_likes WHERE playlist_id = ${playlistId} AND user_address = ${userAddress}
+        `;
+        if (existing.length > 0) {
+          return res.json({ success: true, message: 'Already liked' });
+        }
+        
+        const id = `plike_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await sql`
+          INSERT INTO playlist_likes (id, playlist_id, user_address, created_at)
+          VALUES (${id}, ${playlistId}, ${userAddress}, NOW())
         `;
         
         return res.json({ success: true });
       }
       
-      // Remove track from playlist
-      if (bodyAction === 'removeTrack') {
-        if (!playlistId || !trackId) {
-          return res.status(400).json({ error: 'Playlist ID and track ID required' });
+      // Unlike playlist
+      if (action === 'unlike') {
+        if (!playlistId || !userAddress) {
+          return res.status(400).json({ error: 'Playlist ID and user address required' });
         }
         
         await sql`
-          UPDATE playlists 
-          SET track_ids = track_ids - ${trackId}
-          WHERE id = ${playlistId}
+          DELETE FROM playlist_likes WHERE playlist_id = ${playlistId} AND user_address = ${userAddress}
         `;
         
         return res.json({ success: true });
       }
       
       return res.status(400).json({ error: 'Invalid action' });
+    }
+    
+    // PUT - Update playlist metadata
+    if (req.method === 'PUT') {
+      const { playlistId, ownerAddress, name, description, isPublic, coverUrl } = req.body;
       
-    } else if (req.method === 'DELETE') {
-      const { id } = req.query;
-      
-      if (!id) {
-        return res.status(400).json({ error: 'Playlist ID required' });
+      if (!playlistId || !ownerAddress) {
+        return res.status(400).json({ error: 'Playlist ID and owner address required' });
       }
       
+      // Verify ownership and not system playlist
+      const playlist = await sql`
+        SELECT id, is_system FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
+      `;
+      if (playlist.length === 0) {
+        return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+      }
+      if (playlist[0].is_system) {
+        return res.status(403).json({ error: 'Cannot modify system playlists' });
+      }
+      
+      // Build update
+      const updates = [];
+      const values = [];
+      
+      if (name !== undefined) {
+        await sql`UPDATE playlists SET name = ${name}, updated_at = NOW() WHERE id = ${playlistId}`;
+      }
+      if (description !== undefined) {
+        await sql`UPDATE playlists SET description = ${description}, updated_at = NOW() WHERE id = ${playlistId}`;
+      }
+      if (isPublic !== undefined) {
+        await sql`UPDATE playlists SET is_public = ${isPublic}, updated_at = NOW() WHERE id = ${playlistId}`;
+      }
+      if (coverUrl !== undefined) {
+        await sql`UPDATE playlists SET cover_url = ${coverUrl}, updated_at = NOW() WHERE id = ${playlistId}`;
+      }
+      
+      return res.json({ success: true });
+    }
+    
+    // DELETE - Delete playlist
+    if (req.method === 'DELETE') {
+      const { id, owner } = req.query;
+      
+      if (!id || !owner) {
+        return res.status(400).json({ error: 'Playlist ID and owner required' });
+      }
+      
+      // Verify ownership and not system playlist
+      const playlist = await sql`
+        SELECT id, is_system FROM playlists WHERE id = ${id} AND owner_address = ${owner}
+      `;
+      if (playlist.length === 0) {
+        return res.status(403).json({ error: 'Not authorized to delete this playlist' });
+      }
+      if (playlist[0].is_system) {
+        return res.status(403).json({ error: 'Cannot delete system playlists' });
+      }
+      
+      // Delete tracks first
+      await sql`DELETE FROM playlist_tracks WHERE playlist_id = ${id}`;
+      // Delete likes
+      await sql`DELETE FROM playlist_likes WHERE playlist_id = ${id}`;
+      // Delete playlist
       await sql`DELETE FROM playlists WHERE id = ${id}`;
       
       return res.json({ success: true });
     }
     
     return res.status(405).json({ error: 'Method not allowed' });
+    
   } catch (error) {
     console.error('Playlists API error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: error.message });
   }
-}
-
-function formatPlaylist(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    ownerAddress: row.owner_address,
-    trackIds: row.track_ids || [],
-    createdAt: row.created_at,
-  };
 }
