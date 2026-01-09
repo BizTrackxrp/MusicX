@@ -62,32 +62,35 @@ const PurchasePage = {
   },
   
 async checkAvailability() {
-    try {
-      const response = await fetch('/api/broker-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'check',
-          releaseId: this.release.id,
-          trackId: this.track?.id,
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (!response.ok || !result.available) {
-        return { 
-          available: false, 
-          reason: result.error || 'Not available' 
-        };
-      }
-      
-      return { available: true };
-    } catch (error) {
-      console.error('Availability check failed:', error);
-      return { available: false, reason: 'Failed to check availability' };
+  try {
+    // Use different endpoint for album vs single
+    const endpoint = this.isAlbum ? '/api/broker-album-sale' : '/api/broker-sale';
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'check',
+        releaseId: this.release.id,
+        trackId: this.track?.id,
+      }),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok || !result.available) {
+      return { 
+        available: false, 
+        reason: result.error || 'Not available' 
+      };
     }
-  },
+    
+    return { available: true };
+  } catch (error) {
+    console.error('Availability check failed:', error);
+    return { available: false, reason: 'Failed to check availability' };
+  }
+},
   
   render() {
     const release = this.release;
