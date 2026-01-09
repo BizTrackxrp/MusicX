@@ -146,9 +146,15 @@ const XamanWallet = {
       console.log('Fresh page load detected - clearing any stale sessions');
       localStorage.removeItem('xrpmusic_user');
       localStorage.removeItem('xrpmusic_profile');
-      clearSession();
-      UI.updateAuthUI();
-      UI.showLoggedOutState();
+      // clearSession may not exist yet if state.js hasn't fully initialized
+      if (typeof clearSession === 'function') {
+        clearSession();
+      }
+      // UI may not be loaded yet during init - it will check AppState on its own init
+      if (typeof UI !== 'undefined' && UI.updateAuthUI) {
+        UI.updateAuthUI();
+        UI.showLoggedOutState();
+      }
     } else {
       // Same tab navigation - restore session
       console.log('Same-tab session found, restoring...');
