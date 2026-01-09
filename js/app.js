@@ -31,6 +31,9 @@ const Router = {
     if (page === 'playlist' && params.id) {
       return `/playlist/${params.id}`;
     }
+    if (page === 'release' && params.id) {
+      return `/release/${params.id}`;
+    }
     if (page === 'purchase') {
       const queryParams = new URLSearchParams();
       if (params.release) queryParams.set('release', params.release);
@@ -58,6 +61,12 @@ const Router = {
     if (path.startsWith('/playlist/')) {
       const id = path.replace('/playlist/', '');
       return { page: 'playlist', params: { id } };
+    }
+    
+    // Release page (direct link to release modal)
+    if (path.startsWith('/release/')) {
+      const id = path.replace('/release/', '');
+      return { page: 'release', params: { id } };
     }
     
     // Purchase page
@@ -108,11 +117,42 @@ const Router = {
       case 'playlist':
         this.renderPlaylistPage(this.params.id);
         break;
+      case 'release':
+        // Direct link to release - show stream page then open modal
+        this.openReleaseFromUrl(this.params.id);
+        break;
       case 'artist':
         this.renderArtistPage(this.params.address);
         break;
       default:
         StreamPage.render();
+    }
+  },
+  
+  /**
+   * Open release modal from direct URL
+   */
+  async openReleaseFromUrl(releaseId) {
+    // Show stream page as background
+    StreamPage.render();
+    
+    if (!releaseId) return;
+    
+    try {
+      // Fetch the release
+      const data = await API.getRelease(releaseId);
+      if (data?.release) {
+        // Small delay to let page render first
+        setTimeout(() => {
+          Modals.showRelease(data.release);
+        }, 100);
+      } else {
+        console.error('Release not found:', releaseId);
+        Modals.showToast('Release not found');
+      }
+    } catch (error) {
+      console.error('Failed to load release:', error);
+      Modals.showToast('Failed to load release');
     }
   },
   
