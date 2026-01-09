@@ -3731,9 +3731,11 @@ if (editions > 30) {
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       
+      let releaseId = null;  // Declare in outer scope for cleanup access
+      
       const statusEl = document.getElementById('mint-status');
       const statusText = document.getElementById('mint-status-text');
-      const navEl = document.getElementById('create-nav-3');
+      const navEl = document.getElementById('create-nav-3');ById('create-nav-3');
       
       statusEl.classList.remove('hidden');
       navEl.style.display = 'none';
