@@ -30,7 +30,96 @@ export default async function handler(req, res) {
     return handleConfirmSale(req, res, sql);
   }
   
+  if (action === 'check') {
+    return handleAvailabilityCheck(req, res, sql);
+  }
+  
   return handleAlbumPurchase(req, res, sql);
+}
+
+// Check availability for all tracks in album BEFORE payment
+async function handleAvailabilityCheck(req, res, sql) {
+  try {
+    const { releaseId } = req.body;
+    
+    if (!releaseId) {
+      return res.status(400).json({ error: 'Release ID required' });
+    }
+    
+    // Get release with tracks
+    const releases = await sql`
+      SELECT r.*, 
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', t.id,
+              'title', t.title,
+              'sold_count', COALESCE(t.sold_count, 0)
+            )
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as tracks
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      WHERE r.id = ${releaseId}
+      GROUP BY r.id
+    `;
+    
+    const release = releases[0];
+    if (!release) {
+      return res.status(404).json({ 
+        available: false, 
+        error: 'Release not found' 
+      });
+    }
+    
+    const tracks = release.tracks || [];
+    if (tracks.length === 0) {
+      return res.status(400).json({ 
+        available: false, 
+        error: 'No tracks in release' 
+      });
+    }
+    
+    // Check each track has available NFT
+    const unavailableTracks = [];
+    
+    for (const track of tracks) {
+      const availableNfts = await sql`
+        SELECT id, edition_number FROM nfts 
+        WHERE track_id = ${track.id} 
+          AND status = 'available'
+        LIMIT 1
+      `;
+      
+      if (availableNfts.length === 0) {
+        unavailableTracks.push(track.title);
+      }
+    }
+    
+    if (unavailableTracks.length > 0) {
+      return res.status(400).json({ 
+        available: false, 
+        soldOut: true,
+        error: unavailableTracks.length === tracks.length 
+          ? 'Album is sold out'
+          : `Sold out: ${unavailableTracks.join(', ')}`
+      });
+    }
+    
+    return res.json({ 
+      available: true,
+      releaseId,
+      trackCount: tracks.length
+    });
+    
+  } catch (error) {
+    console.error('Album availability check error:', error);
+    return res.status(500).json({ 
+      available: false, 
+      error: error.message 
+    });
+  }
 }
 
 async function handleConfirmSale(req, res, sql) {
