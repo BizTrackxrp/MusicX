@@ -3573,6 +3573,7 @@ if (editions > 30) {
   document.getElementById('release-editions').value = 30;
   return;
 }
+      const totalNFTs = tracks.length * editions;
       
       const royalty = document.getElementById('release-royalty').value;
       
