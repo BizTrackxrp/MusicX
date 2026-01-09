@@ -37,12 +37,22 @@ const Modals = {
     document.addEventListener('keydown', this.handleEsc);
   },
   
-  close() {
+ close() {
     const container = document.getElementById('modals');
     if (!container) return;
     if (this.nowPlayingInterval) {
       clearInterval(this.nowPlayingInterval);
       this.nowPlayingInterval = null;
+    }
+    
+    // CLEANUP: If we're closing during minting and have a pending release, delete it
+    if (this.pendingReleaseId) {
+      console.log('🧹 Modal closed - cleaning up pending release:', this.pendingReleaseId);
+      fetch(`/api/releases?id=${this.pendingReleaseId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => console.log('Cleanup result:', result))
+        .catch(err => console.error('Cleanup failed:', err));
+      this.pendingReleaseId = null;
     }
     const overlay = container.querySelector('.modal-overlay');
     if (overlay) {
@@ -3874,6 +3884,7 @@ const preReleaseData = {
 
 const preCreateResult = await API.saveRelease(preReleaseData);
 releaseId = preCreateResult.releaseId;
+Modals.pendingReleaseId = releaseId;  // Track for cleanup if modal closes
 const trackIds = preCreateResult.trackIds;
 
 console.log('Pre-created release:', { releaseId, trackIds });
@@ -4014,6 +4025,7 @@ try {
 
 // Success - NFTs minted and ready to sell!
 Modals.mintingInProgress = false;
+Modals.pendingReleaseId = null;  // Clear - minting succeeded, don't cleanup
 statusEl.innerHTML = `
   <div class="mint-success">
     <div class="mint-success-cover">
@@ -4062,23 +4074,24 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         Modals.mintingInProgress = false;
         
         // AUTO-CLEANUP: Delete the pre-created release if minting failed
-        if (releaseId) {
-          console.log('🧹 Cleaning up failed release:', releaseId);
-          try {
-            const deleteResponse = await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
-            const deleteResult = await deleteResponse.json();
-            console.log('Cleanup response:', deleteResponse.status, deleteResult);
-            if (deleteResult.success) {
-              console.log('✅ Cleaned up failed release');
-            } else {
-              console.error('❌ Cleanup failed:', deleteResult.error);
-            }
-          } catch (cleanupErr) {
-            console.error('❌ Cleanup fetch error:', cleanupErr);
-          }
-        } else {
-          console.log('⚠️ No releaseId to cleanup');
-        }
+       if (releaseId) {
+  console.log('🧹 Cleaning up failed release:', releaseId);
+  try {
+    const deleteResponse = await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
+    const deleteResult = await deleteResponse.json();
+    console.log('Cleanup response:', deleteResponse.status, deleteResult);
+    if (deleteResult.success) {
+      console.log('✅ Cleaned up failed release');
+      Modals.pendingReleaseId = null;
+    } else {
+      console.error('❌ Cleanup failed:', deleteResult.error);
+    }
+  } catch (cleanupErr) {
+    console.error('❌ Cleanup fetch error:', cleanupErr);
+  }
+} else {
+  console.log('⚠️ No releaseId to cleanup');
+}
         
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--error);">
