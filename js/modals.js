@@ -3735,7 +3735,7 @@ if (editions > 30) {
       
       const statusEl = document.getElementById('mint-status');
       const statusText = document.getElementById('mint-status-text');
-      const navEl = document.getElementById('create-nav-3');ById('create-nav-3');
+      const navEl = document.getElementById('create-nav-3');
       
       statusEl.classList.remove('hidden');
       navEl.style.display = 'none';
@@ -3752,8 +3752,7 @@ if (editions > 30) {
         `;
       };
       
-      let releaseId = null;
- try {
+      try {
         // Step 1: Upload cover to IPFS
         showStatus(1, 5, 'Uploading cover art...', 'This may take a moment depending on file size');
         const coverResult = await API.uploadFile(coverFile);
