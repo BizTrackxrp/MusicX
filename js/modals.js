@@ -3750,7 +3750,8 @@ if (editions > 30) {
         `;
       };
       
-      try {
+      let releaseId = null;
+ try {
         // Step 1: Upload cover to IPFS
         showStatus(1, 5, 'Uploading cover art...', 'This may take a moment depending on file size');
         const coverResult = await API.uploadFile(coverFile);
@@ -3871,7 +3872,7 @@ const preReleaseData = {
 };
 
 const preCreateResult = await API.saveRelease(preReleaseData);
-const releaseId = preCreateResult.releaseId;
+releaseId = preCreateResult.releaseId;
 const trackIds = preCreateResult.trackIds;
 
 console.log('Pre-created release:', { releaseId, trackIds });
@@ -4052,9 +4053,21 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
   Router.navigate('profile');
 });
 
-      } catch (error) {
+    } catch (error) {
         console.error('Mint failed:', error);
         Modals.mintingInProgress = false;
+        
+        // AUTO-CLEANUP: Delete the pre-created release if minting failed
+        if (releaseId) {
+          console.log('Cleaning up failed release:', releaseId);
+          try {
+            await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
+            console.log('✓ Cleaned up failed release');
+          } catch (cleanupErr) {
+            console.error('Failed to cleanup release:', cleanupErr);
+          }
+        }
+        
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--error);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
