@@ -4054,19 +4054,30 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
   Router.navigate('profile');
 });
 
-    } catch (error) {
+  } catch (error) {
         console.error('Mint failed:', error);
+        console.log('=== CLEANUP DEBUG ===');
+        console.log('releaseId value:', releaseId);
+        
         Modals.mintingInProgress = false;
         
         // AUTO-CLEANUP: Delete the pre-created release if minting failed
         if (releaseId) {
-          console.log('Cleaning up failed release:', releaseId);
+          console.log('🧹 Cleaning up failed release:', releaseId);
           try {
-            await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
-            console.log('✓ Cleaned up failed release');
+            const deleteResponse = await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
+            const deleteResult = await deleteResponse.json();
+            console.log('Cleanup response:', deleteResponse.status, deleteResult);
+            if (deleteResult.success) {
+              console.log('✅ Cleaned up failed release');
+            } else {
+              console.error('❌ Cleanup failed:', deleteResult.error);
+            }
           } catch (cleanupErr) {
-            console.error('Failed to cleanup release:', cleanupErr);
+            console.error('❌ Cleanup fetch error:', cleanupErr);
           }
+        } else {
+          console.log('⚠️ No releaseId to cleanup');
         }
         
         statusEl.innerHTML = `
