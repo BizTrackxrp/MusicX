@@ -5,6 +5,9 @@
  * 2. Platform transfers 1 NFT to buyer (from nfts table inventory)
  * 3. Platform sends 98% to artist
  * 4. Platform keeps 2%
+ * 
+ * IMPORTANT: Only NFTs tracked in the database can be sold.
+ * No fallback to on-chain search - this prevents wrong NFT transfers.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -206,9 +209,10 @@ async function handlePurchase(req, res, sql) {
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
     
-    // TRY to get NFT from nfts table first (new system)
+    // Get NFT from nfts table - this is the ONLY way to get an NFT now
     let nftToTransfer = null;
     let editionNumber = null;
+    let nftRecordId = null;
     
     if (targetTrackId) {
       const availableNfts = await sql`
@@ -223,6 +227,7 @@ async function handlePurchase(req, res, sql) {
         const nftRecord = availableNfts[0];
         nftToTransfer = { NFTokenID: nftRecord.nft_token_id };
         editionNumber = nftRecord.edition_number;
+        nftRecordId = nftRecord.id;
         console.log('Found NFT in database:', nftRecord.nft_token_id, 'Edition:', editionNumber);
         
         // Mark as pending (will be confirmed after buyer accepts)
@@ -232,69 +237,21 @@ async function handlePurchase(req, res, sql) {
       }
     }
     
+    // NO FALLBACK - if NFT not in database, it's sold out
+    if (!nftToTransfer) {
+      console.error('No NFT available in database for track:', targetTrackId);
+      return res.status(400).json({ 
+        error: `"${targetTrack?.title || 'This track'}" is sold out`,
+        soldOut: true 
+      });
+    }
+    
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
     
     try {
       const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-      
-      // If no NFT found in database, fall back to searching on-chain (legacy support)
-      if (!nftToTransfer) {
-        console.log('No NFT in database, searching on-chain...');
-        
-        // Check availability based on sales count vs total editions
-        if (targetTrackId) {
-          const salesCount = await sql`
-            SELECT COUNT(*) as count FROM sales WHERE track_id = ${targetTrackId}
-          `;
-          const soldCount = parseInt(salesCount[0]?.count) || 0;
-          const trackAvailable = release.total_editions - soldCount;
-          
-          if (trackAvailable <= 0) {
-            await client.disconnect();
-            return res.status(400).json({ error: `Track "${targetTrack?.title || 'Unknown'}" is sold out` });
-          }
-        }
-        
-        // Build list of possible metadata CIDs
-        const possibleCids = [];
-        if (targetTrack?.metadata_cid) {
-          possibleCids.push(targetTrack.metadata_cid);
-        } else {
-          if (release.metadata_cid) possibleCids.push(release.metadata_cid);
-          if (release.tracks) {
-            for (const track of release.tracks) {
-              if (track.metadata_cid) possibleCids.push(track.metadata_cid);
-            }
-          }
-        }
-        
-        // Get platform's NFTs
-        const nftsResponse = await client.request({
-          command: 'account_nfts',
-          account: platformAddress,
-          limit: 400,
-        });
-        
-        const platformNFTs = nftsResponse.result.account_nfts || [];
-        const expectedUriHexes = possibleCids.map(cid => xrpl.convertStringToHex(`ipfs://${cid}`));
-        
-        for (const nft of platformNFTs) {
-          if (expectedUriHexes.includes(nft.URI)) {
-            nftToTransfer = nft;
-            break;
-          }
-        }
-        
-        if (!nftToTransfer) {
-          console.error('No matching NFT found for release:', releaseId);
-          // Refund buyer
-          await refundBuyer(client, platformWallet, platformAddress, buyerAddress, price, 'NFT unavailable');
-          await client.disconnect();
-          return res.status(400).json({ error: 'No NFT available - payment refunded', refunded: true });
-        }
-      }
       
       console.log('Transferring NFT:', nftToTransfer.NFTokenID);
       
@@ -334,11 +291,11 @@ async function handlePurchase(req, res, sql) {
       const offerResult = await client.submitAndWait(signedOffer.tx_blob);
       
       if (offerResult.result.meta.TransactionResult !== 'tesSUCCESS') {
-        // Reset NFT status if we had marked it pending
-        if (targetTrackId) {
+        // Reset NFT status
+        if (nftRecordId) {
           await sql`
             UPDATE nfts SET status = 'available' 
-            WHERE nft_token_id = ${nftToTransfer.NFTokenID}
+            WHERE id = ${nftRecordId}
           `;
         }
         await refundBuyer(client, platformWallet, platformAddress, buyerAddress, price, 'Offer creation failed');
@@ -400,10 +357,10 @@ async function handlePurchase(req, res, sql) {
     } catch (innerError) {
       console.error('Purchase error:', innerError);
       // Reset NFT status
-      if (nftToTransfer && targetTrackId) {
+      if (nftRecordId) {
         await sql`
           UPDATE nfts SET status = 'available' 
-          WHERE nft_token_id = ${nftToTransfer.NFTokenID}
+          WHERE id = ${nftRecordId}
         `;
       }
       try {
