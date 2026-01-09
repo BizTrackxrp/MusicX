@@ -854,8 +854,13 @@ const LikedSongsPage = {
   async handleMenuAction(action, track, idx) {
     switch (action) {
       case 'add-to-playlist':
-        // TODO: Show playlist picker modal
-        Modals.showToast('Playlist picker coming soon!');
+        PlaylistPicker.show({
+          trackId: track.track_id,
+          releaseId: track.release_id,
+          title: track.title,
+          artist: track.artist_name || Helpers.truncateAddress(track.artist_address),
+          cover: track.cover_url,
+        });
         break;
         
       case 'remove':
