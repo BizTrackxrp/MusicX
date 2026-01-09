@@ -2995,7 +2995,18 @@ showTrackPurchase(release, track, trackIdx) {
       }
       
       // Success!
-      updateStatus('NFT Purchased! 🎉', 'Redirecting to your collection...', false, true);
+      statusOverlay.querySelector('.qps-content').innerHTML = `
+        <div class="qps-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="qps-text">
+          <div class="qps-title" style="font-size:20px;font-weight:700;margin-top:16px;color:#22c55e;">NFT Buy Successful! 🎉</div>
+          <div class="qps-sub" style="font-size:14px;color:rgba(255,255,255,0.9);margin-top:8px;">Rerouting to your profile to see your collection...</div>
+        </div>
+      `;
       
       // Update button to show "Owned"
       btn.disabled = true;
