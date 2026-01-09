@@ -780,12 +780,44 @@ const LikedSongsPage = {
       </div>
     `;
     
-    // Position menu
+    // Position menu - check viewport boundaries
     const btnRect = event.target.closest('.track-actions-btn').getBoundingClientRect();
-    menu.style.top = `${btnRect.bottom + 4}px`;
-    menu.style.left = `${Math.min(btnRect.left, window.innerWidth - 220)}px`;
+    const menuHeight = 250; // Approximate menu height
+    const menuWidth = 220;
+    const padding = 8;
+    const playerBarHeight = 80; // Account for player bar at bottom
     
+    // Calculate available space
+    const spaceBelow = window.innerHeight - btnRect.bottom - playerBarHeight - padding;
+    const spaceAbove = btnRect.top - padding;
+    
+    // Append first to get actual dimensions
     document.body.appendChild(menu);
+    const actualMenuHeight = menu.offsetHeight;
+    
+    // Position horizontally - keep within viewport
+    let left = btnRect.left;
+    if (left + menuWidth > window.innerWidth - padding) {
+      left = window.innerWidth - menuWidth - padding;
+    }
+    if (left < padding) {
+      left = padding;
+    }
+    menu.style.left = `${left}px`;
+    
+    // Position vertically - prefer below, but flip to above if not enough space
+    if (spaceBelow >= actualMenuHeight) {
+      // Enough space below - position below the button
+      menu.style.top = `${btnRect.bottom + 4}px`;
+    } else if (spaceAbove >= actualMenuHeight) {
+      // Not enough below, but enough above - position above the button
+      menu.style.top = `${btnRect.top - actualMenuHeight - 4}px`;
+    } else {
+      // Not enough space either way - position at top of viewport with scroll
+      menu.style.top = `${padding}px`;
+      menu.style.maxHeight = `${window.innerHeight - playerBarHeight - padding * 2}px`;
+      menu.style.overflowY = 'auto';
+    }
     
     // Handle menu actions
     menu.querySelectorAll('.track-context-menu-item').forEach(item => {
