@@ -171,6 +171,18 @@ const Player = {
       e.stopPropagation();
       this.toggleLike();
     });
+
+    // Add to playlist buttons - desktop player bar and expanded player
+    const addBtn = document.getElementById('player-add-btn');
+    const expAddBtn = document.getElementById('expanded-add-btn');
+    if (addBtn) addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showPlaylistPicker();
+    });
+    if (expAddBtn) expAddBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showPlaylistPicker();
+    });
     
     // Click on track info to open release modal (not expanded player)
     const playerTrack = document.getElementById('player-track-info');
@@ -539,7 +551,7 @@ const Player = {
     this.audio.currentTime = percent * this.audio.duration;
   },
   
-  /**
+/**
    * Toggle like for current track
    * Uses the toggleTrackLike from state.js for optimistic updates
    */
@@ -578,6 +590,31 @@ const Player = {
       } catch (error) {
         console.error('Failed to toggle like:', error);
       }
+    }
+  },
+  
+  /**
+   * Show playlist picker for current track
+   */
+  showPlaylistPicker() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    if (!AppState.user?.address) {
+      if (typeof Modals !== 'undefined' && Modals.showAuth) {
+        Modals.showAuth();
+      }
+      return;
+    }
+    
+    if (typeof PlaylistPicker !== 'undefined') {
+      PlaylistPicker.show({
+        trackId: track.trackId || track.id,
+        releaseId: track.releaseId,
+        title: track.title,
+        artist: track.artist,
+        cover: track.cover,
+      });
     }
   },
   
