@@ -38,14 +38,14 @@ export default async function handler(req, res) {
   };
   
   try {
-    // STEP 1: Fix edition_number in nfts table
+    // STEP 1: Fix edition_number in nfts table (using ID for ordering)
     console.log('Step 1: Fixing NFT edition numbers...');
     try {
       await sql`
         WITH numbered AS (
           SELECT 
             id,
-            ROW_NUMBER() OVER (PARTITION BY track_id ORDER BY created_at, id) as new_edition
+            ROW_NUMBER() OVER (PARTITION BY track_id ORDER BY id) as new_edition
           FROM nfts
         )
         UPDATE nfts 
@@ -128,14 +128,13 @@ export default async function handler(req, res) {
       results.errors.push('Sales without NFTs: ' + e.message);
     }
     
-    // STEP 6: Reset stuck pending NFTs
+    // STEP 6: Reset stuck pending NFTs (reset ALL pending since no timestamp)
     console.log('Step 6: Resetting stuck pending NFTs...');
     try {
       const resetResult = await sql`
         UPDATE nfts 
         SET status = 'available' 
-        WHERE status = 'pending' 
-          AND (updated_at IS NULL OR updated_at < NOW() - INTERVAL '10 minutes')
+        WHERE status = 'pending'
         RETURNING id
       `;
       results.steps.push(`✓ Reset ${resetResult.length} stuck pending NFTs`);
