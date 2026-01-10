@@ -251,7 +251,7 @@ const BrowsePlaylistsPage = {
     
     try {
       // Fetch all public playlists
-      const response = await fetch('/api/playlists?browse=true');
+      const response = await fetch('/api/playlists?public=true');
       const data = await response.json();
       
       this.playlists = data.playlists || [];
