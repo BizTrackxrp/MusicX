@@ -1,8 +1,6 @@
 /**
  * XRP Music - Playlist Picker Modal
  * Shows user's playlists and allows adding tracks or creating new playlists
- * 
- * Add this to your modals.js or include as separate file
  */
 
 const PlaylistPicker = {
@@ -12,11 +10,16 @@ const PlaylistPicker = {
   
   /**
    * Show the playlist picker modal
-   * @param {Object} track - Track to add { trackId, releaseId, title, artist }
+   * @param {Object} track - Track to add { trackId, releaseId, title, artist, cover }
    */
   async show(track) {
     if (!AppState.user?.address) {
       Modals.showToast('Connect wallet to add to playlist');
+      return;
+    }
+    
+    if (!track) {
+      Modals.showToast('No track selected');
       return;
     }
     
@@ -42,8 +45,8 @@ const PlaylistPicker = {
         <div class="playlist-picker-track">
           <img class="playlist-picker-track-cover" src="${track.cover || '/placeholder.png'}" alt="" onerror="this.src='/placeholder.png'">
           <div class="playlist-picker-track-info">
-            <span class="playlist-picker-track-title">${track.title}</span>
-            <span class="playlist-picker-track-artist">${track.artist}</span>
+            <span class="playlist-picker-track-title">${track.title || 'Unknown Track'}</span>
+            <span class="playlist-picker-track-artist">${track.artist || 'Unknown Artist'}</span>
           </div>
         </div>
         
@@ -59,7 +62,7 @@ const PlaylistPicker = {
           </button>
           
           <div class="playlist-picker-create-form hidden" id="playlist-picker-create-form">
-            <input type="text" class="playlist-picker-input" id="playlist-picker-input" placeholder="Playlist name" maxlength="50" autofocus>
+            <input type="text" class="playlist-picker-input" id="playlist-picker-input" placeholder="Playlist name" maxlength="50">
             <div class="playlist-picker-form-actions">
               <button class="btn btn-secondary btn-sm" id="playlist-picker-cancel">Cancel</button>
               <button class="btn btn-primary btn-sm" id="playlist-picker-save">Create</button>
@@ -157,8 +160,13 @@ const PlaylistPicker = {
    * Add track to existing playlist
    */
   async addToPlaylist(playlistId) {
-    const playlist = this.playlists.find(p => p.id === playlistId);
-    if (!playlist || !this.currentTrack) return;
+    const playlist = this.playlists.find(p => p.id == playlistId);
+    const track = this.currentTrack;
+    
+    if (!playlist || !track) {
+      Modals.showToast('Unable to add track');
+      return;
+    }
     
     try {
       const response = await fetch('/api/playlists', {
@@ -168,8 +176,8 @@ const PlaylistPicker = {
           action: 'addTrack',
           playlistId: playlistId,
           ownerAddress: AppState.user.address,
-          trackId: this.currentTrack.trackId,
-          releaseId: this.currentTrack.releaseId,
+          trackId: track.trackId || track.id,
+          releaseId: track.releaseId,
         }),
       });
       
@@ -177,7 +185,7 @@ const PlaylistPicker = {
       
       if (data.success) {
         this.close();
-        Modals.showToast(`Added "${this.currentTrack.title}" to ${playlist.name}`);
+        Modals.showToast(`Added "${track.title}" to ${playlist.name}`);
       } else if (data.message === 'Track already in playlist') {
         Modals.showToast('Track already in this playlist');
       } else {
@@ -199,6 +207,15 @@ const PlaylistPicker = {
     
     if (!name) {
       input?.focus();
+      Modals.showToast('Please enter a playlist name');
+      return;
+    }
+    
+    // IMPORTANT: Save track reference locally before any async operations
+    // This prevents issues if this.currentTrack gets cleared
+    const track = this.currentTrack;
+    if (!track) {
+      Modals.showToast('No track selected');
       return;
     }
     
@@ -226,7 +243,7 @@ const PlaylistPicker = {
         throw new Error(createData.error || 'Failed to create playlist');
       }
       
-      // Add track to new playlist
+      // Add track to new playlist using local track reference
       const addResponse = await fetch('/api/playlists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,8 +251,8 @@ const PlaylistPicker = {
           action: 'addTrack',
           playlistId: createData.playlistId,
           ownerAddress: AppState.user.address,
-          trackId: this.currentTrack.trackId,
-          releaseId: this.currentTrack.releaseId,
+          trackId: track.trackId || track.id,
+          releaseId: track.releaseId,
         }),
       });
       
@@ -243,7 +260,7 @@ const PlaylistPicker = {
       
       if (addData.success) {
         this.close();
-        Modals.showToast(`Added "${this.currentTrack.title}" to ${name}`);
+        Modals.showToast(`Added "${track.title}" to ${name}`);
         
         // Refresh sidebar playlists if function exists
         if (typeof UI !== 'undefined' && UI.loadUserPlaylists) {
@@ -255,7 +272,7 @@ const PlaylistPicker = {
       
     } catch (error) {
       console.error('Failed to create playlist:', error);
-      Modals.showToast('Failed to create playlist');
+      Modals.showToast('Failed to create playlist: ' + error.message);
       
       if (saveBtn) {
         saveBtn.disabled = false;
@@ -276,8 +293,10 @@ const PlaylistPicker = {
     if (btn) btn.classList.toggle('hidden', show);
     
     if (show) {
-      const input = document.getElementById('playlist-picker-input');
-      input?.focus();
+      setTimeout(() => {
+        const input = document.getElementById('playlist-picker-input');
+        input?.focus();
+      }, 50);
     }
   },
   
@@ -323,6 +342,7 @@ const PlaylistPicker = {
     // Enter to save
     document.getElementById('playlist-picker-input')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
+        e.preventDefault();
         this.createAndAdd();
       }
     });
@@ -338,6 +358,7 @@ const PlaylistPicker = {
       setTimeout(() => modal.remove(), 200);
     }
     this.currentTrack = null;
+    this.isCreating = false;
   },
   
   /**
@@ -357,17 +378,17 @@ const PlaylistPicker = {
         align-items: center;
         justify-content: center;
         z-index: 1000;
-        animation: fadeIn 200ms ease;
+        animation: ppFadeIn 200ms ease;
         padding: 20px;
       }
       .playlist-picker-overlay.closing {
-        animation: fadeOut 200ms ease forwards;
+        animation: ppFadeOut 200ms ease forwards;
       }
-      @keyframes fadeIn {
+      @keyframes ppFadeIn {
         from { opacity: 0; }
         to { opacity: 1; }
       }
-      @keyframes fadeOut {
+      @keyframes ppFadeOut {
         from { opacity: 1; }
         to { opacity: 0; }
       }
@@ -380,9 +401,9 @@ const PlaylistPicker = {
         max-height: 80vh;
         display: flex;
         flex-direction: column;
-        animation: slideUp 200ms ease;
+        animation: ppSlideUp 200ms ease;
       }
-      @keyframes slideUp {
+      @keyframes ppSlideUp {
         from { transform: translateY(20px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
@@ -435,6 +456,7 @@ const PlaylistPicker = {
         flex-direction: column;
         gap: 2px;
         min-width: 0;
+        flex: 1;
       }
       .playlist-picker-track-title {
         font-size: 14px;
@@ -509,10 +531,11 @@ const PlaylistPicker = {
         color: white;
         font-size: 14px;
         margin-bottom: 12px;
+        box-sizing: border-box;
       }
       .playlist-picker-input:focus {
         outline: none;
-        border-color: #1db954;
+        border-color: var(--accent, #1db954);
       }
       .playlist-picker-input::placeholder {
         color: var(--text-muted);
@@ -522,7 +545,7 @@ const PlaylistPicker = {
         gap: 8px;
         justify-content: flex-end;
       }
-      .btn-sm {
+      .playlist-picker-form-actions .btn-sm {
         padding: 8px 16px;
         font-size: 13px;
       }
@@ -551,7 +574,7 @@ const PlaylistPicker = {
       .playlist-picker-empty p {
         margin: 4px 0;
       }
-      .text-muted {
+      .playlist-picker-empty .text-muted {
         color: var(--text-muted);
         font-size: 13px;
       }
@@ -599,6 +622,7 @@ const PlaylistPicker = {
         flex-direction: column;
         gap: 2px;
         min-width: 0;
+        flex: 1;
       }
       .playlist-picker-item-name {
         font-size: 14px;
