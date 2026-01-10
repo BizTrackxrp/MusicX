@@ -51,9 +51,10 @@ export default async function handler(req, res) {
 
 /**
  * Extract NFT Token ID from mint transaction result
+ * Tries multiple methods to find the newly minted NFT Token ID
  */
-function extractNFTokenID(meta) {
-  // Look through AffectedNodes for the newly created NFToken
+function extractNFTokenID(meta, txHash = null) {
+  // Method 1: Look through AffectedNodes for modified NFTokenPage
   for (const node of meta.AffectedNodes || []) {
     // Check for modified NFTokenPage (token added to existing page)
     if (node.ModifiedNode?.LedgerEntryType === 'NFTokenPage') {
@@ -63,8 +64,17 @@ function extractNFTokenID(meta) {
       // Find the new token (in final but not in previous)
       const prevIds = new Set(prevTokens.map(t => t.NFToken?.NFTokenID));
       for (const token of finalTokens) {
-        if (!prevIds.has(token.NFToken?.NFTokenID)) {
+        if (token.NFToken?.NFTokenID && !prevIds.has(token.NFToken.NFTokenID)) {
           return token.NFToken.NFTokenID;
+        }
+      }
+      
+      // If PreviousFields is empty, this might be first token on page
+      if (prevTokens.length === 0 && finalTokens.length > 0) {
+        // Return the last token (most recently added)
+        const lastToken = finalTokens[finalTokens.length - 1];
+        if (lastToken?.NFToken?.NFTokenID) {
+          return lastToken.NFToken.NFTokenID;
         }
       }
     }
@@ -73,11 +83,26 @@ function extractNFTokenID(meta) {
     if (node.CreatedNode?.LedgerEntryType === 'NFTokenPage') {
       const tokens = node.CreatedNode.NewFields?.NFTokens || [];
       if (tokens.length > 0) {
-        return tokens[0].NFToken?.NFTokenID;
+        // Return the last token on the new page
+        const lastToken = tokens[tokens.length - 1];
+        if (lastToken?.NFToken?.NFTokenID) {
+          return lastToken.NFToken.NFTokenID;
+        }
       }
     }
   }
   
+  // Method 2: Look for nftoken_id in meta directly (some XRPL versions)
+  if (meta.nftoken_id) {
+    return meta.nftoken_id;
+  }
+  
+  // Method 3: Check if there's an nftoken_ids array
+  if (meta.nftoken_ids && meta.nftoken_ids.length > 0) {
+    return meta.nftoken_ids[0];
+  }
+  
+  console.error('Could not extract NFT Token ID. Meta:', JSON.stringify(meta, null, 2));
   return null;
 }
 
@@ -145,7 +170,9 @@ async function handleMint(req, res) {
       // Results storage
       const mintedTracks = [];
       let totalMinted = 0;
+      let totalStoredInDb = 0;
       const allNftTokenIds = [];
+      const failedToExtract = []; // Track mints where we couldn't get the ID
       
       // Loop through each track
       for (let t = 0; t < trackUris.length; t++) {
@@ -177,7 +204,7 @@ async function handleMint(req, res) {
             
             if (result.result.meta.TransactionResult === 'tesSUCCESS') {
               // Extract the actual NFT Token ID from the transaction result
-              const nftTokenId = extractNFTokenID(result.result.meta);
+              const nftTokenId = extractNFTokenID(result.result.meta, result.result.hash);
               
               if (nftTokenId) {
                 console.log(`    ✓ Edition ${editionNumber} minted: ${nftTokenId}`);
@@ -198,6 +225,7 @@ async function handleMint(req, res) {
                       ON CONFLICT (nft_token_id) DO NOTHING
                     `;
                     console.log(`    ✓ Stored in database: ${nftId}`);
+                    totalStoredInDb++;
                   } catch (dbError) {
                     console.error(`    ⚠ DB insert failed (continuing):`, dbError.message);
                   }
@@ -208,16 +236,30 @@ async function handleMint(req, res) {
                   editionNumber: editionNumber,
                   txHash: result.result.hash,
                   success: true,
+                  storedInDb: true,
                 });
                 allNftTokenIds.push(nftTokenId);
                 totalMinted++;
               } else {
-                console.error(`    ⚠ Could not extract NFT Token ID from result`);
+                // NFT was minted on-chain but we couldn't extract the ID
+                // This is a CRITICAL issue - the NFT exists but isn't tracked!
+                console.error(`    ⚠ CRITICAL: Minted on-chain but could not extract NFT Token ID!`);
+                console.error(`    ⚠ TxHash: ${result.result.hash}`);
+                
+                failedToExtract.push({
+                  txHash: result.result.hash,
+                  trackIndex: t,
+                  editionNumber: editionNumber,
+                });
+                
                 trackNFTs.push({
                   txHash: result.result.hash,
-                  error: 'Could not extract NFT Token ID',
-                  success: false,
+                  editionNumber: editionNumber,
+                  error: 'Minted but could not extract NFT Token ID - check XRPL explorer',
+                  success: true, // It DID mint, we just can't track it
+                  storedInDb: false,
                 });
+                totalMinted++; // Still count it as minted
               }
             } else {
               console.error(`    ✗ Edition ${editionNumber} failed: ${result.result.meta.TransactionResult}`);
@@ -246,11 +288,18 @@ async function handleMint(req, res) {
           trackId: trackId,
           trackUri: trackUri,
           editions: trackNFTs.filter(n => n.success).length,
+          storedInDb: trackNFTs.filter(n => n.storedInDb).length,
           nfts: trackNFTs,
         });
       }
       
-      console.log(`Batch mint complete: ${totalMinted}/${totalNFTs} successful`);
+      console.log(`Batch mint complete: ${totalMinted}/${totalNFTs} minted, ${totalStoredInDb}/${totalMinted} stored in DB`);
+      
+      // CRITICAL WARNING if some NFTs weren't stored
+      if (totalStoredInDb < totalMinted) {
+        console.error(`⚠ WARNING: ${totalMinted - totalStoredInDb} NFTs minted but NOT stored in database!`);
+        console.error(`⚠ Failed extractions:`, failedToExtract);
+      }
       
       // Update release with minted NFT token IDs
       if (releaseId && allNftTokenIds.length > 0) {
@@ -258,24 +307,35 @@ async function handleMint(req, res) {
           await sql`
             UPDATE releases 
             SET nft_token_ids = ${JSON.stringify(allNftTokenIds)},
-                is_minted = true
+                is_minted = true,
+                total_editions = ${totalStoredInDb}
             WHERE id = ${releaseId}
           `;
-          console.log(`Updated release ${releaseId} with ${allNftTokenIds.length} NFT token IDs`);
+          console.log(`Updated release ${releaseId} with ${allNftTokenIds.length} NFT token IDs, total_editions = ${totalStoredInDb}`);
         } catch (updateError) {
           console.error('Failed to update release:', updateError.message);
         }
       }
       
-      return res.json({
+      // Return response with clear indication of any issues
+      const response = {
         success: true,
         totalRequested: totalNFTs,
         totalMinted: totalMinted,
+        totalStoredInDb: totalStoredInDb,
         trackCount: trackUris.length,
         editionsPerTrack: quantity,
         tracks: mintedTracks,
         nftTokenIds: allNftTokenIds,
-      });
+      };
+      
+      // Add warning if there's a mismatch
+      if (totalStoredInDb < totalMinted) {
+        response.warning = `${totalMinted - totalStoredInDb} NFTs were minted on-chain but could not be tracked in database. Check Vercel logs for transaction hashes.`;
+        response.failedToExtract = failedToExtract;
+      }
+      
+      return res.json(response);
       
     } finally {
       await client.disconnect();
