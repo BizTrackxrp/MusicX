@@ -746,18 +746,28 @@ const PurchasePage = {
   
   async processSinglePurchase(paymentTxHash, updateStatus) {
     // Call broker-sale API
-    updateStatus('Preparing NFT', 'Platform is creating transfer offer...');
+    updateStatus('Preparing NFT', 'Platform is creating transfer offer... (this may take 30+ seconds)');
     
-    const purchaseResponse = await fetch('/api/broker-sale', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        releaseId: this.release.id,
-        trackId: this.track?.id,
-        buyerAddress: AppState.user.address,
-        paymentTxHash: paymentTxHash,
-      }),
-    });
+    // Use AbortController with 2 minute timeout - broker-sale can take a while
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+    
+    let purchaseResponse;
+    try {
+      purchaseResponse = await fetch('/api/broker-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: this.release.id,
+          trackId: this.track?.id,
+          buyerAddress: AppState.user.address,
+          paymentTxHash: paymentTxHash,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     
     const purchaseResult = await purchaseResponse.json();
     
@@ -807,17 +817,27 @@ const PurchasePage = {
     const trackCount = this.release.tracks?.length || 1;
     
     // Call broker-album-sale API
-    updateStatus('Preparing NFTs', `Creating ${trackCount} transfer offers...`);
+    updateStatus('Preparing NFTs', `Creating ${trackCount} transfer offers... (this may take 30+ seconds)`);
     
-    const purchaseResponse = await fetch('/api/broker-album-sale', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        releaseId: this.release.id,
-        buyerAddress: AppState.user.address,
-        paymentTxHash: paymentTxHash,
-      }),
-    });
+    // Use AbortController with 2 minute timeout - broker-sale can take a while
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+    
+    let purchaseResponse;
+    try {
+      purchaseResponse = await fetch('/api/broker-album-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: this.release.id,
+          buyerAddress: AppState.user.address,
+          paymentTxHash: paymentTxHash,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     
     const purchaseResult = await purchaseResponse.json();
     
