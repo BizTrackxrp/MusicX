@@ -144,6 +144,39 @@ export default async function handler(req, res) {
       results.errors.push('Sales editions: ' + e.message);
     }
     
+    // STEP 5b: Create missing NFT records for sales that don't have matching NFTs
+    console.log('Step 5b: Creating missing NFT records for orphaned sales...');
+    try {
+      const orphanedSales = await sql`
+        SELECT s.id, s.track_id, s.nft_token_id, s.buyer_address, s.edition_number
+        FROM sales s
+        WHERE s.nft_token_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM nfts n WHERE n.nft_token_id = s.nft_token_id
+          )
+      `;
+      
+      let nftsCreated = 0;
+      for (const sale of orphanedSales) {
+        const nftId = 'nft_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        await sql`
+          INSERT INTO nfts (id, nft_token_id, track_id, edition_number, status, owner_address)
+          VALUES (
+            ${nftId},
+            ${sale.nft_token_id},
+            ${sale.track_id},
+            ${sale.edition_number},
+            'sold',
+            ${sale.buyer_address}
+          )
+        `;
+        nftsCreated++;
+      }
+      results.steps.push(`✓ Created ${nftsCreated} missing NFT records for sales`);
+    } catch (e) {
+      results.errors.push('Create missing NFTs: ' + e.message);
+    }
+    
     // STEP 6: Reset stuck pending NFTs (reset ALL pending since no timestamp)
     console.log('Step 6: Resetting stuck pending NFTs...');
     try {
