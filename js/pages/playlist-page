@@ -61,10 +61,10 @@ const PlaylistPage = {
     this.isLoading = true;
     
     try {
-      const response = await fetch(`/api/playlists?id=${playlistId}`);
+      const response = await fetch(`/api/playlists?id=${playlistId}&withTracks=true`);
       const data = await response.json();
       
-      if (!data.success || !data.playlist) {
+      if (!data.playlist) {
         main.innerHTML = `
           <div class="playlist-page-error">
             <h2>Playlist Not Found</h2>
@@ -76,7 +76,7 @@ const PlaylistPage = {
       }
       
       this.playlist = data.playlist;
-      this.tracks = data.tracks || [];
+      this.tracks = data.playlist.tracks || [];
       
       this.renderPlaylist();
       
