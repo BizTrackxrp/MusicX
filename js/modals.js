@@ -2668,6 +2668,19 @@ async processListNFT(nft, price) {
     document.getElementById('add-to-playlist-btn')?.addEventListener('click', () => {
       this.showAddToPlaylist(release);
     });
+
+    // Share button
+    document.getElementById('share-release-btn')?.addEventListener('click', () => {
+      if (typeof ShareUtils !== 'undefined') {
+        ShareUtils.shareRelease(release);
+      } else {
+        // Fallback if ShareUtils not loaded
+        const url = `${window.location.origin}/release/${release.id}`;
+        navigator.clipboard.writeText(url).then(() => {
+          this.showToast('Link copied to clipboard!');
+        });
+      }
+    });
     
     // Like track buttons
     document.querySelectorAll('.like-track-btn').forEach(btn => {
