@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         `;
         
         if (playlists.length === 0) {
-          return res.status(404).json({ error: 'Playlist not found' });
+          return res.status(404).json({ success: false, error: 'Playlist not found' });
         }
         
         const playlist = playlists[0];
@@ -54,8 +54,8 @@ export default async function handler(req, res) {
           playlist.isLiked = liked.length > 0;
         }
         
-        // Get tracks if requested
-        if (withTracks === 'true') {
+        // Get tracks if requested (default to true for single playlist fetch)
+        if (withTracks !== 'false') {
           const tracks = await sql`
             SELECT 
               pt.id as playlist_track_id,
@@ -81,7 +81,7 @@ export default async function handler(req, res) {
           playlist.tracks = tracks;
         }
         
-        return res.json({ playlist });
+        return res.json({ success: true, playlist });
       }
       
       // Get user's playlists
@@ -96,13 +96,24 @@ export default async function handler(req, res) {
           ORDER BY p.is_system DESC, p.created_at DESC
         `;
         
-        return res.json({ playlists });
+        // Get track covers for each playlist (first 4)
+        for (const playlist of playlists) {
+          const covers = await sql`
+            SELECT DISTINCT r.cover_url
+            FROM playlist_tracks pt
+            JOIN releases r ON pt.release_id = r.id
+            WHERE pt.playlist_id = ${playlist.id}
+            ORDER BY pt.position ASC
+            LIMIT 4
+          `;
+          playlist.track_covers = covers.map(c => c.cover_url).filter(Boolean);
+        }
+        
+        return res.json({ success: true, playlists });
       }
       
-      // Get public playlists (for discovery)
+      // Get public playlists (for discovery/browse)
       if (isPublic === 'true') {
-        const orderBy = sort === 'popular' ? 'like_count DESC' : 'p.created_at DESC';
-        
         const playlists = await sql`
           SELECT 
             p.*,
@@ -117,10 +128,23 @@ export default async function handler(req, res) {
           LIMIT 50
         `;
         
-        return res.json({ playlists });
+        // Get track covers for each playlist (first 4)
+        for (const playlist of playlists) {
+          const covers = await sql`
+            SELECT DISTINCT r.cover_url
+            FROM playlist_tracks pt
+            JOIN releases r ON pt.release_id = r.id
+            WHERE pt.playlist_id = ${playlist.id}
+            ORDER BY pt.position ASC
+            LIMIT 4
+          `;
+          playlist.track_covers = covers.map(c => c.cover_url).filter(Boolean);
+        }
+        
+        return res.json({ success: true, playlists });
       }
       
-      return res.status(400).json({ error: 'Provide id, user, or public=true' });
+      return res.status(400).json({ success: false, error: 'Provide id, user, or public=true' });
     }
     
     // POST - Create playlist or manage tracks/likes
@@ -130,7 +154,7 @@ export default async function handler(req, res) {
       // Create new playlist
       if (action === 'create') {
         if (!name || !ownerAddress) {
-          return res.status(400).json({ error: 'Name and owner address required' });
+          return res.status(400).json({ success: false, error: 'Name and owner address required' });
         }
         
         const id = `pl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -146,7 +170,7 @@ export default async function handler(req, res) {
       // Add track to playlist
       if (action === 'addTrack') {
         if (!playlistId || !ownerAddress || !trackId || !releaseId) {
-          return res.status(400).json({ error: 'Playlist ID, owner, track ID, and release ID required' });
+          return res.status(400).json({ success: false, error: 'Playlist ID, owner, track ID, and release ID required' });
         }
         
         // Verify ownership
@@ -154,7 +178,7 @@ export default async function handler(req, res) {
           SELECT id FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
         `;
         if (playlist.length === 0) {
-          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+          return res.status(403).json({ success: false, error: 'Not authorized to modify this playlist' });
         }
         
         // Check if track already in playlist
@@ -187,8 +211,9 @@ export default async function handler(req, res) {
       
       // Remove track from playlist
       if (action === 'removeTrack') {
-        if (!playlistId || !ownerAddress || !playlistTrackId) {
-          return res.status(400).json({ error: 'Playlist ID, owner, and playlist track ID required' });
+        // Support both playlistTrackId and trackId for removal
+        if (!playlistId || !ownerAddress || (!playlistTrackId && !trackId)) {
+          return res.status(400).json({ success: false, error: 'Playlist ID, owner, and track identifier required' });
         }
         
         // Verify ownership
@@ -196,12 +221,19 @@ export default async function handler(req, res) {
           SELECT id, is_system FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
         `;
         if (playlist.length === 0) {
-          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+          return res.status(403).json({ success: false, error: 'Not authorized to modify this playlist' });
         }
         
-        await sql`
-          DELETE FROM playlist_tracks WHERE id = ${playlistTrackId} AND playlist_id = ${playlistId}
-        `;
+        // Delete by playlistTrackId or trackId
+        if (playlistTrackId) {
+          await sql`
+            DELETE FROM playlist_tracks WHERE id = ${playlistTrackId} AND playlist_id = ${playlistId}
+          `;
+        } else if (trackId) {
+          await sql`
+            DELETE FROM playlist_tracks WHERE track_id = ${trackId} AND playlist_id = ${playlistId}
+          `;
+        }
         
         // Update playlist updated_at
         await sql`UPDATE playlists SET updated_at = NOW() WHERE id = ${playlistId}`;
@@ -212,7 +244,7 @@ export default async function handler(req, res) {
       // Reorder tracks
       if (action === 'reorder') {
         if (!playlistId || !ownerAddress || !trackIds || !Array.isArray(trackIds)) {
-          return res.status(400).json({ error: 'Playlist ID, owner, and track IDs array required' });
+          return res.status(400).json({ success: false, error: 'Playlist ID, owner, and track IDs array required' });
         }
         
         // Verify ownership
@@ -220,7 +252,7 @@ export default async function handler(req, res) {
           SELECT id FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
         `;
         if (playlist.length === 0) {
-          return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+          return res.status(403).json({ success: false, error: 'Not authorized to modify this playlist' });
         }
         
         // Update positions
@@ -237,7 +269,7 @@ export default async function handler(req, res) {
       // Like playlist
       if (action === 'like') {
         if (!playlistId || !userAddress) {
-          return res.status(400).json({ error: 'Playlist ID and user address required' });
+          return res.status(400).json({ success: false, error: 'Playlist ID and user address required' });
         }
         
         const existing = await sql`
@@ -259,7 +291,7 @@ export default async function handler(req, res) {
       // Unlike playlist
       if (action === 'unlike') {
         if (!playlistId || !userAddress) {
-          return res.status(400).json({ error: 'Playlist ID and user address required' });
+          return res.status(400).json({ success: false, error: 'Playlist ID and user address required' });
         }
         
         await sql`
@@ -269,7 +301,7 @@ export default async function handler(req, res) {
         return res.json({ success: true });
       }
       
-      return res.status(400).json({ error: 'Invalid action' });
+      return res.status(400).json({ success: false, error: 'Invalid action' });
     }
     
     // PUT - Update playlist metadata
@@ -277,7 +309,7 @@ export default async function handler(req, res) {
       const { playlistId, ownerAddress, name, description, isPublic, coverUrl } = req.body;
       
       if (!playlistId || !ownerAddress) {
-        return res.status(400).json({ error: 'Playlist ID and owner address required' });
+        return res.status(400).json({ success: false, error: 'Playlist ID and owner address required' });
       }
       
       // Verify ownership and not system playlist
@@ -285,16 +317,13 @@ export default async function handler(req, res) {
         SELECT id, is_system FROM playlists WHERE id = ${playlistId} AND owner_address = ${ownerAddress}
       `;
       if (playlist.length === 0) {
-        return res.status(403).json({ error: 'Not authorized to modify this playlist' });
+        return res.status(403).json({ success: false, error: 'Not authorized to modify this playlist' });
       }
       if (playlist[0].is_system) {
-        return res.status(403).json({ error: 'Cannot modify system playlists' });
+        return res.status(403).json({ success: false, error: 'Cannot modify system playlists' });
       }
       
       // Build update
-      const updates = [];
-      const values = [];
-      
       if (name !== undefined) {
         await sql`UPDATE playlists SET name = ${name}, updated_at = NOW() WHERE id = ${playlistId}`;
       }
@@ -316,7 +345,7 @@ export default async function handler(req, res) {
       const { id, owner } = req.query;
       
       if (!id || !owner) {
-        return res.status(400).json({ error: 'Playlist ID and owner required' });
+        return res.status(400).json({ success: false, error: 'Playlist ID and owner required' });
       }
       
       // Verify ownership and not system playlist
@@ -324,10 +353,10 @@ export default async function handler(req, res) {
         SELECT id, is_system FROM playlists WHERE id = ${id} AND owner_address = ${owner}
       `;
       if (playlist.length === 0) {
-        return res.status(403).json({ error: 'Not authorized to delete this playlist' });
+        return res.status(403).json({ success: false, error: 'Not authorized to delete this playlist' });
       }
       if (playlist[0].is_system) {
-        return res.status(403).json({ error: 'Cannot delete system playlists' });
+        return res.status(403).json({ success: false, error: 'Cannot delete system playlists' });
       }
       
       // Delete tracks first
@@ -340,10 +369,10 @@ export default async function handler(req, res) {
       return res.json({ success: true });
     }
     
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
     
   } catch (error) {
     console.error('Playlists API error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
