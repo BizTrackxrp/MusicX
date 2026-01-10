@@ -106,26 +106,42 @@ export default async function handler(req, res) {
       results.errors.push('Sales editions from NFTs: ' + e.message);
     }
     
-    // STEP 5: Fix sales without NFT token ID
-    console.log('Step 5: Fixing sales without NFT token IDs...');
+    // STEP 5: Fix sales without NFT token ID - assign edition by purchase order
+    console.log('Step 5: Fixing sales edition numbers by purchase order...');
     try {
-      // For sales without nft_token_id, assign edition based on sale order
-      await sql`
-        WITH sale_editions AS (
-          SELECT 
-            id,
-            ROW_NUMBER() OVER (PARTITION BY track_id ORDER BY created_at) as sale_order
-          FROM sales
-          WHERE edition_number IS NULL
-        )
-        UPDATE sales s
-        SET edition_number = se.sale_order
-        FROM sale_editions se
-        WHERE s.id = se.id
+      // Get all sales grouped by track, ordered by created_at
+      const allSales = await sql`
+        SELECT id, track_id, edition_number, created_at
+        FROM sales
+        ORDER BY track_id, created_at, id
       `;
-      results.steps.push('✓ Fixed sales without NFT references');
+      
+      // Group by track and assign sequential editions
+      const salesByTrack = {};
+      for (const sale of allSales) {
+        if (!salesByTrack[sale.track_id]) {
+          salesByTrack[sale.track_id] = [];
+        }
+        salesByTrack[sale.track_id].push(sale);
+      }
+      
+      let salesFixed = 0;
+      for (const trackId in salesByTrack) {
+        const trackSales = salesByTrack[trackId];
+        for (let i = 0; i < trackSales.length; i++) {
+          const sale = trackSales[i];
+          const correctEdition = i + 1;
+          if (sale.edition_number !== correctEdition) {
+            await sql`
+              UPDATE sales SET edition_number = ${correctEdition} WHERE id = ${sale.id}
+            `;
+            salesFixed++;
+          }
+        }
+      }
+      results.steps.push(`✓ Fixed ${salesFixed} sales edition numbers`);
     } catch (e) {
-      results.errors.push('Sales without NFTs: ' + e.message);
+      results.errors.push('Sales editions: ' + e.message);
     }
     
     // STEP 6: Reset stuck pending NFTs (reset ALL pending since no timestamp)
