@@ -148,13 +148,22 @@ async function handleConfirmSale(req, res, sql) {
         `;
       }
       
-      // Calculate edition number from sales table
-      let editionNumber = sale.editionNumber;
-      if (!editionNumber && sale.trackId) {
+      // ALWAYS calculate edition number from sales count (sale order, not mint order)
+      let editionNumber = null;
+      if (sale.trackId) {
         const salesCount = await sql`
           SELECT COUNT(*) as count FROM sales WHERE track_id = ${sale.trackId}
         `;
         editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
+      }
+      
+      // Update NFT's edition_number to match sale order
+      if (sale.nftTokenId && editionNumber) {
+        await sql`
+          UPDATE nfts 
+          SET edition_number = ${editionNumber}
+          WHERE nft_token_id = ${sale.nftTokenId}
+        `;
       }
       
       // Update track sold_count to match sales
