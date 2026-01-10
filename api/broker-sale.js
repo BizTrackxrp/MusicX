@@ -152,7 +152,7 @@ async function handleConfirmSale(req, res, sql) {
       return res.status(400).json({ error: 'Missing pending sale data or transaction hash' });
     }
     
-    const { releaseId, trackId, buyerAddress, artistAddress, nftTokenId, price, platformFee, editionNumber } = pendingSale;
+    const { releaseId, trackId, buyerAddress, artistAddress, nftTokenId, price, platformFee } = pendingSale;
     
     // Update the NFT status in nfts table
     if (nftTokenId) {
@@ -165,15 +165,24 @@ async function handleConfirmSale(req, res, sql) {
       `;
     }
     
-    // Calculate the correct edition number from sales table
-    let finalEditionNumber = editionNumber;
+    // ALWAYS calculate edition number from sales count (sale order, not mint order)
+    let finalEditionNumber = 1;
     
-    if (!finalEditionNumber && trackId) {
+    if (trackId) {
       // Count existing sales for this track to determine edition number
       const salesCount = await sql`
         SELECT COUNT(*) as count FROM sales WHERE track_id = ${trackId}
       `;
       finalEditionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
+    }
+    
+    // Update the NFT's edition_number to match sale order (not mint order)
+    if (nftTokenId) {
+      await sql`
+        UPDATE nfts 
+        SET edition_number = ${finalEditionNumber}
+        WHERE nft_token_id = ${nftTokenId}
+      `;
     }
     
     // Update track sold_count to match sales
