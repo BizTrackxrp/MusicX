@@ -28,13 +28,21 @@ export default async function handler(req, res) {
       if (id) {
         const playlists = await sql`
           SELECT 
-            p.*,
+            p.id,
+            p.name,
+            p.description,
+            p.owner_address,
+            p.is_public,
+            p.is_system,
+            p.cover_url,
+            p.created_at,
+            p.updated_at,
             pr.name as owner_name,
             pr.avatar_url as owner_avatar,
             (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count,
             (SELECT COUNT(*) FROM playlist_likes WHERE playlist_id = p.id) as like_count
           FROM playlists p
-          LEFT JOIN profiles pr ON p.owner_address = pr.address
+          LEFT JOIN profiles pr ON p.owner_address = pr.wallet_address
           WHERE p.id = ${id}
         `;
         
@@ -99,7 +107,7 @@ export default async function handler(req, res) {
         // Get track covers for each playlist (first 4)
         for (const playlist of playlists) {
           const covers = await sql`
-            SELECT DISTINCT r.cover_url
+            SELECT r.cover_url
             FROM playlist_tracks pt
             JOIN releases r ON pt.release_id = r.id
             WHERE pt.playlist_id = ${playlist.id}
@@ -116,22 +124,30 @@ export default async function handler(req, res) {
       if (isPublic === 'true') {
         const playlists = await sql`
           SELECT 
-            p.*,
+            p.id,
+            p.name,
+            p.description,
+            p.owner_address,
+            p.is_public,
+            p.is_system,
+            p.cover_url,
+            p.created_at,
+            p.updated_at,
             pr.name as owner_name,
             pr.avatar_url as owner_avatar,
             (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count,
             (SELECT COUNT(*) FROM playlist_likes WHERE playlist_id = p.id) as like_count
           FROM playlists p
-          LEFT JOIN profiles pr ON p.owner_address = pr.address
+          LEFT JOIN profiles pr ON p.owner_address = pr.wallet_address
           WHERE p.is_public = true AND p.is_system = false
-          ORDER BY ${sort === 'popular' ? sql`like_count DESC` : sql`p.created_at DESC`}
+          ORDER BY p.created_at DESC
           LIMIT 50
         `;
         
         // Get track covers for each playlist (first 4)
         for (const playlist of playlists) {
           const covers = await sql`
-            SELECT DISTINCT r.cover_url
+            SELECT r.cover_url
             FROM playlist_tracks pt
             JOIN releases r ON pt.release_id = r.id
             WHERE pt.playlist_id = ${playlist.id}
