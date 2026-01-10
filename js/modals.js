@@ -2798,8 +2798,38 @@ async processListNFT(nft, price) {
   },
   
   showAddToPlaylist(release, track = null) {
-    // TODO: Implement playlist picker modal
-    this.showToast('Playlists feature coming soon!');
+    if (!AppState.user?.address) {
+      this.showAuth();
+      return;
+    }
+    
+    // Build track object for PlaylistPicker
+    const trackToAdd = track ? {
+      id: track.id,
+      trackId: track.id?.toString(),
+      title: release.type === 'single' ? release.title : track.title,
+      artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
+      cover: release.coverUrl,
+      ipfsHash: track.audioCid,
+      releaseId: release.id,
+      duration: track.duration,
+    } : {
+      // If no specific track, use first track
+      id: release.tracks?.[0]?.id,
+      trackId: release.tracks?.[0]?.id?.toString(),
+      title: release.title,
+      artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
+      cover: release.coverUrl,
+      ipfsHash: release.tracks?.[0]?.audioCid,
+      releaseId: release.id,
+      duration: release.tracks?.[0]?.duration,
+    };
+    
+    if (typeof PlaylistPicker !== 'undefined') {
+      PlaylistPicker.show(trackToAdd);
+    } else {
+      this.showToast('Playlist feature loading...');
+    }
   },
   
 showTrackPurchase(release, track, trackIdx) {
