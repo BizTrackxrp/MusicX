@@ -88,6 +88,47 @@ const API = {
   },
 
   // ============================================
+  // PLAYS / STREAMS
+  // ============================================
+  
+  /**
+   * Record a play event
+   * Called after ~30 seconds of listening
+   */
+  async recordPlay(trackId, releaseId, userAddress = null, sessionId = null, duration = null) {
+    return this.fetch('/api/plays', {
+      method: 'POST',
+      body: JSON.stringify({
+        trackId,
+        releaseId,
+        userAddress,
+        sessionId,
+        duration,
+      }),
+    });
+  },
+  
+  /**
+   * Get top played tracks for a period
+   * @param {string} period - '1d', '7d', '30d', '365d', or 'all'
+   * @param {number} limit - Number of tracks to return (default 10)
+   */
+  async getTopTracks(period = '7d', limit = 10) {
+    const data = await this.fetch(`/api/plays?action=top&period=${period}&limit=${limit}`);
+    return data.tracks || [];
+  },
+  
+  /**
+   * Get play counts for specific tracks
+   * @param {string[]} trackIds - Array of track IDs
+   * @param {string} period - Time period to aggregate
+   */
+  async getPlayCounts(trackIds, period = '7d') {
+    const data = await this.fetch(`/api/plays?trackIds=${trackIds.join(',')}&period=${period}`);
+    return data.counts || {};
+  },
+
+  // ============================================
   // PROFILES
   // ============================================
   
@@ -448,6 +489,33 @@ const Helpers = {
    */
   generateId() {
     return Math.random().toString(36).substr(2, 9);
+  },
+  
+  /**
+   * Format number with K/M suffix for large numbers
+   */
+  formatNumber(num) {
+    if (!num || isNaN(num)) return '0';
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    }
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    }
+    return num.toLocaleString();
+  },
+  
+  /**
+   * Generate a session ID for play deduplication
+   * Stored in sessionStorage so it persists across page loads but not browser sessions
+   */
+  getSessionId() {
+    let sessionId = sessionStorage.getItem('xrp_music_session');
+    if (!sessionId) {
+      sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('xrp_music_session', sessionId);
+    }
+    return sessionId;
   },
 };
 
