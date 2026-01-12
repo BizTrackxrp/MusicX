@@ -1,6 +1,11 @@
 /**
  * XRP Music - Audio Player
- * Handles playback, queue, progress, and volume
+ * Handles playback, queue, progress, volume, and PLAY TRACKING
+ * 
+ * PLAY TRACKING:
+ * - A "play" is recorded after 30 seconds of listening
+ * - Uses session ID for deduplication (same track won't count twice in 5 min)
+ * - Tracks are sent to /api/plays endpoint
  * 
  * SHUFFLE BEHAVIOR:
  * - Shuffle is ALWAYS ON by default (no toggle)
@@ -59,6 +64,15 @@ const Player = {
   progressInterval: null,
   allTracksCache: [], // Cache of all available tracks for shuffle
   
+  // Play tracking state
+  playTracking: {
+    currentTrackId: null,
+    playStartTime: null,
+    playRecorded: false,
+    playCheckInterval: null,
+    PLAY_THRESHOLD_SECONDS: 30, // Record play after 30 seconds
+  },
+  
   /**
    * Initialize player
    */
@@ -84,6 +98,8 @@ const Player = {
     this.audio.addEventListener('loadedmetadata', () => this.onLoadedMetadata());
     this.audio.addEventListener('error', (e) => this.onError(e));
     this.audio.addEventListener('canplay', () => this.onCanPlay());
+    this.audio.addEventListener('play', () => this.onPlay());
+    this.audio.addEventListener('pause', () => this.onPause());
     
     // Bind controls
     this.bindControls();
@@ -196,6 +212,95 @@ const Player = {
     }
   },
   
+  // ============================================
+  // PLAY TRACKING
+  // ============================================
+  
+  /**
+   * Start tracking play time for current track
+   */
+  startPlayTracking(track) {
+    const trackId = track.trackId || track.id;
+    
+    // Reset tracking state for new track
+    this.playTracking.currentTrackId = trackId;
+    this.playTracking.playStartTime = Date.now();
+    this.playTracking.playRecorded = false;
+    
+    // Clear any existing interval
+    if (this.playTracking.playCheckInterval) {
+      clearInterval(this.playTracking.playCheckInterval);
+    }
+    
+    console.log('📊 Play tracking started for:', track.title);
+  },
+  
+  /**
+   * Check if we should record a play (called on timeupdate)
+   */
+  checkAndRecordPlay() {
+    // Skip if already recorded or no current track
+    if (this.playTracking.playRecorded || !this.playTracking.currentTrackId) {
+      return;
+    }
+    
+    // Check if we've been playing for 30+ seconds
+    const currentTime = this.audio.currentTime;
+    
+    if (currentTime >= this.playTracking.PLAY_THRESHOLD_SECONDS) {
+      this.recordPlay();
+    }
+  },
+  
+  /**
+   * Record a play to the API
+   */
+  async recordPlay() {
+    if (this.playTracking.playRecorded) return;
+    
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    const trackId = track.trackId || track.id;
+    const releaseId = track.releaseId;
+    const userAddress = AppState.user?.address || null;
+    const sessionId = typeof Helpers !== 'undefined' && Helpers.getSessionId 
+      ? Helpers.getSessionId() 
+      : null;
+    
+    // Mark as recorded immediately to prevent duplicate calls
+    this.playTracking.playRecorded = true;
+    
+    console.log('📊 Recording play for:', track.title);
+    
+    try {
+      const result = await API.recordPlay(trackId, releaseId, userAddress, sessionId);
+      
+      if (result.deduplicated) {
+        console.log('📊 Play was deduplicated (already counted recently)');
+      } else {
+        console.log('✅ Play recorded successfully:', result.playId);
+      }
+    } catch (error) {
+      console.error('❌ Failed to record play:', error);
+      // Don't un-set playRecorded - we don't want to spam retries
+    }
+  },
+  
+  /**
+   * Reset play tracking (when track changes or stops)
+   */
+  resetPlayTracking() {
+    this.playTracking.currentTrackId = null;
+    this.playTracking.playStartTime = null;
+    this.playTracking.playRecorded = false;
+    
+    if (this.playTracking.playCheckInterval) {
+      clearInterval(this.playTracking.playCheckInterval);
+      this.playTracking.playCheckInterval = null;
+    }
+  },
+  
   /**
    * Open release modal for current track
    */
@@ -294,6 +399,9 @@ const Player = {
     
     console.log('🎵 Playing track:', track.title);
     
+    // Reset play tracking for new track
+    this.resetPlayTracking();
+    
     // Update state
     setCurrentTrack(track);
     
@@ -351,6 +459,9 @@ const Player = {
     // Update UI
     this.updateTrackInfo(track);
     this.showPlayerBar();
+    
+    // Start play tracking
+    this.startPlayTracking(track);
   },
   
   /**
@@ -647,6 +758,16 @@ const Player = {
     }
   },
   
+  onPlay() {
+    // Track started playing - tracking is already started in playTrack()
+    console.log('▶️ Playback started');
+  },
+  
+  onPause() {
+    // Track paused - we don't reset tracking, just pause the counter
+    console.log('⏸️ Playback paused');
+  },
+  
   onEnded() {
     console.log('🎵 Track ended. Repeat:', AppState.player.isRepeat);
     
@@ -683,6 +804,9 @@ const Player = {
     if (durationEl && typeof Helpers !== 'undefined') {
       durationEl.textContent = Helpers.formatDuration(this.audio.duration);
     }
+    
+    // Check if we should record a play (after 30 seconds)
+    this.checkAndRecordPlay();
   },
   
   onLoadedMetadata() {
