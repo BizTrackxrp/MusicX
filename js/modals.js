@@ -4024,7 +4024,7 @@ onProgress: (progress) => {
       const total = progress.quantity || totalNFTs;
       const percent = total > 0 ? Math.round((minted / total) * 100) : 0;
       const elapsed = progress.elapsed || 0;
-      const perNft = minted > 0 ? elapsed / minted : 8.5;
+      const perNft = minted > 0 ? elapsed / minted : 10;
       const remaining = Math.max(0, (total - minted) * perNft);
       const remainingText = remaining > 60 
         ? `~${Math.ceil(remaining / 60)} min remaining`
