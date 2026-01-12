@@ -1049,12 +1049,12 @@ body:not(.light) .toggle-knob {
    ============================================ */
 @media (max-width: 1024px) {
   .player-bar {
-    height: 72px;  /* Taller for better touch */
+    height: 72px;
   }
   
   .player-content {
-    padding: 0 12px;
-    gap: 8px;
+    padding: 0 16px;
+    gap: 12px;
   }
   
   .player-cover {
@@ -1065,56 +1065,83 @@ body:not(.light) .toggle-knob {
   }
   
   .player-track-details {
+    flex: 1;
+    min-width: 0;
     margin-right: 8px;
   }
   
   .player-title {
     font-size: 14px;
+    font-weight: 600;
   }
   
   .player-artist {
     font-size: 12px;
   }
   
-  /* Hide desktop controls on mobile */
   .player-center,
   .player-right {
     display: none;
   }
   
-  /* Show mobile controls */
   .player-left {
     flex: 1;
     max-width: none;
   }
   
-  /* Mobile control buttons - touch friendly */
-  .mobile-play-btn {
+  .player-controls-mobile {
     display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  
+  #mobile-prev-btn,
+  #mobile-next-btn {
     width: 44px;
     height: 44px;
     min-width: 44px;
     min-height: 44px;
-    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  #mobile-play-btn {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    margin: 0 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .player-expand-btn {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
   }
 }
-
-/* Update CSS variable for mobile player height */
-:root {
-  --player-height-mobile: 72px;  /* Was 64px */
-}
-
-
 /* ============================================
    Expanded Mobile Player
    ============================================ */
