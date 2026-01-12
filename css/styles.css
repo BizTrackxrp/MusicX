@@ -31,8 +31,8 @@
   --sidebar-width: 256px;
   --header-height: 64px;
   --player-height: 80px;
-  --player-height-mobile: 64px;
-  
+  --player-height-mobile: 72px;
+   
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
@@ -830,11 +830,11 @@ body:not(.light) .toggle-knob {
 
 @media (max-width: 1024px) {
   .player-cover {
-    width: 40px;
-    height: 40px;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
   }
 }
-
 .player-track-details {
   flex: 1;
   min-width: 0;
@@ -1043,6 +1043,77 @@ body:not(.light) .toggle-knob {
   cursor: pointer;
   border: none;
 }
+
+/* ============================================
+   Mobile Player Bar Enhancements
+   ============================================ */
+@media (max-width: 1024px) {
+  .player-bar {
+    height: 72px;  /* Taller for better touch */
+  }
+  
+  .player-content {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  
+  .player-cover {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: var(--radius-md);
+  }
+  
+  .player-track-details {
+    margin-right: 8px;
+  }
+  
+  .player-title {
+    font-size: 14px;
+  }
+  
+  .player-artist {
+    font-size: 12px;
+  }
+  
+  /* Hide desktop controls on mobile */
+  .player-center,
+  .player-right {
+    display: none;
+  }
+  
+  /* Show mobile controls */
+  .player-left {
+    flex: 1;
+    max-width: none;
+  }
+  
+  /* Mobile control buttons - touch friendly */
+  .mobile-play-btn {
+    display: flex;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+  
+  .player-expand-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+}
+
+/* Update CSS variable for mobile player height */
+:root {
+  --player-height-mobile: 72px;  /* Was 64px */
+}
+
 
 /* ============================================
    Expanded Mobile Player
