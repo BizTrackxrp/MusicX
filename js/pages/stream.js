@@ -1,6 +1,8 @@
 /**
  * XRP Music - Stream Page
  * Main discovery page with top played tracks, all tracks, sorting, and artists
+ * 
+ * UPDATED: Now fetches real play data from /api/plays endpoint
  */
 
 const StreamPage = {
@@ -53,61 +55,56 @@ const StreamPage = {
   },
   
   /**
-   * Load top played tracks for current period
-   * TODO: Replace with actual API call to /api/tracks/top?period=7d&limit=10
+   * Load top played tracks for current period from the API
    */
   async loadTopTracks() {
     try {
-      // Try to fetch from API if endpoint exists
+      // Fetch real play data from /api/plays endpoint
       if (typeof API.getTopTracks === 'function') {
-        this.topTracks = await API.getTopTracks(this.currentTopPeriod, 10);
-        return;
+        const topTracks = await API.getTopTracks(this.currentTopPeriod, 10);
+        
+        if (topTracks && topTracks.length > 0) {
+          // Format the API response for our UI
+          this.topTracks = topTracks.map(item => ({
+            id: item.trackId,
+            trackId: item.trackId,
+            displayTitle: item.track?.title || item.release?.title || 'Unknown',
+            audioCid: item.track?.audioCid,
+            duration: item.track?.duration,
+            plays: item.plays || 0,
+            release: {
+              id: item.releaseId,
+              title: item.release?.title,
+              artistName: item.release?.artistName,
+              artistAddress: item.release?.artistAddress,
+              coverUrl: item.release?.coverUrl,
+              songPrice: item.release?.songPrice || 0,
+              totalEditions: item.release?.totalEditions || 0,
+              soldEditions: item.release?.soldEditions || 0,
+              type: item.release?.type || 'single',
+            }
+          }));
+          
+          console.log(`📊 Loaded ${this.topTracks.length} top tracks for ${this.currentTopPeriod}`);
+          return;
+        }
       }
     } catch (e) {
-      console.log('Top tracks API not available, using fallback');
+      console.log('Top tracks API not available or returned no data:', e.message);
     }
     
-    // Fallback: Calculate from releases data
-    // In production, this should come from stream_events table aggregated by period
+    // Fallback: If no play data exists yet, show tracks sorted by sales
+    // This handles the case where the plays table is empty (fresh deployment)
+    console.log('📊 No play data yet, showing tracks by sales as fallback');
     const allTracks = this.getAllTracks();
     
-    // Sort by play count (using soldEditions as proxy for now)
-    // TODO: Replace with actual play counts from stream_events
     this.topTracks = allTracks
       .map(track => ({
         ...track,
-        // Simulated play counts - REPLACE WITH REAL DATA
-        plays: this.getTrackPlays(track, this.currentTopPeriod),
+        plays: track.release.soldEditions || 0, // Use sales as proxy until we have play data
       }))
       .sort((a, b) => b.plays - a.plays)
       .slice(0, 10);
-  },
-  
-  /**
-   * Get play count for a track in a given period
-   * TODO: Replace with actual data from stream_events table
-   */
-  getTrackPlays(track, period) {
-    // This is placeholder logic - replace with real stream counts
-    // You'll want columns like: plays_1d, plays_7d, plays_30d, plays_365d
-    // Or query stream_events table with date filters
-    
-    const basePlays = track.release.soldEditions || 0;
-    
-    // Simulate different counts for different periods (REMOVE THIS)
-    // Just for demo - actual implementation should query real data
-    switch (period) {
-      case '1d':
-        return Math.floor(basePlays * 0.1 + Math.random() * 50);
-      case '7d':
-        return Math.floor(basePlays * 0.4 + Math.random() * 200);
-      case '30d':
-        return Math.floor(basePlays * 0.7 + Math.random() * 500);
-      case '365d':
-        return Math.floor(basePlays + Math.random() * 1000);
-      default:
-        return basePlays;
-    }
   },
   
   extractArtists() {
@@ -122,7 +119,6 @@ const StreamPage = {
           releaseCount: 1,
           trackCount: release.tracks?.length || 0,
           totalSold: release.soldEditions || 0,
-          // TODO: Replace with actual stream count from stream_events table
           totalStreams: release.soldEditions || 0,
         });
       } else {
@@ -168,7 +164,7 @@ const StreamPage = {
           <div class="top-tracks-grid">
             ${this.topTracks.length > 0 
               ? this.topTracks.map((track, index) => this.renderTopTrackCard(track, index)).join('')
-              : '<div class="empty-message" style="grid-column: 1/-1;">No play data available yet</div>'
+              : '<div class="empty-message" style="grid-column: 1/-1;">No play data available yet. Start listening to build the charts!</div>'
             }
           </div>
         </section>
@@ -641,7 +637,7 @@ const StreamPage = {
         sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
         break;
       case 'popular':
-        // TODO: Replace with actual stream count from stream_events table
+        // Sort by sales (until we have play counts on all tracks)
         sorted.sort((a, b) => (b.release.soldEditions || 0) - (a.release.soldEditions || 0));
         break;
       case 'genre':
@@ -973,7 +969,9 @@ const StreamPage = {
         const index = parseInt(card.dataset.topTrackIndex, 10);
         const track = this.topTracks[index];
         if (track?.release) {
-          Modals.showRelease(track.release);
+          // Try to find full release data from our releases array
+          const fullRelease = this.releases.find(r => r.id === track.release.id);
+          Modals.showRelease(fullRelease || track.release);
         }
       });
     });
@@ -1025,12 +1023,12 @@ const StreamPage = {
   playTrack(trackData, allTracks, index) {
     const queue = allTracks.map(t => ({
       id: parseInt(t.id) || 0,
-      trackId: t.id,
-      title: t.displayTitle,
-      artist: t.release.artistName || Helpers.truncateAddress(t.release.artistAddress),
-      cover: t.release.coverUrl,
+      trackId: t.trackId || t.id,
+      title: t.displayTitle || t.title,
+      artist: t.release?.artistName || Helpers.truncateAddress(t.release?.artistAddress),
+      cover: t.release?.coverUrl,
       ipfsHash: t.audioCid,
-      releaseId: t.release.id,
+      releaseId: t.release?.id || t.releaseId,
       duration: t.duration,
     }));
     Player.playTrack(queue[index], queue, index);
