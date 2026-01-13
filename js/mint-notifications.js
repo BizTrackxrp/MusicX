@@ -452,15 +452,15 @@ const MintNotifications = {
    * This gives immediate feedback while waiting for first poll
    */
   addJob(jobData) {
-    if (!this.bellElement) {
-      this.init();
+    if (!this.dropdownElement) {
+      this.ensureDropdown();
     }
     
     // Show active state immediately
-    const badge = this.bellElement?.querySelector('.mint-bell-badge');
+    const badge = document.querySelector('#mint-notifications-bell .mint-bell-badge');
     if (badge) {
       badge.style.display = 'block';
-      this.bellElement.classList.add('has-active');
+      document.getElementById('mint-notifications-bell')?.classList.add('has-active');
     }
     
     // Start polling if not already
@@ -470,6 +470,53 @@ const MintNotifications = {
     
     // Fetch fresh data
     this.fetchJobs();
+  },
+  
+  /**
+   * Ensure dropdown exists (can be called before full init)
+   */
+  ensureDropdown() {
+    if (this.dropdownElement) return;
+    
+    this.bellElement = document.getElementById('mint-notifications-bell');
+    
+    // Create dropdown
+    this.dropdownElement = document.createElement('div');
+    this.dropdownElement.id = 'mint-notifications-dropdown';
+    this.dropdownElement.className = 'mint-dropdown';
+    this.dropdownElement.style.display = 'none';
+    this.dropdownElement.innerHTML = `
+      <div class="mint-dropdown-header">Mint Status</div>
+      <div class="mint-dropdown-content">
+        <div class="mint-dropdown-empty">Loading...</div>
+      </div>
+    `;
+    document.body.appendChild(this.dropdownElement);
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.dropdownElement?.contains(e.target) && 
+          !document.getElementById('mint-notifications-bell')?.contains(e.target)) {
+        this.closeDropdown();
+      }
+    });
+    
+    // Add styles
+    this.addStyles();
+    
+    // Try to fetch jobs if we have an address
+    const stored = localStorage.getItem('xrpmusic_user');
+    if (stored) {
+      try {
+        const userData = JSON.parse(stored);
+        if (userData.address) {
+          window.AppState = window.AppState || {};
+          window.AppState.user = window.AppState.user || {};
+          window.AppState.user.address = userData.address;
+          this.fetchJobs();
+        }
+      } catch (e) {}
+    }
   },
 };
 
@@ -482,7 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const userCardVisible = document.getElementById('user-card') && 
                            !document.getElementById('user-card').classList.contains('hidden');
     
-    if ((hasAppState || userCardVisible) && !MintNotifications.bellElement) {
+    if ((hasAppState || userCardVisible) && !MintNotifications.dropdownElement) {
       // If AppState isn't ready but user card is visible, try to get address from localStorage
       if (!hasAppState && userCardVisible) {
         const stored = localStorage.getItem('xrpmusic_user');
@@ -506,6 +553,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   };
+  
+  // Always create dropdown on page load so bell click works
+  MintNotifications.ensureDropdown();
   
   // Check immediately and then periodically
   setTimeout(checkLogin, 500); // Small delay to let other scripts load
