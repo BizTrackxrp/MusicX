@@ -311,36 +311,44 @@ const XamanWallet = {
    */
   startMintProgressPolling(jobId, totalNFTs, onProgress) {
     const startTime = Date.now();
+    console.log(`Starting progress polling for job ${jobId}`);
     
     const poll = async () => {
       try {
         const response = await fetch(`/api/mint-progress?jobId=${jobId}`);
         const data = await response.json();
         
+        console.log('Progress poll result:', data);
+        
         if (data.success) {
           const minted = data.minted || 0;
           const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const percent = Math.round((minted / totalNFTs) * 100);
           
           if (onProgress) {
             onProgress({
-              stage: 'minting',
-              message: `Minting NFTs... ${minted}/${totalNFTs} complete`,
+              stage: data.status === 'complete' ? 'complete' : 'minting',
+              message: data.status === 'complete' 
+                ? `Successfully minted ${minted} NFTs!`
+                : `Minting NFTs... ${minted}/${totalNFTs} complete`,
               quantity: totalNFTs,
               minted: minted,
               elapsed: elapsed,
-              progress: Math.round((minted / totalNFTs) * 100),
+              progress: data.status === 'complete' ? 100 : Math.min(percent, 99),
             });
           }
           
           // Stop polling if complete or failed
           if (data.status === 'complete' || data.status === 'failed') {
+            console.log(`Job ${jobId} finished with status: ${data.status}`);
             this.stopMintProgress();
-            return;
+            return data;
           }
         }
       } catch (err) {
         console.error('Progress poll error:', err);
       }
+      return null;
     };
     
     // Poll immediately, then every 3 seconds
@@ -349,40 +357,7 @@ const XamanWallet = {
   },
   
   /**
-   * Fallback: Start animated progress during minting (when no jobId available yet)
-   */
-  startMintProgress(totalNFTs, onProgress) {
-    const startTime = Date.now();
-    let currentEstimate = 0;
-    
-    // Use realistic 10 sec/NFT estimate (measured from real mints)
-    const estimatedSecondsPerNFT = 10;
-    const estimatedTotalTime = totalNFTs * estimatedSecondsPerNFT * 1000;
-    
-    this.mintProgressInterval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      // Cap at 95% until we get real confirmation
-      const timeProgress = Math.min(elapsed / estimatedTotalTime, 0.95);
-      const estimatedMinted = Math.floor(timeProgress * totalNFTs);
-      
-      if (estimatedMinted > currentEstimate) {
-        currentEstimate = estimatedMinted;
-        if (onProgress) {
-          onProgress({
-            stage: 'minting',
-            message: `Minting NFTs... ~${currentEstimate}/${totalNFTs} complete`,
-            quantity: totalNFTs,
-            minted: currentEstimate,
-            elapsed: Math.floor(elapsed / 1000),
-            progress: Math.round(timeProgress * 100),
-          });
-        }
-      }
-    }, 1000);
-  },
-  
-  /**
-   * Stop the progress animation/polling
+   * Stop the progress polling
    */
   stopMintProgress() {
     if (this.mintProgressInterval) {
@@ -392,7 +367,62 @@ const XamanWallet = {
   },
   
   /**
-   * Mint NFT
+   * Wait for mint job to complete
+   */
+  waitForMintComplete(jobId, totalNFTs, onProgress) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      
+      const poll = async () => {
+        try {
+          const response = await fetch(`/api/mint-progress?jobId=${jobId}`);
+          const data = await response.json();
+          
+          console.log('Progress poll:', data);
+          
+          if (data.success) {
+            const minted = data.minted || 0;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const percent = Math.round((minted / totalNFTs) * 100);
+            
+            if (onProgress) {
+              onProgress({
+                stage: data.status === 'complete' ? 'complete' : 'minting',
+                message: data.status === 'complete' 
+                  ? `Successfully minted ${minted} NFTs!`
+                  : `Minting NFTs... ${minted}/${totalNFTs} complete`,
+                quantity: totalNFTs,
+                minted: minted,
+                elapsed: elapsed,
+                progress: data.status === 'complete' ? 100 : Math.min(percent, 99),
+              });
+            }
+            
+            if (data.status === 'complete') {
+              this.stopMintProgress();
+              resolve({ success: true, minted: minted, status: 'complete' });
+              return;
+            }
+            
+            if (data.status === 'failed') {
+              this.stopMintProgress();
+              resolve({ success: false, error: data.error || 'Minting failed', status: 'failed' });
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Progress poll error:', err);
+        }
+      };
+      
+      // Poll immediately, then every 3 seconds
+      poll();
+      this.mintProgressInterval = setInterval(poll, 3000);
+    });
+  },
+  
+  /**
+   * Mint NFT - NEW VERSION using queue system
    */
   async mintNFT(metadataUri, options = {}) {
     if (!this.sdk) {
@@ -548,73 +578,77 @@ const XamanWallet = {
       
       console.log('Authorization successful:', authResult.txHash);
       
-      // STEP 3: Backend batch mints - start with fallback progress first
+      // STEP 3: Queue the mint job (returns immediately!)
       if (onProgress) {
         onProgress({
           stage: 'minting',
-          message: `Step 3/3: Minting ${totalNFTs} NFTs... Please wait!`,
+          message: `Step 3/3: Queuing mint job for ${totalNFTs} NFTs...`,
           quantity: totalNFTs,
           minted: 0,
           elapsed: 0,
-          progress: 0,
+          progress: 15,
         });
       }
       
-      // Start fallback animated progress (will be replaced by real polling once we get jobId)
-      this.startMintProgress(totalNFTs, onProgress);
+      console.log('Queuing mint job...');
       
-      const mintResponse = await fetch('/api/batch-mint', {
+      const queueResponse = await fetch('/api/queue-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'mint',
           artistAddress: AppState.user.address,
-          metadataUri: metadataUri,
-          tracks: tracks,
-          trackIds: trackIds,
           releaseId: releaseId,
           quantity: quantity,
           transferFee: transferFee,
-          taxon: taxon,
         }),
       });
       
-      // Stop the progress animation (minting complete or failed)
-      this.stopMintProgress();
-
-      // Handle non-JSON responses
-      const mintText = await mintResponse.text();
-      let mintData;
-      try {
-        mintData = JSON.parse(mintText);
-      } catch {
-        console.error('Batch mint response not JSON:', mintText);
-        throw new Error(mintText || 'Minting failed - server error');
+      const queueData = await queueResponse.json();
+      
+      if (!queueData.success) {
+        throw new Error(queueData.error || 'Failed to queue mint job');
       }
       
-      if (!mintData.success) {
-        throw new Error(mintData.error || 'Batch minting failed');
+      console.log('Mint job queued:', queueData);
+      
+      const jobId = queueData.jobId;
+      
+      // Now poll for progress until complete
+      if (onProgress) {
+        onProgress({
+          stage: 'minting',
+          message: `Minting ${totalNFTs} NFTs... This may take a few minutes.`,
+          quantity: totalNFTs,
+          minted: 0,
+          elapsed: 0,
+          progress: 20,
+        });
+      }
+      
+      // Wait for the job to complete
+      const mintResult = await this.waitForMintComplete(jobId, totalNFTs, onProgress);
+      
+      if (!mintResult.success) {
+        throw new Error(mintResult.error || 'Minting failed');
       }
       
       // Final progress update
       if (onProgress) {
         onProgress({
           stage: 'complete',
-          message: `Successfully minted ${mintData.totalMinted} NFTs!`,
-          quantity: mintData.totalMinted,
-          minted: mintData.totalMinted,
+          message: `Successfully minted ${mintResult.minted} NFTs!`,
+          quantity: mintResult.minted,
+          minted: mintResult.minted,
           progress: 100,
         });
       }
       
       return {
         success: true,
-        jobId: mintData.jobId,
+        jobId: jobId,
         txHash: authResult.txHash,
         paymentTxHash: paymentResult.txHash,
-        nftTokenIds: mintData.nftTokenIds,
-        totalMinted: mintData.totalMinted,
-        tracks: mintData.tracks,
+        totalMinted: mintResult.minted,
       };
       
     } catch (error) {
