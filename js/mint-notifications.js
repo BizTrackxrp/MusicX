@@ -1,155 +1,121 @@
 /**
  * XRP Music - Mint Notifications Service
  * 
- * Handles the notification bell for mint job status.
- * - Polls for job status in background
- * - Persists across page navigation
- * - Shows progress, completion, and errors
+ * Creates a notification bell in the header that shows mint job progress.
+ * Polls for updates when there are active jobs.
+ * Persists across page navigation.
  */
 
 const MintNotifications = {
   pollInterval: null,
   isPolling: false,
-  
-  // Current state
-  state: {
-    hasUnread: false,
-    hasActive: false,
-    activeCount: 0,
-    unreadCount: 0,
-    jobs: {
-      active: [],
-      completedUnseen: [],
-      failed: [],
-      recentCompleted: [],
-    }
-  },
+  bellElement: null,
+  dropdownElement: null,
+  lastData: null,
   
   /**
-   * Initialize the notification service
-   * Call this on page load
+   * Initialize the notification system
+   * Call this on page load if user is logged in
    */
-  async init() {
-    if (!AppState.user?.address) {
-      console.log('MintNotifications: No user logged in, skipping init');
+  init() {
+    if (!window.AppState?.user?.address) {
       return;
     }
     
-    console.log('MintNotifications: Initializing...');
-    
-    // Create the notification bell UI if it doesn't exist
     this.createBellUI();
-    
-    // Fetch initial state
-    await this.fetchJobs();
-    
-    // Start polling if there are active jobs
-    if (this.state.hasActive) {
-      this.startPolling();
-    }
-    
-    // Update UI
-    this.updateUI();
+    this.fetchJobs(); // Initial fetch
+    this.startPolling();
   },
   
   /**
-   * Create the notification bell UI element
+   * Clean up when user logs out
+   */
+  destroy() {
+    this.stopPolling();
+    if (this.bellElement) {
+      this.bellElement.remove();
+      this.bellElement = null;
+    }
+    if (this.dropdownElement) {
+      this.dropdownElement.remove();
+      this.dropdownElement = null;
+    }
+  },
+  
+  /**
+   * Create the bell icon in the header
    */
   createBellUI() {
-    // Check if bell already exists
-    if (document.getElementById('mint-notification-bell')) {
+    // Remove if already exists
+    document.getElementById('mint-notifications-bell')?.remove();
+    document.getElementById('mint-notifications-dropdown')?.remove();
+    
+    // Find header actions
+    const headerActions = document.querySelector('.header-actions');
+    if (!headerActions) {
+      console.warn('MintNotifications: Could not find .header-actions');
       return;
     }
     
-    // Find the header/nav area to insert the bell
-    const header = document.querySelector('.nav-actions') || 
-                   document.querySelector('header nav') ||
-                   document.querySelector('header');
-    
-    if (!header) {
-      console.warn('MintNotifications: Could not find header to insert bell');
-      return;
-    }
-    
-    // Create bell container
-    const bellContainer = document.createElement('div');
-    bellContainer.id = 'mint-notification-bell';
-    bellContainer.className = 'mint-notification-bell';
-    bellContainer.innerHTML = `
-      <button class="bell-button" onclick="MintNotifications.toggleDropdown()">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-        </svg>
-        <span class="bell-badge" style="display: none;"></span>
-        <span class="bell-spinner" style="display: none;"></span>
-      </button>
-      <div class="bell-dropdown" style="display: none;">
-        <div class="dropdown-header">Mint Status</div>
-        <div class="dropdown-content">
-          <div class="empty-state">No recent mints</div>
-        </div>
-      </div>
+    // Create bell button
+    this.bellElement = document.createElement('button');
+    this.bellElement.id = 'mint-notifications-bell';
+    this.bellElement.className = 'header-btn mint-bell';
+    this.bellElement.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+      </svg>
+      <span class="mint-bell-badge" style="display: none;"></span>
     `;
     
-    // Insert before the profile/wallet button if possible
-    const walletBtn = header.querySelector('.wallet-button') || 
-                      header.querySelector('[class*="wallet"]') ||
-                      header.lastElementChild;
+    // Insert at the beginning of header actions
+    headerActions.insertBefore(this.bellElement, headerActions.firstChild);
     
-    if (walletBtn) {
-      header.insertBefore(bellContainer, walletBtn);
-    } else {
-      header.appendChild(bellContainer);
-    }
+    // Create dropdown
+    this.dropdownElement = document.createElement('div');
+    this.dropdownElement.id = 'mint-notifications-dropdown';
+    this.dropdownElement.className = 'mint-dropdown';
+    this.dropdownElement.style.display = 'none';
+    this.dropdownElement.innerHTML = `
+      <div class="mint-dropdown-header">Mint Status</div>
+      <div class="mint-dropdown-content">
+        <div class="mint-dropdown-empty">No recent mints</div>
+      </div>
+    `;
+    document.body.appendChild(this.dropdownElement);
     
-    // Add styles if not already added
-    this.addStyles();
+    // Add click handler
+    this.bellElement.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDropdown();
+    });
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-      const bell = document.getElementById('mint-notification-bell');
-      if (bell && !bell.contains(e.target)) {
+      if (!this.dropdownElement?.contains(e.target) && !this.bellElement?.contains(e.target)) {
         this.closeDropdown();
       }
     });
+    
+    // Add styles
+    this.addStyles();
   },
   
   /**
-   * Add CSS styles for the notification bell
+   * Add CSS styles for the notification UI
    */
   addStyles() {
-    if (document.getElementById('mint-notification-styles')) {
-      return;
-    }
+    if (document.getElementById('mint-notifications-styles')) return;
     
-    const styles = document.createElement('style');
-    styles.id = 'mint-notification-styles';
-    styles.textContent = `
-      .mint-notification-bell {
+    const style = document.createElement('style');
+    style.id = 'mint-notifications-styles';
+    style.textContent = `
+      .mint-bell {
         position: relative;
-        margin-right: 12px;
       }
       
-      .bell-button {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 8px;
-        color: #fff;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        transition: background 0.2s;
-      }
-      
-      .bell-button:hover {
-        background: rgba(255,255,255,0.1);
-      }
-      
-      .bell-badge {
+      .mint-bell-badge {
         position: absolute;
         top: 4px;
         right: 4px;
@@ -157,162 +123,144 @@ const MintNotifications = {
         height: 10px;
         background: #ef4444;
         border-radius: 50%;
-        border: 2px solid #1a1a2e;
+        border: 2px solid var(--bg-primary);
       }
       
-      .bell-spinner {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 10px;
-        height: 10px;
-        border: 2px solid rgba(139, 92, 246, 0.3);
-        border-top-color: #8b5cf6;
-        border-radius: 50%;
-        animation: bell-spin 1s linear infinite;
+      .mint-bell.has-active .mint-bell-badge {
+        background: #8b5cf6;
+        animation: mint-pulse 1.5s ease-in-out infinite;
       }
       
-      @keyframes bell-spin {
-        to { transform: rotate(360deg); }
+      .mint-bell.has-unread .mint-bell-badge {
+        background: #22c55e;
       }
       
-      .bell-dropdown {
-        position: absolute;
-        top: 100%;
-        right: 0;
+      @keyframes mint-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+      }
+      
+      .mint-dropdown {
+        position: fixed;
+        top: 60px;
+        right: 20px;
         width: 320px;
-        max-height: 400px;
-        overflow-y: auto;
-        background: #1a1a2e;
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        max-height: 450px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-xl);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         z-index: 1000;
-        margin-top: 8px;
-      }
-      
-      .dropdown-header {
-        padding: 12px 16px;
-        font-weight: 600;
-        border-bottom: 1px solid rgba(255,255,255,0.1);
-        color: #fff;
-      }
-      
-      .dropdown-content {
-        padding: 8px;
-      }
-      
-      .empty-state {
-        padding: 24px;
-        text-align: center;
-        color: rgba(255,255,255,0.5);
-      }
-      
-      .notification-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      
-      .notification-item:hover {
-        background: rgba(255,255,255,0.05);
-      }
-      
-      .notification-item.unread {
-        background: rgba(139, 92, 246, 0.1);
-      }
-      
-      .notification-thumb {
-        width: 48px;
-        height: 48px;
-        border-radius: 6px;
-        object-fit: cover;
-        background: rgba(255,255,255,0.1);
-      }
-      
-      .notification-info {
-        flex: 1;
-        min-width: 0;
-      }
-      
-      .notification-title {
-        font-weight: 500;
-        color: #fff;
-        white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
-        margin-bottom: 4px;
       }
       
-      .notification-status {
+      .mint-dropdown-header {
+        padding: 16px 20px;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-color);
+      }
+      
+      .mint-dropdown-content {
+        max-height: 350px;
+        overflow-y: auto;
+      }
+      
+      .mint-dropdown-empty {
+        padding: 32px 20px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+      
+      .mint-job-item {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background 150ms;
+      }
+      
+      .mint-job-item:last-child {
+        border-bottom: none;
+      }
+      
+      .mint-job-item:hover {
+        background: var(--bg-hover);
+      }
+      
+      .mint-job-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+      }
+      
+      .mint-job-status {
         font-size: 13px;
-        color: rgba(255,255,255,0.6);
       }
       
-      .notification-status.success {
-        color: #22c55e;
-      }
-      
-      .notification-status.error {
-        color: #ef4444;
-      }
-      
-      .notification-status.minting {
+      .mint-job-status.minting {
         color: #8b5cf6;
       }
       
-      .notification-progress {
-        width: 100%;
-        height: 4px;
-        background: rgba(255,255,255,0.1);
-        border-radius: 2px;
-        margin-top: 6px;
+      .mint-job-status.complete {
+        color: #22c55e;
+      }
+      
+      .mint-job-status.failed {
+        color: #ef4444;
+      }
+      
+      .mint-job-progress {
+        margin-top: 10px;
+        height: 6px;
+        background: var(--bg-hover);
+        border-radius: 3px;
         overflow: hidden;
       }
       
-      .notification-progress-bar {
+      .mint-job-progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, #8b5cf6, #6366f1);
-        border-radius: 2px;
-        transition: width 0.3s;
+        background: linear-gradient(90deg, #8b5cf6, #a855f7);
+        border-radius: 3px;
+        transition: width 300ms ease;
+      }
+      
+      .mint-job-time {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 8px;
       }
     `;
-    
-    document.head.appendChild(styles);
+    document.head.appendChild(style);
   },
   
   /**
-   * Fetch mint jobs from API
+   * Toggle dropdown visibility
    */
-  async fetchJobs() {
-    if (!AppState.user?.address) return;
-    
-    try {
-      const response = await fetch(`/api/my-mint-jobs?address=${AppState.user.address}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        this.state = {
-          hasUnread: data.hasUnread,
-          hasActive: data.hasActive,
-          activeCount: data.summary.activeCount,
-          unreadCount: data.summary.unreadCount,
-          jobs: data.jobs,
-        };
-        
-        // Start/stop polling based on active jobs
-        if (this.state.hasActive && !this.isPolling) {
-          this.startPolling();
-        } else if (!this.state.hasActive && this.isPolling) {
-          this.stopPolling();
-        }
-      }
-    } catch (error) {
-      console.error('MintNotifications: Failed to fetch jobs', error);
+  toggleDropdown() {
+    if (this.dropdownElement.style.display === 'none') {
+      this.openDropdown();
+    } else {
+      this.closeDropdown();
+    }
+  },
+  
+  /**
+   * Open dropdown and fetch fresh data
+   */
+  openDropdown() {
+    this.dropdownElement.style.display = 'block';
+    this.fetchJobs(); // Refresh when opening
+  },
+  
+  /**
+   * Close dropdown
+   */
+  closeDropdown() {
+    if (this.dropdownElement) {
+      this.dropdownElement.style.display = 'none';
     }
   },
   
@@ -321,13 +269,10 @@ const MintNotifications = {
    */
   startPolling() {
     if (this.isPolling) return;
-    
-    console.log('MintNotifications: Starting polling...');
     this.isPolling = true;
     
-    this.pollInterval = setInterval(async () => {
-      await this.fetchJobs();
-      this.updateUI();
+    this.pollInterval = setInterval(() => {
+      this.fetchJobs();
     }, 5000); // Poll every 5 seconds
   },
   
@@ -335,11 +280,7 @@ const MintNotifications = {
    * Stop polling
    */
   stopPolling() {
-    if (!this.isPolling) return;
-    
-    console.log('MintNotifications: Stopping polling');
     this.isPolling = false;
-    
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
@@ -347,201 +288,217 @@ const MintNotifications = {
   },
   
   /**
-   * Update the notification bell UI
+   * Fetch jobs from API
    */
-  updateUI() {
-    const badge = document.querySelector('.bell-badge');
-    const spinner = document.querySelector('.bell-spinner');
-    const content = document.querySelector('.bell-dropdown .dropdown-content');
+  async fetchJobs() {
+    if (!window.AppState?.user?.address) return;
     
-    if (!badge || !spinner || !content) return;
+    try {
+      const response = await fetch(`/api/my-mint-jobs?address=${AppState.user.address}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        this.lastData = data;
+        this.updateUI(data);
+        
+        // If no active jobs, slow down polling
+        if (!data.hasActive && this.isPolling) {
+          this.stopPolling();
+          // Check again in 30 seconds in case a new job starts
+          setTimeout(() => {
+            if (window.AppState?.user?.address) {
+              this.fetchJobs();
+              // If there are now active jobs, resume fast polling
+              if (this.lastData?.hasActive) {
+                this.startPolling();
+              }
+            }
+          }, 30000);
+        } else if (data.hasActive && !this.isPolling) {
+          // Resume polling if there are active jobs
+          this.startPolling();
+        }
+      }
+    } catch (error) {
+      console.error('MintNotifications: Failed to fetch jobs', error);
+    }
+  },
+  
+  /**
+   * Update the UI based on job data
+   */
+  updateUI(data) {
+    if (!this.bellElement || !this.dropdownElement) return;
     
-    // Update badge/spinner visibility
-    if (this.state.hasActive) {
-      badge.style.display = 'none';
-      spinner.style.display = 'block';
-    } else if (this.state.hasUnread) {
+    const badge = this.bellElement.querySelector('.mint-bell-badge');
+    
+    // Update bell state
+    this.bellElement.classList.remove('has-active', 'has-unread');
+    badge.style.display = 'none';
+    
+    if (data.hasActive) {
+      this.bellElement.classList.add('has-active');
       badge.style.display = 'block';
-      spinner.style.display = 'none';
-    } else {
-      badge.style.display = 'none';
-      spinner.style.display = 'none';
+    } else if (data.hasUnread) {
+      this.bellElement.classList.add('has-unread');
+      badge.style.display = 'block';
     }
     
-    // Build dropdown content
+    // Update dropdown content
+    const content = this.dropdownElement.querySelector('.mint-dropdown-content');
     const allJobs = [
-      ...this.state.jobs.active,
-      ...this.state.jobs.completedUnseen,
-      ...this.state.jobs.failed,
-      ...this.state.jobs.recentCompleted,
+      ...data.jobs.active,
+      ...data.jobs.completedUnseen,
+      ...data.jobs.failed,
+      ...data.jobs.recentCompleted,
     ];
     
     if (allJobs.length === 0) {
-      content.innerHTML = '<div class="empty-state">No recent mints</div>';
+      content.innerHTML = '<div class="mint-dropdown-empty">No recent mints</div>';
       return;
     }
     
     content.innerHTML = allJobs.map(job => this.renderJobItem(job)).join('');
+    
+    // Add click handlers for completed jobs
+    content.querySelectorAll('.mint-job-item[data-job-id]').forEach(item => {
+      item.addEventListener('click', () => {
+        const jobId = item.dataset.jobId;
+        const releaseId = item.dataset.releaseId;
+        this.handleJobClick(jobId, releaseId);
+      });
+    });
   },
   
   /**
-   * Render a single job notification item
+   * Render a single job item
    */
   renderJobItem(job) {
-    const isUnread = (job.status === 'complete' || job.status === 'failed') && !job.seen;
     const isActive = job.status === 'pending' || job.status === 'minting';
+    const isComplete = job.status === 'complete';
+    const isFailed = job.status === 'failed';
     
     let statusText = '';
     let statusClass = '';
+    let progressBar = '';
+    let timeEstimate = '';
     
-    if (job.status === 'pending') {
-      statusText = 'Waiting to mint...';
-      statusClass = 'minting';
-    } else if (job.status === 'minting') {
+    if (isActive) {
+      const percent = job.total_nfts > 0 ? Math.round((job.minted_count / job.total_nfts) * 100) : 0;
       statusText = `Minting... ${job.minted_count}/${job.total_nfts} NFTs`;
       statusClass = 'minting';
-    } else if (job.status === 'complete') {
-      statusText = `✓ ${job.minted_count} NFTs minted!`;
-      statusClass = 'success';
-    } else if (job.status === 'failed') {
+      progressBar = `
+        <div class="mint-job-progress">
+          <div class="mint-job-progress-fill" style="width: ${percent}%"></div>
+        </div>
+      `;
+      
+      // Calculate time estimate
+      if (job.minted_count > 10) {
+        const elapsed = (new Date() - new Date(job.created_at)) / 1000; // seconds
+        const perNft = elapsed / job.minted_count;
+        const remaining = (job.total_nfts - job.minted_count) * perNft;
+        
+        if (remaining > 3600) {
+          const hours = Math.floor(remaining / 3600);
+          const mins = Math.ceil((remaining % 3600) / 60);
+          timeEstimate = `<div class="mint-job-time">~${hours}h ${mins}m remaining</div>`;
+        } else if (remaining > 60) {
+          timeEstimate = `<div class="mint-job-time">~${Math.ceil(remaining / 60)} minutes remaining</div>`;
+        } else {
+          timeEstimate = `<div class="mint-job-time">Almost done...</div>`;
+        }
+      } else {
+        timeEstimate = `<div class="mint-job-time">Calculating time...</div>`;
+      }
+    } else if (isComplete) {
+      statusText = `✓ ${job.total_nfts} NFTs minted!`;
+      statusClass = 'complete';
+    } else if (isFailed) {
       statusText = `✗ Failed: ${job.error || 'Unknown error'}`;
-      statusClass = 'error';
+      statusClass = 'failed';
     }
     
-    const progress = job.total_nfts > 0 ? Math.round((job.minted_count / job.total_nfts) * 100) : 0;
-    
-    const coverUrl = job.cover_art_url || '/images/default-cover.png';
-    
     return `
-      <div class="notification-item ${isUnread ? 'unread' : ''}" 
-           onclick="MintNotifications.handleItemClick('${job.job_id}', '${job.release_id}', ${isUnread})">
-        <img class="notification-thumb" src="${coverUrl}" alt="${job.release_title}" onerror="this.src='/images/default-cover.png'">
-        <div class="notification-info">
-          <div class="notification-title">${job.release_title || 'Untitled Release'}</div>
-          <div class="notification-status ${statusClass}">${statusText}</div>
-          ${isActive ? `
-            <div class="notification-progress">
-              <div class="notification-progress-bar" style="width: ${progress}%"></div>
-            </div>
-          ` : ''}
-        </div>
+      <div class="mint-job-item" data-job-id="${job.job_id}" data-release-id="${job.release_id}">
+        <div class="mint-job-title">${job.release_title || 'Untitled Release'}</div>
+        <div class="mint-job-status ${statusClass}">${statusText}</div>
+        ${progressBar}
+        ${timeEstimate}
       </div>
     `;
   },
   
   /**
-   * Handle click on a notification item
+   * Handle click on a job item
    */
-  async handleItemClick(jobId, releaseId, isUnread) {
-    // Mark as seen if unread
-    if (isUnread && AppState.user?.address) {
-      try {
-        await fetch('/api/mark-job-seen', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jobId: jobId,
-            address: AppState.user.address,
-          }),
-        });
-        
-        // Refresh jobs
-        await this.fetchJobs();
-        this.updateUI();
-      } catch (error) {
-        console.error('Failed to mark job as seen:', error);
-      }
+  async handleJobClick(jobId, releaseId) {
+    // Mark as seen
+    try {
+      await fetch('/api/mark-job-seen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId,
+          address: AppState.user.address,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to mark job as seen:', error);
     }
     
-    // Navigate to profile releases tab
+    // Close dropdown
     this.closeDropdown();
     
-    // If we have a profile page navigation function, use it
-    if (typeof navigateToProfile === 'function') {
-      navigateToProfile('releases');
-    } else if (typeof UI !== 'undefined' && UI.showProfile) {
-      UI.showProfile(AppState.user.address, 'releases');
-    } else {
-      // Fallback: just go to profile page
-      window.location.hash = `#/profile/${AppState.user.address}/releases`;
+    // Navigate to profile releases tab
+    if (typeof Router !== 'undefined') {
+      Router.navigate('profile');
     }
-  },
-  
-  /**
-   * Toggle dropdown visibility
-   */
-  toggleDropdown() {
-    const dropdown = document.querySelector('.bell-dropdown');
-    if (!dropdown) return;
     
-    if (dropdown.style.display === 'none') {
-      dropdown.style.display = 'block';
-      // Refresh when opening
-      this.fetchJobs().then(() => this.updateUI());
-    } else {
-      dropdown.style.display = 'none';
-    }
+    // Refresh to update badge
+    this.fetchJobs();
   },
   
   /**
-   * Close the dropdown
+   * Manually add a job (called after successful queue)
+   * This gives immediate feedback while waiting for first poll
    */
-  closeDropdown() {
-    const dropdown = document.querySelector('.bell-dropdown');
-    if (dropdown) {
-      dropdown.style.display = 'none';
+  addJob(jobData) {
+    if (!this.bellElement) {
+      this.init();
     }
-  },
-  
-  /**
-   * Add a new job (called after queueing a mint)
-   */
-  addJob(jobId, releaseId, totalNFTs) {
-    console.log('MintNotifications: Adding new job', jobId);
     
-    // Start polling immediately
-    this.startPolling();
+    // Show active state immediately
+    const badge = this.bellElement?.querySelector('.mint-bell-badge');
+    if (badge) {
+      badge.style.display = 'block';
+      this.bellElement.classList.add('has-active');
+    }
+    
+    // Start polling if not already
+    if (!this.isPolling) {
+      this.startPolling();
+    }
     
     // Fetch fresh data
-    this.fetchJobs().then(() => this.updateUI());
+    this.fetchJobs();
   },
-  
-  /**
-   * Clean up when user logs out
-   */
-  cleanup() {
-    this.stopPolling();
-    this.state = {
-      hasUnread: false,
-      hasActive: false,
-      activeCount: 0,
-      unreadCount: 0,
-      jobs: { active: [], completedUnseen: [], failed: [], recentCompleted: [] }
-    };
-    
-    const bell = document.getElementById('mint-notification-bell');
-    if (bell) {
-      bell.remove();
-    }
-  }
 };
 
 // Auto-initialize when DOM is ready and user is logged in
 document.addEventListener('DOMContentLoaded', () => {
-  // Wait a bit for AppState to be populated
-  setTimeout(() => {
-    if (AppState.user?.address) {
+  // Check periodically for login state
+  const checkLogin = () => {
+    if (window.AppState?.user?.address && !MintNotifications.bellElement) {
       MintNotifications.init();
     }
-  }, 1000);
+  };
+  
+  // Check immediately and then periodically
+  checkLogin();
+  setInterval(checkLogin, 2000);
 });
 
-// Re-initialize when user logs in
-window.addEventListener('userLoggedIn', () => {
-  MintNotifications.init();
-});
-
-// Cleanup when user logs out
-window.addEventListener('userLoggedOut', () => {
-  MintNotifications.cleanup();
-});
+// Listen for login/logout events if AppState fires them
+window.addEventListener('user-login', () => MintNotifications.init());
+window.addEventListener('user-logout', () => MintNotifications.destroy());
