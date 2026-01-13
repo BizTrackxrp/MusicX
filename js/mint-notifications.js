@@ -32,8 +32,9 @@ const MintNotifications = {
    */
   destroy() {
     this.stopPolling();
+    // Hide the bell (don't remove it)
     if (this.bellElement) {
-      this.bellElement.remove();
+      this.bellElement.style.display = 'none';
       this.bellElement = null;
     }
     if (this.dropdownElement) {
@@ -46,31 +47,18 @@ const MintNotifications = {
    * Create the bell icon in the header
    */
   createBellUI() {
-    // Remove if already exists
-    document.getElementById('mint-notifications-bell')?.remove();
-    document.getElementById('mint-notifications-dropdown')?.remove();
-    
-    // Find header actions
-    const headerActions = document.querySelector('.header-actions');
-    if (!headerActions) {
-      console.warn('MintNotifications: Could not find .header-actions');
+    // Use existing bell from HTML
+    this.bellElement = document.getElementById('mint-notifications-bell');
+    if (!this.bellElement) {
+      console.warn('MintNotifications: Could not find #mint-notifications-bell');
       return;
     }
     
-    // Create bell button
-    this.bellElement = document.createElement('button');
-    this.bellElement.id = 'mint-notifications-bell';
-    this.bellElement.className = 'header-btn mint-bell';
-    this.bellElement.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-      </svg>
-      <span class="mint-bell-badge" style="display: none;"></span>
-    `;
+    // Show the bell when user is logged in
+    this.bellElement.style.display = '';
     
-    // Insert at the beginning of header actions
-    headerActions.insertBefore(this.bellElement, headerActions.firstChild);
+    // Remove old dropdown if exists
+    document.getElementById('mint-notifications-dropdown')?.remove();
     
     // Create dropdown
     this.dropdownElement = document.createElement('div');
