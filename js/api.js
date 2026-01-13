@@ -35,7 +35,7 @@ const API = {
   // ============================================
   
   /**
-   * Get all releases
+   * Get all releases (only minted releases shown publicly)
    */
   async getReleases() {
     const data = await this.fetch('/api/releases');
@@ -44,9 +44,15 @@ const API = {
   
   /**
    * Get releases by artist
+   * @param {string} artistAddress - The artist's wallet address
+   * @param {boolean} includeUnminted - If true, includes releases still being minted (for artist's own profile)
    */
-  async getReleasesByArtist(artistAddress) {
-    const data = await this.fetch(`/api/releases?artist=${artistAddress}`);
+  async getReleasesByArtist(artistAddress, includeUnminted = false) {
+    let url = `/api/releases?artist=${artistAddress}`;
+    if (includeUnminted) {
+      url += '&includeUnminted=true';
+    }
+    const data = await this.fetch(url);
     return data.releases || [];
   },
   
@@ -71,6 +77,15 @@ const API = {
   },
   
   /**
+   * Delete a release (used for cleanup on failed mints)
+   */
+  async deleteRelease(releaseId) {
+    return this.fetch(`/api/releases?id=${releaseId}`, {
+      method: 'DELETE',
+    });
+  },
+  
+  /**
    * Search releases
    */
   async searchReleases(query) {
@@ -84,6 +99,36 @@ const API = {
    */
   async getRelease(releaseId) {
     const data = await this.fetch(`/api/releases?id=${releaseId}`);
+    return data;
+  },
+
+  // ============================================
+  // MINT JOBS / NOTIFICATIONS
+  // ============================================
+  
+  /**
+   * Get user's mint jobs for notification bell
+   */
+  async getMyMintJobs(address) {
+    const data = await this.fetch(`/api/my-mint-jobs?address=${address}`);
+    return data;
+  },
+  
+  /**
+   * Mark a mint job notification as seen
+   */
+  async markJobSeen(jobId, address) {
+    return this.fetch('/api/mark-job-seen', {
+      method: 'POST',
+      body: JSON.stringify({ jobId, address }),
+    });
+  },
+  
+  /**
+   * Get mint job progress
+   */
+  async getMintProgress(jobId) {
+    const data = await this.fetch(`/api/mint-progress?jobId=${jobId}`);
     return data;
   },
 
