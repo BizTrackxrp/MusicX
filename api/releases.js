@@ -1,6 +1,9 @@
 /**
  * XRP Music - Releases API
  * Vercel Serverless Function
+ * 
+ * NOTE: Public listings (Listen page) only show is_minted = true releases.
+ * Artist's own page shows ALL their releases (including minting in progress).
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -37,12 +40,13 @@ export default async function handler(req, res) {
 }
 
 async function getReleases(req, res, sql) {
-  const { artist, id } = req.query;
+  const { artist, id, includeUnminted } = req.query;
   
   let releases;
   
   if (id) {
     // Get single release with tracks and per-track sold counts
+    // Single release lookup doesn't filter by is_minted (need to see it for minting flow)
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -78,34 +82,69 @@ async function getReleases(req, res, sql) {
   
   if (artist) {
     // Get releases by artist with per-track sold counts
-    releases = await sql`
-      SELECT r.*, 
-        p.avatar_url as artist_avatar,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'id', t.id,
-              'title', t.title,
-              'trackNumber', t.track_order,
-              'duration', t.duration,
-              'audioCid', t.audio_cid,
-              'audioUrl', t.audio_url,
-              'soldCount', COALESCE((
-                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
-              ), 0)
-            ) ORDER BY t.track_order
-          ) FILTER (WHERE t.id IS NOT NULL),
-          '[]'
-        ) as tracks
-      FROM releases r
-      LEFT JOIN tracks t ON t.release_id = r.id
-      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
-      WHERE r.artist_address = ${artist}
-      GROUP BY r.id, p.avatar_url
-      ORDER BY r.created_at DESC
-    `;
+    // Artist's own page shows ALL their releases (including minting in progress)
+    // This lets them see the status of their pending mints
+    if (includeUnminted === 'true') {
+      // Show all releases for the artist (their own profile page)
+      releases = await sql`
+        SELECT r.*, 
+          p.avatar_url as artist_avatar,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', t.id,
+                'title', t.title,
+                'trackNumber', t.track_order,
+                'duration', t.duration,
+                'audioCid', t.audio_cid,
+                'audioUrl', t.audio_url,
+                'soldCount', COALESCE((
+                  SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
+                ), 0)
+              ) ORDER BY t.track_order
+            ) FILTER (WHERE t.id IS NOT NULL),
+            '[]'
+          ) as tracks
+        FROM releases r
+        LEFT JOIN tracks t ON t.release_id = r.id
+        LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+        WHERE r.artist_address = ${artist}
+        GROUP BY r.id, p.avatar_url
+        ORDER BY r.created_at DESC
+      `;
+    } else {
+      // Public view - only show minted releases
+      releases = await sql`
+        SELECT r.*, 
+          p.avatar_url as artist_avatar,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', t.id,
+                'title', t.title,
+                'trackNumber', t.track_order,
+                'duration', t.duration,
+                'audioCid', t.audio_cid,
+                'audioUrl', t.audio_url,
+                'soldCount', COALESCE((
+                  SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
+                ), 0)
+              ) ORDER BY t.track_order
+            ) FILTER (WHERE t.id IS NOT NULL),
+            '[]'
+          ) as tracks
+        FROM releases r
+        LEFT JOIN tracks t ON t.release_id = r.id
+        LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+        WHERE r.artist_address = ${artist}
+          AND r.is_minted = true
+        GROUP BY r.id, p.avatar_url
+        ORDER BY r.created_at DESC
+      `;
+    }
   } else {
-    // Get all releases with per-track sold counts
+    // Get all releases (Listen page, Browse, etc.)
+    // ONLY show minted releases to the public
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -128,6 +167,7 @@ async function getReleases(req, res, sql) {
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+      WHERE r.is_minted = true
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
@@ -162,7 +202,8 @@ async function createRelease(req, res, sql) {
   // Generate unique ID (since id column is varchar, not serial)
   const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  // Insert release (using columns that exist in your schema)
+  // Insert release - is_minted defaults to false
+  // Worker will set is_minted = true when minting completes
   const [release] = await sql`
     INSERT INTO releases (
       id,
@@ -180,6 +221,7 @@ async function createRelease(req, res, sql) {
       sold_editions,
       tx_hash,
       sell_offer_index,
+      is_minted,
       listed_at,
       created_at
     ) VALUES (
@@ -198,6 +240,7 @@ async function createRelease(req, res, sql) {
       0,
       ${txHash || null},
       ${sellOfferIndex || null},
+      false,
       ${sellOfferIndex ? new Date() : null},
       NOW()
     )
@@ -220,7 +263,8 @@ async function createRelease(req, res, sql) {
           audio_cid,
           audio_url,
           metadata_cid,
-          sold_editions
+          sold_editions,
+          track_number
         ) VALUES (
           ${trackId},
           ${release.id},
@@ -230,7 +274,8 @@ async function createRelease(req, res, sql) {
           ${track.audioCid || null},
           ${track.audioUrl || null},
           ${track.metadataCid || null},
-          0
+          0,
+          ${i + 1}
         )
       `;
       trackIds.push(trackId);
@@ -264,6 +309,7 @@ async function updateRelease(req, res, sql) {
     sellOfferIndex: 'sell_offer_index',
     listedAt: 'listed_at',
     soldEditions: 'sold_editions',
+    isMinted: 'is_minted',
   };
   
   // Prepare update values
@@ -271,6 +317,7 @@ async function updateRelease(req, res, sql) {
   const txHash = updates.txHash || null;
   const sellOfferIndex = updates.sellOfferIndex || null;
   const listedAt = updates.sellOfferIndex ? new Date() : null;
+  const isMinted = updates.isMinted !== undefined ? updates.isMinted : null;
   
   // Update the release
   const [updated] = await sql`
@@ -279,7 +326,8 @@ async function updateRelease(req, res, sql) {
       nft_token_ids = COALESCE(${nftTokenIds ? JSON.stringify(nftTokenIds) : null}, nft_token_ids),
       tx_hash = COALESCE(${txHash}, tx_hash),
       sell_offer_index = COALESCE(${sellOfferIndex}, sell_offer_index),
-      listed_at = COALESCE(${listedAt}, listed_at)
+      listed_at = COALESCE(${listedAt}, listed_at),
+      is_minted = COALESCE(${isMinted}, is_minted)
     WHERE id = ${id}
     RETURNING *
   `;
@@ -323,7 +371,14 @@ async function deleteRelease(req, res, sql) {
     `;
     console.log(`Deleted ${deletedTracks.length} track records`);
     
-    // 3. Delete the release itself
+    // 3. Delete from mint_jobs table
+    const deletedJobs = await sql`
+      DELETE FROM mint_jobs WHERE release_id = ${id}
+      RETURNING id
+    `;
+    console.log(`Deleted ${deletedJobs.length} mint job records`);
+    
+    // 4. Delete the release itself
     const deletedRelease = await sql`
       DELETE FROM releases WHERE id = ${id}
       RETURNING id
@@ -340,7 +395,8 @@ async function deleteRelease(req, res, sql) {
       deleted: {
         releaseId: id,
         nfts: deletedNfts.length,
-        tracks: deletedTracks.length
+        tracks: deletedTracks.length,
+        jobs: deletedJobs.length
       }
     });
     
@@ -372,6 +428,7 @@ function formatRelease(row) {
     sellOfferIndex: row.sell_offer_index,
     listedAt: row.listed_at,
     txHash: row.tx_hash,
+    isMinted: row.is_minted || false,
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
