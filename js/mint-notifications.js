@@ -489,13 +489,38 @@ const MintNotifications = {
 document.addEventListener('DOMContentLoaded', () => {
   // Check periodically for login state
   const checkLogin = () => {
-    if (window.AppState?.user?.address && !MintNotifications.bellElement) {
-      MintNotifications.init();
+    // Check multiple signals for logged-in state
+    const hasAppState = window.AppState?.user?.address;
+    const userCardVisible = document.getElementById('user-card') && 
+                           !document.getElementById('user-card').classList.contains('hidden');
+    
+    if ((hasAppState || userCardVisible) && !MintNotifications.bellElement) {
+      // If AppState isn't ready but user card is visible, try to get address from localStorage
+      if (!hasAppState && userCardVisible) {
+        const stored = localStorage.getItem('xrpmusic_user');
+        if (stored) {
+          try {
+            const userData = JSON.parse(stored);
+            if (userData.address) {
+              // Ensure AppState exists
+              window.AppState = window.AppState || {};
+              window.AppState.user = window.AppState.user || {};
+              window.AppState.user.address = userData.address;
+            }
+          } catch (e) {
+            console.warn('MintNotifications: Could not parse stored user data');
+          }
+        }
+      }
+      
+      if (window.AppState?.user?.address) {
+        MintNotifications.init();
+      }
     }
   };
   
   // Check immediately and then periodically
-  checkLogin();
+  setTimeout(checkLogin, 500); // Small delay to let other scripts load
   setInterval(checkLogin, 2000);
 });
 
