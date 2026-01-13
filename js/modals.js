@@ -3322,8 +3322,8 @@ showTrackPurchase(release, track, trackIdx) {
                   </div>
                   <div class="form-group">
                     <label class="form-label">Editions *</label>
-                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="30" min="1" max="30" value="30" required>
-<p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 30 editions per track (server limit)</p>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="10,000" min="1" max="10,000" value="10,000" required>
+<p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 10,000 nfts total per mint (If an album, all tracks combined cannot have more than 10k nfts) (server limit)</p>
                   </div>
                 </div>
                 
@@ -3652,11 +3652,11 @@ showTrackPurchase(release, track, trackIdx) {
       if (!coverFile) { alert('Please upload cover art'); return; }
       if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
       
-   // Validate edition limit (30 max due to server timeout)
+   // Validate edition limit (10000 max)
 const editions = parseInt(document.getElementById('release-editions').value) || 1;
-if (editions > 30) {
-  alert('Maximum 30 editions per track due to server limits. Higher limits coming soon!');
-  document.getElementById('release-editions').value = 30;
+if (editions > 10000) {
+  alert('Maximum 10,000 editions per minting session due to server limits. If an album, you can have a 10 song album and give it 1000 copies!');
+  document.getElementById('release-editions').value = 10000;
   return;
 }
       const totalNFTs = tracks.length * editions;
