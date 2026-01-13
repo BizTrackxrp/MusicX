@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         mj.completed_at,
         mj.seen,
         r.title as release_title,
-        r.cover_art_url,
+        r.cover_url,
         r.artist_name
       FROM mint_jobs mj
       JOIN releases r ON r.id = mj.release_id
