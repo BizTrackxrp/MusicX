@@ -5,6 +5,9 @@
  * IMPORTANT: Sessions are NOT persisted across page closes.
  * Users must re-authenticate with Xaman each time they visit.
  * This prevents stale session issues and ensures fresh wallet connections.
+ * 
+ * MINTING: Uses Railway worker queue - no timeout limits!
+ * Max 10,000 NFTs per batch. User can close page after signing.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -66,6 +69,11 @@ const XamanWallet = {
             await this.loadUserData(account);
             UI.updateAuthUI();
             UI.showLoggedInState();
+            
+            // Initialize mint notifications
+            if (typeof MintNotifications !== 'undefined') {
+              MintNotifications.init();
+            }
           }
         } catch (err) {
           console.error('Error getting account after success:', err);
@@ -78,6 +86,11 @@ const XamanWallet = {
         clearSession();
         UI.updateAuthUI();
         UI.showLoggedOutState();
+        
+        // Cleanup notifications
+        if (typeof MintNotifications !== 'undefined') {
+          MintNotifications.cleanup();
+        }
       });
       
       this.sdk.on('error', (err) => {
@@ -224,6 +237,11 @@ const XamanWallet = {
     if (AppState.user?.address) {
       await this.loadUserData(AppState.user.address);
       UI.updateAuthUI();
+      
+      // Initialize mint notifications
+      if (typeof MintNotifications !== 'undefined') {
+        MintNotifications.init();
+      }
       return;
     }
     
@@ -234,6 +252,11 @@ const XamanWallet = {
         saveSession(account);
         await this.loadUserData(account);
         UI.updateAuthUI();
+        
+        // Initialize mint notifications
+        if (typeof MintNotifications !== 'undefined') {
+          MintNotifications.init();
+        }
       }
     } catch (err) {
       console.log('No existing SDK session');
@@ -290,6 +313,11 @@ const XamanWallet = {
     clearSession();
     UI.updateAuthUI();
     UI.showLoggedOutState();
+    
+    // Cleanup notifications
+    if (typeof MintNotifications !== 'undefined') {
+      MintNotifications.cleanup();
+    }
   },
   
   /**
@@ -307,57 +335,7 @@ const XamanWallet = {
   },
   
   /**
-   * Poll real progress from backend mint_jobs table
-   */
-  startMintProgressPolling(jobId, totalNFTs, onProgress) {
-    const startTime = Date.now();
-    console.log(`Starting progress polling for job ${jobId}`);
-    
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/mint-progress?jobId=${jobId}`);
-        const data = await response.json();
-        
-        console.log('Progress poll result:', data);
-        
-        if (data.success) {
-          const minted = data.minted || 0;
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          const percent = Math.round((minted / totalNFTs) * 100);
-          
-          if (onProgress) {
-            onProgress({
-              stage: data.status === 'complete' ? 'complete' : 'minting',
-              message: data.status === 'complete' 
-                ? `Successfully minted ${minted} NFTs!`
-                : `Minting NFTs... ${minted}/${totalNFTs} complete`,
-              quantity: totalNFTs,
-              minted: minted,
-              elapsed: elapsed,
-              progress: data.status === 'complete' ? 100 : Math.min(percent, 99),
-            });
-          }
-          
-          // Stop polling if complete or failed
-          if (data.status === 'complete' || data.status === 'failed') {
-            console.log(`Job ${jobId} finished with status: ${data.status}`);
-            this.stopMintProgress();
-            return data;
-          }
-        }
-      } catch (err) {
-        console.error('Progress poll error:', err);
-      }
-      return null;
-    };
-    
-    // Poll immediately, then every 3 seconds
-    poll();
-    this.mintProgressInterval = setInterval(poll, 3000);
-  },
-  
-  /**
-   * Stop the progress polling
+   * Stop any active polling
    */
   stopMintProgress() {
     if (this.mintProgressInterval) {
@@ -367,62 +345,12 @@ const XamanWallet = {
   },
   
   /**
-   * Wait for mint job to complete
-   */
-  waitForMintComplete(jobId, totalNFTs, onProgress) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      
-      const poll = async () => {
-        try {
-          const response = await fetch(`/api/mint-progress?jobId=${jobId}`);
-          const data = await response.json();
-          
-          console.log('Progress poll:', data);
-          
-          if (data.success) {
-            const minted = data.minted || 0;
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            const percent = Math.round((minted / totalNFTs) * 100);
-            
-            if (onProgress) {
-              onProgress({
-                stage: data.status === 'complete' ? 'complete' : 'minting',
-                message: data.status === 'complete' 
-                  ? `Successfully minted ${minted} NFTs!`
-                  : `Minting NFTs... ${minted}/${totalNFTs} complete`,
-                quantity: totalNFTs,
-                minted: minted,
-                elapsed: elapsed,
-                progress: data.status === 'complete' ? 100 : Math.min(percent, 99),
-              });
-            }
-            
-            if (data.status === 'complete') {
-              this.stopMintProgress();
-              resolve({ success: true, minted: minted, status: 'complete' });
-              return;
-            }
-            
-            if (data.status === 'failed') {
-              this.stopMintProgress();
-              resolve({ success: false, error: data.error || 'Minting failed', status: 'failed' });
-              return;
-            }
-          }
-        } catch (err) {
-          console.error('Progress poll error:', err);
-        }
-      };
-      
-      // Poll immediately, then every 3 seconds
-      poll();
-      this.mintProgressInterval = setInterval(poll, 3000);
-    });
-  },
-  
-  /**
-   * Mint NFT - NEW VERSION using queue system
+   * Mint NFT - Fire and Forget!
+   * 
+   * After user signs the 2 transactions (pay + authorize), the job is queued
+   * and the user can close the page. The Railway worker handles the rest.
+   * 
+   * Max 10,000 NFTs per batch - no timeout limits!
    */
   async mintNFT(metadataUri, options = {}) {
     if (!this.sdk) {
@@ -444,8 +372,18 @@ const XamanWallet = {
       releaseId = null
     } = options;
     
+    // Validate quantity - max 10,000 NFTs
+    if (quantity > 10000) {
+      throw new Error('Maximum 10,000 NFTs per batch');
+    }
+    
     const trackCount = tracks ? tracks.length : 1;
     const totalNFTs = trackCount * quantity;
+    
+    if (totalNFTs > 10000) {
+      throw new Error('Maximum 10,000 NFTs per batch (tracks × editions)');
+    }
+    
     const mintFee = (totalNFTs * 0.000012) + 0.001;
     const mintFeeDrops = Math.ceil(mintFee * 1000000).toString();
     
@@ -469,7 +407,7 @@ const XamanWallet = {
       if (onProgress) {
         onProgress({
           stage: 'paying',
-          message: `Step 1/3: Pay mint fee (${mintFee.toFixed(6)} XRP)`,
+          message: `Step 1/2: Pay mint fee (${mintFee.toFixed(6)} XRP)`,
           quantity: quantity,
           progress: 0,
         });
@@ -530,9 +468,9 @@ const XamanWallet = {
       if (onProgress) {
         onProgress({
           stage: 'authorizing',
-          message: 'Step 2/3: Authorize minting in Xaman',
+          message: 'Step 2/2: Authorize minting in Xaman',
           quantity: quantity,
-          progress: 10,
+          progress: 25,
         });
       }
       
@@ -578,15 +516,13 @@ const XamanWallet = {
       
       console.log('Authorization successful:', authResult.txHash);
       
-      // STEP 3: Queue the mint job (returns immediately!)
+      // STEP 3: Queue the mint job - FIRE AND FORGET!
       if (onProgress) {
         onProgress({
-          stage: 'minting',
-          message: `Step 3/3: Queuing mint job for ${totalNFTs} NFTs...`,
+          stage: 'queuing',
+          message: `Queuing ${totalNFTs} NFTs for minting...`,
           quantity: totalNFTs,
-          minted: 0,
-          elapsed: 0,
-          progress: 15,
+          progress: 50,
         });
       }
       
@@ -609,46 +545,36 @@ const XamanWallet = {
         throw new Error(queueData.error || 'Failed to queue mint job');
       }
       
-      console.log('Mint job queued:', queueData);
+      console.log('Mint job queued successfully:', queueData);
       
       const jobId = queueData.jobId;
       
-      // Now poll for progress until complete
+      // Notify the bell service about the new job
+      if (typeof MintNotifications !== 'undefined') {
+        MintNotifications.addJob(jobId, releaseId, totalNFTs);
+      }
+      
+      // DONE! User can close the page now
       if (onProgress) {
         onProgress({
-          stage: 'minting',
-          message: `Minting ${totalNFTs} NFTs... This may take a few minutes.`,
+          stage: 'queued',
+          message: `✓ Minting queued! You can close this page.`,
+          subMessage: `Check the 🔔 notification bell for progress.`,
           quantity: totalNFTs,
-          minted: 0,
-          elapsed: 0,
-          progress: 20,
-        });
-      }
-      
-      // Wait for the job to complete
-      const mintResult = await this.waitForMintComplete(jobId, totalNFTs, onProgress);
-      
-      if (!mintResult.success) {
-        throw new Error(mintResult.error || 'Minting failed');
-      }
-      
-      // Final progress update
-      if (onProgress) {
-        onProgress({
-          stage: 'complete',
-          message: `Successfully minted ${mintResult.minted} NFTs!`,
-          quantity: mintResult.minted,
-          minted: mintResult.minted,
+          jobId: jobId,
+          canClose: true,
           progress: 100,
         });
       }
       
       return {
         success: true,
+        queued: true,
         jobId: jobId,
         txHash: authResult.txHash,
         paymentTxHash: paymentResult.txHash,
-        totalMinted: mintResult.minted,
+        totalNFTs: totalNFTs,
+        message: 'Mint job queued. Check notifications for progress.',
       };
       
     } catch (error) {
@@ -884,7 +810,6 @@ const XamanWallet = {
     
     console.log('Accept offer payload:', payload);
     
-    // FIX: Open Xaman for the user to sign (this was missing!)
     if (payload.next?.always) {
       console.log('Opening Xaman for accept offer:', payload.next.always);
       this.openXamanPopup(payload.next.always);
