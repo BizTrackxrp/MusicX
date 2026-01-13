@@ -12,6 +12,7 @@
  * 3. Artist set as Issuer - gets royalties on resale
  * 4. NFTs go to platform wallet - ready to sell
  * 5. NFT token IDs stored in database for tracking
+ * 6. Progress tracked in mint_jobs table for real-time updates
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -109,6 +110,9 @@ function extractNFTokenID(meta, txHash = null) {
 async function handleMint(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
+  // Generate job ID early so we can track from the start
+  const jobId = `mint_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
     const {
       artistAddress,
@@ -145,6 +149,13 @@ async function handleMint(req, res) {
       return res.status(500).json({ error: 'Platform wallet not configured' });
     }
     
+    // Create mint job for progress tracking
+    await sql`
+      INSERT INTO mint_jobs (id, release_id, status, total_nfts, minted_count, started_at, updated_at)
+      VALUES (${jobId}, ${releaseId}, 'minting', ${totalNFTs}, 0, NOW(), NOW())
+    `;
+    console.log(`Created mint job: ${jobId}`);
+    
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
@@ -162,6 +173,12 @@ async function handleMint(req, res) {
       
       const authorizedMinter = accountInfo.result.account_data.NFTokenMinter;
       if (authorizedMinter !== platformAddress) {
+        // Update job status to failed
+        await sql`
+          UPDATE mint_jobs 
+          SET status = 'failed', error = 'Platform not authorized as minter', updated_at = NOW()
+          WHERE id = ${jobId}
+        `;
         throw new Error('Platform not authorized as minter. Artist must sign authorization first.');
       }
       
@@ -261,6 +278,14 @@ async function handleMint(req, res) {
                 });
                 totalMinted++; // Still count it as minted
               }
+              
+              // UPDATE PROGRESS IN DATABASE after each successful mint
+              await sql`
+                UPDATE mint_jobs 
+                SET minted_count = ${totalMinted}, updated_at = NOW()
+                WHERE id = ${jobId}
+              `;
+              
             } else {
               console.error(`    ✗ Edition ${editionNumber} failed: ${result.result.meta.TransactionResult}`);
               trackNFTs.push({
@@ -317,9 +342,17 @@ async function handleMint(req, res) {
         }
       }
       
+      // Mark job as complete
+      await sql`
+        UPDATE mint_jobs 
+        SET status = 'complete', minted_count = ${totalMinted}, updated_at = NOW()
+        WHERE id = ${jobId}
+      `;
+      
       // Return response with clear indication of any issues
       const response = {
         success: true,
+        jobId: jobId,  // Include jobId in response
         totalRequested: totalNFTs,
         totalMinted: totalMinted,
         totalStoredInDb: totalStoredInDb,
@@ -343,8 +376,21 @@ async function handleMint(req, res) {
     
   } catch (error) {
     console.error('Batch mint error:', error);
+    
+    // Update job status to failed
+    try {
+      await sql`
+        UPDATE mint_jobs 
+        SET status = 'failed', error = ${error.message || 'Unknown error'}, updated_at = NOW()
+        WHERE id = ${jobId}
+      `;
+    } catch (updateError) {
+      console.error('Failed to update job status:', updateError);
+    }
+    
     return res.status(500).json({ 
       success: false,
+      jobId: jobId,
       error: error.message || 'Batch mint failed' 
     });
   }
