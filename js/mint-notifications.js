@@ -28,8 +28,8 @@ const MintNotifications = {
     this.dropdown.id = 'mint-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      top: 60px;
-      right: 20px;
+      top: 55px;
+      right: 80px;
       width: 320px;
       max-height: 400px;
       background: #1a1a2e;
@@ -68,8 +68,11 @@ const MintNotifications = {
     let address = window.AppState?.user?.address;
     if (!address) {
       try {
-        const stored = localStorage.getItem('xrpmusic_user');
-        if (stored) address = JSON.parse(stored).address;
+        const stored = localStorage.getItem('xrpmusic_wallet_session');
+        if (stored) {
+          const data = JSON.parse(stored);
+          address = data.address || data.account || data.wallet;
+        }
       } catch(e) {}
     }
     
@@ -205,8 +208,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let address = window.AppState?.user?.address;
     if (!address) {
       try {
-        const stored = localStorage.getItem('xrpmusic_user');
-        if (stored) address = JSON.parse(stored).address;
+        const stored = localStorage.getItem('xrpmusic_wallet_session');
+        if (stored) {
+          const data = JSON.parse(stored);
+          address = data.address || data.account || data.wallet;
+        }
       } catch(e) {}
     }
     
