@@ -7,6 +7,7 @@
  * - Auto-retry on transient errors
  * - Graceful error handling
  * - Auto-restart on crash
+ * - CANCEL CHECK inside mint loop <-- NEW!
  */
 
 const { neon } = require('@neondatabase/serverless');
@@ -99,6 +100,14 @@ async function withRetry(fn, description, maxRetries = MAX_RETRIES) {
 }
 
 /**
+ * Check if job was cancelled
+ */
+async function isJobCancelled(sql, jobId) {
+  const jobCheck = await sql`SELECT status FROM mint_jobs WHERE id = ${jobId}`;
+  return jobCheck[0]?.status === 'cancelled';
+}
+
+/**
  * Process a single mint job with RESUME CAPABILITY
  */
 async function processJob(job) {
@@ -115,6 +124,12 @@ async function processJob(job) {
   }
   
   try {
+    // CHECK IF CANCELLED BEFORE STARTING
+    if (await isJobCancelled(sql, job.id)) {
+      console.log('🛑 Job was cancelled before starting. Skipping.');
+      return;
+    }
+    
     // Update status to 'minting'
     await sql`
       UPDATE mint_jobs 
@@ -193,6 +208,41 @@ async function processJob(job) {
         if (globalEditionIndex <= alreadyMinted) {
           continue; // Skip this one, already done
         }
+        
+        // ====== CHECK IF JOB WAS CANCELLED ======
+        if (await isJobCancelled(sql, job.id)) {
+          console.log('🛑 Job cancelled! Stopping mint loop...');
+          
+          // Update job with final count
+          await sql`
+            UPDATE mint_jobs 
+            SET updated_at = NOW(), minted_count = ${totalMinted}
+            WHERE id = ${job.id}
+          `;
+          
+          // Update release with what we have so far
+          if (allNftTokenIds.length > 0) {
+            const existingRelease = await sql`SELECT nft_token_ids FROM releases WHERE id = ${job.release_id}`;
+            let existingIds = [];
+            try {
+              existingIds = JSON.parse(existingRelease[0]?.nft_token_ids || '[]');
+            } catch (e) {}
+            
+            const mergedIds = [...existingIds, ...allNftTokenIds];
+            
+            await sql`
+              UPDATE releases 
+              SET nft_token_ids = ${JSON.stringify(mergedIds)},
+                  is_minted = ${totalMinted > 0},
+                  total_editions = ${totalStoredInDb}
+              WHERE id = ${job.release_id}
+            `;
+          }
+          
+          console.log(`🛑 Cancelled after minting ${totalMinted} NFTs`);
+          return; // EXIT THE FUNCTION
+        }
+        // ====== END CANCEL CHECK ======
         
         // Mint with retry
         let mintSuccess = false;
@@ -351,6 +401,7 @@ async function runWorker() {
   while (true) {
     try {
       // Find jobs: PENDING first, then interrupted MINTING jobs
+      // EXCLUDE cancelled jobs!
       const jobs = await sql`
         SELECT * FROM mint_jobs 
         WHERE status IN ('pending', 'minting')
