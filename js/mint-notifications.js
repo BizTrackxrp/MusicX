@@ -64,8 +64,15 @@ const MintNotifications = {
     const content = document.getElementById('mint-dropdown-content');
     if (!content) return;
     
-    // Get address from AppState or localStorage
-    let address = window.AppState?.user?.address;
+    // Get address from multiple sources (mobile compatibility)
+    let address = null;
+    
+    // Try AppState first
+    if (window.AppState?.user?.address) {
+      address = window.AppState.user.address;
+    }
+    
+    // Try localStorage wallet session
     if (!address) {
       try {
         const stored = localStorage.getItem('xrpmusic_wallet_session');
@@ -74,6 +81,30 @@ const MintNotifications = {
           address = data.address || data.account || data.wallet;
         }
       } catch(e) {}
+    }
+    
+    // Try other common localStorage keys
+    if (!address) {
+      const keysToTry = ['xrpmusic_user', 'wallet_session', 'user_address', 'xaman_session'];
+      for (const key of keysToTry) {
+        try {
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const data = JSON.parse(stored);
+            address = data.address || data.account || data.wallet || data;
+            if (typeof address === 'string' && address.startsWith('r')) break;
+            address = null;
+          }
+        } catch(e) {}
+      }
+    }
+    
+    // Last resort - check if user card is showing an address
+    if (!address) {
+      const addrEl = document.getElementById('user-address');
+      if (addrEl?.textContent && addrEl.textContent.startsWith('r')) {
+        address = addrEl.textContent;
+      }
     }
     
     if (!address) {
@@ -204,8 +235,9 @@ const MintNotifications = {
 // Auto-check for active jobs on page load
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
-    // Get address
+    // Get address from multiple sources
     let address = window.AppState?.user?.address;
+    
     if (!address) {
       try {
         const stored = localStorage.getItem('xrpmusic_wallet_session');
@@ -216,8 +248,15 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch(e) {}
     }
     
+    // Fallback: check user-address element
+    if (!address) {
+      const addrEl = document.getElementById('user-address');
+      if (addrEl?.textContent && addrEl.textContent.startsWith('r')) {
+        address = addrEl.textContent;
+      }
+    }
+    
     if (address) {
-      // Check if there are active jobs to show badge
       fetch(`/api/my-mint-jobs?address=${address}`)
         .then(r => r.json())
         .then(data => {
