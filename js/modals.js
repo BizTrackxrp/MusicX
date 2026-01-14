@@ -104,7 +104,7 @@ const Modals = {
             <!-- Left: Cover Art -->
             <div class="np-cover-section">
               <div class="np-cover">
-                <img src="${track.cover || '/placeholder.png'}" alt="${track.title}">
+               <img src="${this.getImageUrl(track.cover)}" alt="${track.title}" onerror="this.src='/placeholder.png'">
               </div>
             </div>
             
@@ -671,7 +671,7 @@ const Modals = {
             <!-- Item Preview -->
             <div class="purchase-item">
               <div class="purchase-cover">
-                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
+                ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'">` : ''}
               </div>
               <div class="purchase-details">
                 <div class="purchase-title">${release.title}</div>
@@ -1063,7 +1063,7 @@ const Modals = {
               ${releases.map((release, i) => `
                 <div class="list-all-item" data-index="${i}" data-release-id="${release.id}">
                   <div class="list-all-item-cover">
-                    ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : ''}
+                    ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'">` : ''}
                   </div>
                   <div class="list-all-item-info">
                     <div class="list-all-item-title">${release.title}</div>
@@ -1571,7 +1571,7 @@ const Modals = {
             <div class="list-nft-preview">
               <div class="list-nft-cover">
                 ${nft.coverUrl 
-                  ? `<img src="${nft.coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}">`
+                  ? `<img src="${this.getImageUrl(nft.coverUrl)}" alt="${nft.trackTitle || nft.releaseTitle}" onerror="this.src='/placeholder.png'">`
                   : `<div class="cover-placeholder">🎵</div>`
                 }
               </div>
@@ -1878,7 +1878,7 @@ async processListNFT(nft, price) {
             <div class="purchase-item">
               <div class="purchase-cover">
                 ${listing.cover_url 
-                  ? `<img src="${listing.cover_url}" alt="${title}">`
+                  ? `<img src="${this.getImageUrl(listing.cover_url)}" alt="${title}" onerror="this.src='/placeholder.png'">`
                   : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;">🎵</div>`
                 }
               </div>
@@ -2118,7 +2118,7 @@ async processListNFT(nft, price) {
           <div class="release-header" style="background: linear-gradient(180deg, ${this.getColorFromImage(release.coverUrl)} 0%, var(--bg-primary) 100%);">
             <div class="release-header-content">
               <div class="release-cover-small">
-                ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${release.title}">` : '<div class="cover-placeholder">🎵</div>'}
+                ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'">` : '<div class="cover-placeholder">🎵</div>'}
               </div>
               <div class="release-header-info">
                 <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
