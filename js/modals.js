@@ -20,6 +20,14 @@ const Modals = {
     { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
+
+  getImageUrl(url) {
+  if (!url) return '/placeholder.png';
+  if (typeof IpfsHelper !== 'undefined' && IpfsHelper.toProxyUrl) {
+    return IpfsHelper.toProxyUrl(url);
+  }
+  return url;
+},
   
   show(html) {
     const container = document.getElementById('modals');
