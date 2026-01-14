@@ -8,7 +8,7 @@
  *   - burn: Actually burns the NFTs (requires secret)
  */
 
-import xrpl from 'xrpl';
+import * as xrpl from 'xrpl';
 
 const PLATFORM_WALLET_ADDRESS = process.env.PLATFORM_WALLET_ADDRESS;
 const PLATFORM_WALLET_SEED = process.env.PLATFORM_WALLET_SEED;
