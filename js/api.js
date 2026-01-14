@@ -584,7 +584,7 @@ document.addEventListener('error', function(e) {
   if (retryCount >= IPFS_GATEWAYS.length - 1) {
     console.warn('All IPFS gateways failed for image:', currentSrc);
     // Set to placeholder if all gateways fail
-    target.src = '/placeholder.png';
+    target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect fill="%23333" width="200" height="200"/><text x="50%" y="50%" fill="%23666" font-size="40" text-anchor="middle" dy=".3em">♪</text></svg>';
     return;
   }
   
