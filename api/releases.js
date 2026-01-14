@@ -2,17 +2,19 @@
  * XRP Music - Releases API
  * Vercel Serverless Function
  * 
- * NOTE: Public listings (Listen page) only show is_minted = true releases.
- * Artist's own page shows ALL their releases (including minting in progress).
+ * With lazy minting, releases are "live" when mint_fee_paid = true.
+ * NFTs mint on-demand at purchase time, not upfront.
+ * 
+ * Visibility rules:
+ * - Public pages: show is_minted = true OR mint_fee_paid = true OR status = 'live'
+ * - Artist's own page: show ALL their releases (including drafts)
  */
 
 import { neon } from '@neondatabase/serverless';
 
 export default async function handler(req, res) {
-  // Initialize SQL connection inside handler
   const sql = neon(process.env.DATABASE_URL);
   
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -45,8 +47,8 @@ async function getReleases(req, res, sql) {
   let releases;
   
   if (id) {
-    // Get single release with tracks and per-track sold counts
-    // Single release lookup doesn't filter by is_minted (need to see it for minting flow)
+    // Get single release with tracks
+    // No filter - need to see it for purchase flow regardless of status
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -59,9 +61,9 @@ async function getReleases(req, res, sql) {
               'duration', t.duration,
               'audioCid', t.audio_cid,
               'audioUrl', t.audio_url,
-              'soldCount', COALESCE((
-                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
-              ), 0)
+              'metadataCid', t.metadata_cid,
+              'soldCount', COALESCE(t.sold_count, 0),
+              'mintedEditions', COALESCE(t.minted_editions, 0)
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -81,11 +83,8 @@ async function getReleases(req, res, sql) {
   }
   
   if (artist) {
-    // Get releases by artist with per-track sold counts
-    // Artist's own page shows ALL their releases (including minting in progress)
-    // This lets them see the status of their pending mints
     if (includeUnminted === 'true') {
-      // Show all releases for the artist (their own profile page)
+      // Artist's own profile - show ALL their releases
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -98,9 +97,9 @@ async function getReleases(req, res, sql) {
                 'duration', t.duration,
                 'audioCid', t.audio_cid,
                 'audioUrl', t.audio_url,
-                'soldCount', COALESCE((
-                  SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
-                ), 0)
+                'metadataCid', t.metadata_cid,
+                'soldCount', COALESCE(t.sold_count, 0),
+                'mintedEditions', COALESCE(t.minted_editions, 0)
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -113,7 +112,7 @@ async function getReleases(req, res, sql) {
         ORDER BY r.created_at DESC
       `;
     } else {
-      // Public view - only show minted releases
+      // Public view of artist - show live releases only
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -126,9 +125,9 @@ async function getReleases(req, res, sql) {
                 'duration', t.duration,
                 'audioCid', t.audio_cid,
                 'audioUrl', t.audio_url,
-                'soldCount', COALESCE((
-                  SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
-                ), 0)
+                'metadataCid', t.metadata_cid,
+                'soldCount', COALESCE(t.sold_count, 0),
+                'mintedEditions', COALESCE(t.minted_editions, 0)
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -137,14 +136,14 @@ async function getReleases(req, res, sql) {
         LEFT JOIN tracks t ON t.release_id = r.id
         LEFT JOIN profiles p ON p.wallet_address = r.artist_address
         WHERE r.artist_address = ${artist}
-          AND r.is_minted = true
+          AND (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         GROUP BY r.id, p.avatar_url
         ORDER BY r.created_at DESC
       `;
     }
   } else {
-    // Get all releases (Listen page, Browse, etc.)
-    // ONLY show minted releases to the public
+    // Get all releases (Stream, Browse, Marketplace)
+    // Show minted OR live (mint fee paid) releases
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -157,9 +156,9 @@ async function getReleases(req, res, sql) {
               'duration', t.duration,
               'audioCid', t.audio_cid,
               'audioUrl', t.audio_url,
-              'soldCount', COALESCE((
-                SELECT COUNT(*) FROM sales s WHERE s.track_id = t.id
-              ), 0)
+              'metadataCid', t.metadata_cid,
+              'soldCount', COALESCE(t.sold_count, 0),
+              'mintedEditions', COALESCE(t.minted_editions, 0)
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -167,7 +166,7 @@ async function getReleases(req, res, sql) {
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
-      WHERE r.is_minted = true
+      WHERE r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live'
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
@@ -189,6 +188,7 @@ async function createRelease(req, res, sql) {
     songPrice,
     albumPrice,
     totalEditions,
+    royaltyPercent,
     tracks,
     nftTokenIds,
     txHash,
@@ -199,11 +199,9 @@ async function createRelease(req, res, sql) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   
-  // Generate unique ID (since id column is varchar, not serial)
   const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  // Insert release - is_minted defaults to false
-  // Worker will set is_minted = true when minting completes
+  // Insert release - starts as draft, becomes live when mint fee paid
   const [release] = await sql`
     INSERT INTO releases (
       id,
@@ -219,10 +217,13 @@ async function createRelease(req, res, sql) {
       album_price,
       total_editions,
       sold_editions,
+      minted_editions,
+      royalty_percent,
       tx_hash,
       sell_offer_index,
       is_minted,
-      listed_at,
+      mint_fee_paid,
+      status,
       created_at
     ) VALUES (
       ${releaseId},
@@ -238,16 +239,19 @@ async function createRelease(req, res, sql) {
       ${albumPrice || null},
       ${totalEditions || 100},
       0,
+      0,
+      ${royaltyPercent || 5},
       ${txHash || null},
       ${sellOfferIndex || null},
       false,
-      ${sellOfferIndex ? new Date() : null},
+      false,
+      'draft',
       NOW()
     )
     RETURNING *
   `;
   
-  // Insert tracks and collect their IDs
+  // Insert tracks
   const trackIds = [];
   if (tracks && tracks.length > 0) {
     for (let i = 0; i < tracks.length; i++) {
@@ -263,7 +267,8 @@ async function createRelease(req, res, sql) {
           audio_cid,
           audio_url,
           metadata_cid,
-          sold_editions,
+          sold_count,
+          minted_editions,
           track_number
         ) VALUES (
           ${trackId},
@@ -275,6 +280,7 @@ async function createRelease(req, res, sql) {
           ${track.audioUrl || null},
           ${track.metadataCid || null},
           0,
+          0,
           ${i + 1}
         )
       `;
@@ -282,7 +288,6 @@ async function createRelease(req, res, sql) {
     }
   }
   
-  // Return both releaseId and trackIds for NFT minting
   return res.json({ 
     success: true, 
     releaseId: release.id,
@@ -292,7 +297,7 @@ async function createRelease(req, res, sql) {
 
 /**
  * Update an existing release
- * Used after NFT minting to add nftTokenIds, txHash, etc.
+ * Used after mint fee payment to mark as live
  */
 async function updateRelease(req, res, sql) {
   const { id } = req.query;
@@ -302,22 +307,16 @@ async function updateRelease(req, res, sql) {
     return res.status(400).json({ error: 'Missing release ID' });
   }
   
-  // Build dynamic update query based on provided fields
-  const allowedFields = {
-    nftTokenIds: 'nft_token_ids',
-    txHash: 'tx_hash',
-    sellOfferIndex: 'sell_offer_index',
-    listedAt: 'listed_at',
-    soldEditions: 'sold_editions',
-    isMinted: 'is_minted',
-  };
-  
   // Prepare update values
   const nftTokenIds = updates.nftTokenIds || null;
   const txHash = updates.txHash || null;
   const sellOfferIndex = updates.sellOfferIndex || null;
-  const listedAt = updates.sellOfferIndex ? new Date() : null;
+  const listedAt = (updates.sellOfferIndex || updates.mintFeePaid) ? new Date() : null;
   const isMinted = updates.isMinted !== undefined ? updates.isMinted : null;
+  const mintFeePaid = updates.mintFeePaid !== undefined ? updates.mintFeePaid : null;
+  const mintFeeTxHash = updates.mintFeeTxHash || null;
+  const mintFeeAmount = updates.mintFeeAmount || null;
+  const status = updates.status || null;
   
   // Update the release
   const [updated] = await sql`
@@ -327,7 +326,11 @@ async function updateRelease(req, res, sql) {
       tx_hash = COALESCE(${txHash}, tx_hash),
       sell_offer_index = COALESCE(${sellOfferIndex}, sell_offer_index),
       listed_at = COALESCE(${listedAt}, listed_at),
-      is_minted = COALESCE(${isMinted}, is_minted)
+      is_minted = COALESCE(${isMinted}, is_minted),
+      mint_fee_paid = COALESCE(${mintFeePaid}, mint_fee_paid),
+      mint_fee_tx_hash = COALESCE(${mintFeeTxHash}, mint_fee_tx_hash),
+      mint_fee_amount = COALESCE(${mintFeeAmount}, mint_fee_amount),
+      status = COALESCE(${status}, status)
     WHERE id = ${id}
     RETURNING *
   `;
@@ -344,7 +347,7 @@ async function updateRelease(req, res, sql) {
 
 /**
  * Delete a release and all associated data
- * Used for cleanup when minting fails (e.g., user rejects Xaman signature)
+ * Used for cleanup when mint fee payment fails
  */
 async function deleteRelease(req, res, sql) {
   const { id } = req.query;
@@ -353,30 +356,47 @@ async function deleteRelease(req, res, sql) {
     return res.status(400).json({ error: 'Missing release ID' });
   }
   
-  console.log('Deleting release:', id);
+  console.log('🗑️ Deleting release:', id);
   
   try {
+    // Check if release has any sales - don't delete if people bought NFTs!
+    const sales = await sql`
+      SELECT COUNT(*) as count FROM sales WHERE release_id = ${id}
+    `;
+    
+    if (parseInt(sales[0]?.count) > 0) {
+      console.log('❌ Cannot delete release with sales');
+      return res.status(400).json({ 
+        error: 'Cannot delete release that has sales. Contact support.' 
+      });
+    }
+    
     // Delete in order due to foreign key constraints:
-    // 1. Delete from nfts table (references tracks and releases)
+    
+    // 1. Delete NFTs (references tracks and releases)
     const deletedNfts = await sql`
       DELETE FROM nfts WHERE release_id = ${id}
       RETURNING id
     `;
-    console.log(`Deleted ${deletedNfts.length} NFT records`);
+    console.log(`  Deleted ${deletedNfts.length} NFT records`);
     
-    // 2. Delete from tracks table (references releases)
+    // 2. Delete tracks (references releases)
     const deletedTracks = await sql`
       DELETE FROM tracks WHERE release_id = ${id}
       RETURNING id
     `;
-    console.log(`Deleted ${deletedTracks.length} track records`);
+    console.log(`  Deleted ${deletedTracks.length} track records`);
     
-    // 3. Delete from mint_jobs table
-    const deletedJobs = await sql`
-      DELETE FROM mint_jobs WHERE release_id = ${id}
-      RETURNING id
-    `;
-    console.log(`Deleted ${deletedJobs.length} mint job records`);
+    // 3. Delete mint_jobs if table exists
+    try {
+      const deletedJobs = await sql`
+        DELETE FROM mint_jobs WHERE release_id = ${id}
+        RETURNING id
+      `;
+      console.log(`  Deleted ${deletedJobs.length} mint job records`);
+    } catch (e) {
+      // Table might not exist, that's fine
+    }
     
     // 4. Delete the release itself
     const deletedRelease = await sql`
@@ -388,21 +408,20 @@ async function deleteRelease(req, res, sql) {
       return res.status(404).json({ error: 'Release not found' });
     }
     
-    console.log('Successfully deleted release:', id);
+    console.log('✅ Successfully deleted release:', id);
     
     return res.json({ 
       success: true, 
       deleted: {
         releaseId: id,
         nfts: deletedNfts.length,
-        tracks: deletedTracks.length,
-        jobs: deletedJobs.length
+        tracks: deletedTracks.length
       }
     });
     
   } catch (error) {
-    console.error('Delete release error:', error);
-    return res.status(500).json({ error: 'Failed to delete release' });
+    console.error('❌ Delete release error:', error);
+    return res.status(500).json({ error: 'Failed to delete release: ' + error.message });
   }
 }
 
@@ -421,28 +440,34 @@ function formatRelease(row) {
     songPrice: parseFloat(row.song_price) || 0,
     albumPrice: row.album_price ? parseFloat(row.album_price) : null,
     totalEditions: row.total_editions || 100,
-    // Calculate sold editions as max of any track's sold count (for accurate album availability)
     soldEditions: calculateSoldEditions(row),
+    mintedEditions: row.minted_editions || 0,
+    royaltyPercent: row.royalty_percent || 5,
     nftTokenId: row.nft_token_id,
     nftTokenIds: row.nft_token_ids ? (typeof row.nft_token_ids === 'string' ? JSON.parse(row.nft_token_ids) : row.nft_token_ids) : [],
     sellOfferIndex: row.sell_offer_index,
     listedAt: row.listed_at,
     txHash: row.tx_hash,
     isMinted: row.is_minted || false,
+    mintFeePaid: row.mint_fee_paid || false,
+    mintFeeTxHash: row.mint_fee_tx_hash,
+    mintFeeAmount: row.mint_fee_amount ? parseFloat(row.mint_fee_amount) : null,
+    status: row.status || 'draft',
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
 }
 
-// Calculate sold editions based on track with most sales
-// Album availability = total - max(track sold counts)
+/**
+ * Calculate sold editions based on track sales
+ * For albums: use the track with most sales (determines album availability)
+ */
 function calculateSoldEditions(row) {
   const tracks = row.tracks || [];
   if (tracks.length === 0) {
     return row.sold_editions || 0;
   }
   
-  // Find the track with most sales (determines album availability)
   let maxSold = 0;
   for (const track of tracks) {
     const trackSold = parseInt(track.soldCount) || 0;
