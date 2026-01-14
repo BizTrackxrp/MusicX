@@ -13,50 +13,32 @@
  * - Skip/Next button plays a random song
  * - Repeat overrides shuffle (replays current track)
  * - Playlists will have their own queue logic (future feature)
+ * 
+ * IPFS PROXY:
+ * - All IPFS content (audio + images) routes through /api/ipfs/[cid]
+ * - This bypasses security software that blocks IPFS gateways directly
  */
 
 /**
- * IPFS Gateway fallback list
+ * Get proxied IPFS URL
+ * Routes through our API to bypass IPFS blocks (Whalebone, etc.)
  */
-const IPFS_GATEWAYS = [
-  'https://gateway.lighthouse.storage/ipfs/',
-  'https://ipfs.io/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
-  'https://dweb.link/ipfs/'
-];
-
-/**
- * Try to get a working IPFS URL with fallback gateways
- */
-async function getWorkingIpfsUrl(cidOrUrl) {
-  // Extract CID from full URL if needed
+function getProxiedIpfsUrl(cidOrUrl) {
+  if (!cidOrUrl) return null;
+  
   let cid = cidOrUrl;
-  if (cidOrUrl && cidOrUrl.includes('/ipfs/')) {
-    cid = cidOrUrl.split('/ipfs/')[1].split('?')[0]; // Remove query params too
-  }
-  if (!cid) return cidOrUrl;
   
-  // Try each gateway with a quick timeout
-  for (const gateway of IPFS_GATEWAYS) {
-    try {
-      const url = gateway + cid;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(url, { method: 'HEAD', signal: controller.signal });
-      clearTimeout(timeout);
-      if (res.ok) {
-        console.log('✅ Working gateway found:', gateway);
-        return url;
-      }
-    } catch (e) {
-      console.log('❌ Gateway failed:', gateway);
-      continue;
-    }
+  // Extract CID from full URL if needed
+  if (cidOrUrl.includes('/ipfs/')) {
+    cid = cidOrUrl.split('/ipfs/')[1].split('?')[0];
   }
   
-  // Fallback to first gateway if all fail
-  console.warn('⚠️ All gateways failed, using default');
-  return IPFS_GATEWAYS[0] + cid;
+  // Already a proxy URL
+  if (cidOrUrl.startsWith('/api/ipfs/')) {
+    return cidOrUrl;
+  }
+  
+  return '/api/ipfs/' + cid;
 }
 
 const Player = {
@@ -346,7 +328,7 @@ const Player = {
           trackId: track.id,
           title: release.type === 'single' ? release.title : track.title,
           artist: release.artistName || (typeof Helpers !== 'undefined' ? Helpers.truncateAddress(release.artistAddress) : release.artistAddress),
-          cover: release.coverUrl,
+          cover: getProxiedIpfsUrl(release.coverUrl),
           ipfsHash: track.audioCid,
           releaseId: release.id,
           duration: track.duration,
@@ -389,7 +371,7 @@ const Player = {
   },
   
   /**
-   * Play a track (NOW ASYNC with gateway fallback)
+   * Play a track
    * @param {Object} track - Track to play
    * @param {Array} queue - Optional queue (if null, uses global shuffle)
    * @param {Number} queueIndex - Index in queue
@@ -431,14 +413,10 @@ const Player = {
       setQueue([track, ...shuffledOthers], 0);
     }
     
-    // Get audio source - try Helpers.getIPFSUrl if it exists, otherwise build URL
+    // Get audio source - USE PROXY for all IPFS content
     let src = track.audioUrl;
     if (!src && track.ipfsHash) {
-      if (typeof Helpers !== 'undefined' && Helpers.getIPFSUrl) {
-        src = Helpers.getIPFSUrl(track.ipfsHash);
-      } else {
-        src = IPFS_GATEWAYS[0] + track.ipfsHash;
-      }
+      src = getProxiedIpfsUrl(track.ipfsHash);
     }
     
     if (!src) {
@@ -446,11 +424,7 @@ const Player = {
       return;
     }
     
-    // Try fallback gateways if it's an IPFS URL
-    if (src.includes('/ipfs/') || track.ipfsHash) {
-      console.log('🔄 Checking IPFS gateways for audio...');
-      src = await getWorkingIpfsUrl(src);
-    }
+    console.log('🔊 Audio source:', src);
     
     // Set source and play
     this.audio.src = src;
@@ -662,7 +636,7 @@ const Player = {
     this.audio.currentTime = percent * this.audio.duration;
   },
   
-/**
+  /**
    * Toggle like for current track
    * Uses the toggleTrackLike from state.js for optimistic updates
    */
@@ -836,13 +810,13 @@ const Player = {
     const title = document.getElementById('player-title');
     const artist = document.getElementById('player-artist');
     
-    // Defensive: handle missing/broken cover images
-    const coverUrl = track.cover || track.coverUrl || '/placeholder.png';
+    // Use proxy for cover images too
+    const coverUrl = getProxiedIpfsUrl(track.cover || track.coverUrl) || '/placeholder.png';
     
     if (cover) {
       cover.onerror = () => {
-        cover.src = '/placeholder.png';
-        console.warn('⚠️ Cover image failed to load:', coverUrl);
+        cover.onerror = null; // Prevent infinite loop
+        cover.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23222" width="200" height="200"/><text x="50%" y="50%" fill="%23444" font-size="48" text-anchor="middle" dy=".3em">♪</text></svg>';
       };
       cover.src = coverUrl;
     }
@@ -856,7 +830,8 @@ const Player = {
     
     if (expCover) {
       expCover.onerror = () => {
-        expCover.src = '/placeholder.png';
+        expCover.onerror = null; // Prevent infinite loop
+        expCover.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23222" width="200" height="200"/><text x="50%" y="50%" fill="%23444" font-size="48" text-anchor="middle" dy=".3em">♪</text></svg>';
       };
       expCover.src = coverUrl;
     }
