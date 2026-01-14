@@ -1,6 +1,8 @@
 /**
  * XRP Music - Marketplace Page
  * NFT marketplace with filtering and views
+ * 
+ * UPDATED: Uses IpfsHelper for proxied IPFS images
  */
 
 const MarketplacePage = {
@@ -9,6 +11,15 @@ const MarketplacePage = {
   viewMode: 'grid',
   activeTab: 'all',
   marketType: 'primary', // 'primary' or 'secondary'
+  
+  // Helper to get proxied image URL
+  getImageUrl(url) {
+    if (!url) return '/placeholder.png';
+    if (typeof IpfsHelper !== 'undefined') {
+      return IpfsHelper.toProxyUrl(url);
+    }
+    return url;
+  },
   
   /**
    * Render marketplace page
@@ -276,12 +287,13 @@ const MarketplacePage = {
     const title = listing.track_title || listing.release_title || 'NFT';
     const artist = listing.artist_name || 'Unknown Artist';
     const price = parseFloat(listing.price);
+    const coverUrl = this.getImageUrl(listing.cover_url);
     
     return `
       <div class="secondary-listing-card" data-listing-id="${listing.id}">
         <div class="secondary-cover">
           ${listing.cover_url 
-            ? `<img src="${listing.cover_url}" alt="${title}">`
+            ? `<img src="${coverUrl}" alt="${title}" onerror="this.src='/placeholder.png'">`
             : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;">🎵</div>`
           }
           <div class="secondary-price">${price} XRP</div>
@@ -325,12 +337,13 @@ const MarketplacePage = {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
     const price = release.albumPrice || release.songPrice;
+    const coverUrl = this.getImageUrl(release.coverUrl);
     
     return `
       <div class="release-card" data-release-id="${release.id}">
         <div class="release-card-cover" style="${isSoldOut ? 'opacity: 0.5;' : ''}">
           ${release.coverUrl 
-            ? `<img src="${release.coverUrl}" alt="${release.title}">`
+            ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 18V5l12-2v13"></path>
@@ -374,11 +387,12 @@ const MarketplacePage = {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
     const price = release.albumPrice || release.songPrice;
+    const coverUrl = this.getImageUrl(release.coverUrl);
     
     return `
       <div class="track-item" data-release-id="${release.id}" style="${isSoldOut ? 'opacity: 0.6;' : ''}">
         <div class="track-cover" style="position: relative;">
-          <img src="${release.coverUrl || '/placeholder.png'}" alt="${release.title}">
+          <img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">
           ${!isSoldOut ? `
             <div class="release-play-overlay" style="border-radius: var(--radius-md);">
               <button class="release-play-btn" data-release-id="${release.id}" style="width: 36px; height: 36px;">
@@ -413,7 +427,7 @@ const MarketplacePage = {
   /**
    * Render empty state
    */
-  renderEmptyState() {
+  renderEmptyState(message) {
     return `
       <div class="empty-state">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -422,9 +436,9 @@ const MarketplacePage = {
           <path d="M16 10a4 4 0 0 1-8 0"></path>
         </svg>
         <h3>No Releases For Sale</h3>
-        <p>${this.activeTab === 'all' 
+        <p>${message || (this.activeTab === 'all' 
           ? 'No music is currently listed for sale. Check back soon!' 
-          : `No ${this.activeTab} listed for sale yet.`}</p>
+          : `No ${this.activeTab} listed for sale yet.`)}</p>
       </div>
     `;
   },
