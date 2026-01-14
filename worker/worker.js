@@ -19,8 +19,10 @@ const PLATFORM_WALLET_SEED = process.env.PLATFORM_WALLET_SEED;
 
 // Config
 const POLL_INTERVAL = 5000;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000;
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 10000;
+const MINT_DELAY = 500; // Delay between mints (ms)
+const RATE_LIMIT_DELAY = 30000; // Wait 30s when rate limited
 
 /**
  * Extract NFT Token ID from mint transaction result
@@ -259,9 +261,14 @@ async function processJob(job) {
             }
             
           } catch (mintError) {
-            console.error(`  ✗ Mint error (attempt ${attempt}/${MAX_RETRIES}): ${mintError.message}`);
+            const errorMsg = mintError.message || String(mintError);
+            console.error(`  ✗ Mint error (attempt ${attempt}/${MAX_RETRIES}): ${errorMsg}`);
             
-            if (attempt < MAX_RETRIES) {
+            // Check if rate limited (429)
+            if (errorMsg.includes('429') || errorMsg.includes('rate') || errorMsg.includes('Too Many')) {
+              console.log(`  ⏳ Rate limited! Waiting ${RATE_LIMIT_DELAY/1000}s...`);
+              await sleep(RATE_LIMIT_DELAY);
+            } else if (attempt < MAX_RETRIES) {
               await sleep(RETRY_DELAY);
             }
           }
@@ -271,8 +278,8 @@ async function processJob(job) {
           console.error(`  ⚠ Skipping edition ${editionNumber} after ${MAX_RETRIES} failures`);
         }
         
-        // Small delay between mints
-        await sleep(100);
+        // Delay between mints to avoid rate limits
+        await sleep(MINT_DELAY);
       }
     }
     
