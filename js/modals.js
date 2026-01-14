@@ -3602,13 +3602,14 @@ showTrackPurchase(release, track, trackIdx) {
     const tracks = [];
     let coverFile = null;
     
-    // Calculate mint fee: tracks × editions × network fee + buffer
-    function calculateMintFee(editions, trackCount = 1) {
-      const totalNFTs = trackCount * editions;
-      const networkFee = totalNFTs * 0.000012;
-      const buffer = 0.001;
-      return (networkFee + buffer).toFixed(6);
-    }
+   // Calculate listing fee: pre-funds future on-demand mints
+// tracks × editions × network fee + buffer for reserves
+function calculateMintFee(editions, trackCount = 1) {
+  const totalNFTs = trackCount * editions;
+  const networkFee = totalNFTs * 0.000012;
+  const buffer = 0.01; // Slightly higher buffer for reserve account costs
+  return (networkFee + buffer).toFixed(6);
+}
     
     // Update mint fee display
     function updateMintFee() {
@@ -3973,143 +3974,83 @@ const trackIds = preCreateResult.trackIds;
 
 console.log('Pre-created release:', { releaseId, trackIds });
 
-// Step 5: Mint NFTs
+// Step 5: Pay mint fee (pre-funds on-demand minting)
+const mintFee = calculateMintFee(editions, uploadedTracks.length);
+
 statusEl.innerHTML = `
   <div class="mint-status-icon">
     <div class="spinner"></div>
   </div>
-  <div class="mint-status-text" style="font-size: 15px; font-weight: 600;">Get ready to sign in Xaman!</div>
-  <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 You'll sign 2 transactions:</p>
-  <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">1. Pay mint fee to platform</p>
-  <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">2. Authorize NFT creation</p>
-  <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px; opacity: 0.7;">Minting ${totalNFTs} NFTs (${uploadedTracks.length} tracks × ${editions} editions)</p>
+  <div class="mint-status-text" style="font-size: 15px; font-weight: 600;">Pay Mint Fee</div>
+  <p style="font-size: 13px; color: var(--accent); margin-top: 12px;">📱 Sign in Xaman</p>
+  <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">One quick signature and you're live!</p>
 `;
 
-const mintResult = await XamanWallet.mintNFT(trackMetadataUris[0], {
-  quantity: editions,
-  transferFee: transferFee,
-  tracks: uploadedTracks.length > 1 ? trackMetadataUris : null,
-  trackIds: trackIds,
-  releaseId: releaseId,
-onProgress: (progress) => {
-    if (progress.stage === 'paying') {
-      Modals.mintingInProgress = true;
-      statusEl.innerHTML = `
-        <div class="mint-status-icon">
-          <div class="spinner"></div>
-        </div>
-        <div class="mint-status-text">Step 5/6: Sign payment in Xaman</div>
-        <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 1 of 2</p>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Pay mint fee to platform</p>
-        <div class="mint-warning">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          Don't close this page
-        </div>
-      `;
-    } else if (progress.stage === 'authorizing') {
-      statusEl.innerHTML = `
-        <div class="mint-status-icon">
-          <div class="spinner"></div>
-        </div>
-        <div class="mint-status-text">Step 5/6: Sign authorization in Xaman</div>
-        <p style="font-size: 13px; color: var(--accent); margin-top: 8px;">📱 Transaction 2 of 2</p>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Authorize XRP Music to mint your NFTs</p>
-        <div class="mint-warning">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          Don't close this page
-        </div>
-      `;
-    } else if (progress.stage === 'minting') {
-      const minted = progress.minted || 0;
-      const total = progress.quantity || totalNFTs;
-      const percent = total > 0 ? Math.round((minted / total) * 100) : 0;
-      const elapsed = progress.elapsed || 0;
-      const perNft = minted > 0 ? elapsed / minted : 10;
-      const remaining = Math.max(0, (total - minted) * perNft);
-      const remainingText = remaining > 60 
-        ? `~${Math.ceil(remaining / 60)} min remaining`
-        : `~${Math.ceil(remaining)} sec remaining`;
-      
-      statusEl.innerHTML = `
-        <div class="mint-status-text" style="font-size: 18px; font-weight: 700; margin-bottom: 20px;">
-          Minting Your NFTs ⛓️
-        </div>
-        <div class="mint-progress-container">
-          <div class="mint-progress-bar">
-            <div class="mint-progress-fill" style="width: ${percent}%"></div>
-          </div>
-          <div class="mint-progress-stats">
-            <span class="mint-progress-percent">${percent}% (${minted}/${total})</span>
-            <span class="mint-progress-time">${remainingText}</span>
-          </div>
-        </div>
-        <p style="font-size: 13px; color: var(--text-secondary);">
-          Saving your music forever to the XRP Ledger
-        </p>
-        <div class="mint-warning">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          Please don't close or refresh this page
-        </div>
-      `;
-    }
-  },
-});
+Modals.mintingInProgress = true;
 
-if (!mintResult.success) {
-  throw new Error(mintResult.error || 'Minting failed');
+// Get platform address
+const configResponse = await fetch('/api/batch-mint', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ action: 'getConfig' }),
+});
+const configData = await configResponse.json();
+const platformAddress = configData.platformAddress;
+
+if (!platformAddress) {
+  throw new Error('Platform not configured');
 }
 
-// Step 6: Update release with NFT token IDs (CRITICAL - must succeed for listing)
-showStatus(6, 6, 'Finalizing...', 'Updating release with NFT data');
+// Pay mint fee
+const paymentResult = await XamanWallet.sendPayment(
+  platformAddress,
+  parseFloat(mintFee),
+  `XRP Music: ${releaseTitle}`
+);
+
+if (!paymentResult.success) {
+  throw new Error(paymentResult.error || 'Payment cancelled');
+}
+
+Modals.mintingInProgress = false;
+
+// Step 6: Finalize release (now live, NFTs mint on purchase)
+showStatus(6, 6, 'Going live...', 'Your release is being published!');
 
 try {
   await API.updateRelease(releaseId, {
-    nftTokenIds: mintResult.nftTokenIds,
-    txHash: mintResult.txHash,
-    sellOfferIndex: 'platform-owned',
+    mintFeePaid: true,
+    mintFeeTxHash: paymentResult.txHash,
+    mintFeeAmount: parseFloat(mintFee),
+    status: 'live',
   });
-  console.log('✓ Release updated with platform-owned status');
+  console.log('✓ Release is live - lazy minting enabled');
 } catch (updateError) {
-  console.error('⚠ CRITICAL: Failed to update release after minting:', updateError);
-  // NFTs are minted but not marked for sale - show warning but don't fail
+  console.error('⚠ Failed to finalize release:', updateError);
   Modals.mintingInProgress = false;
   statusEl.innerHTML = `
-    <div class="mint-status-icon" style="color: var(--warning);">
+    <div class="mint-status-icon" style="color: var(--error);">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-        <line x1="12" y1="9" x2="12" y2="13"></line>
-        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
       </svg>
     </div>
-    <div class="mint-status-text" style="color: var(--warning);">NFTs Minted - Action Required</div>
+    <div class="mint-status-text" style="color: var(--error);">Failed to publish</div>
     <p style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;">
-      Your ${mintResult.totalMinted} NFTs were minted successfully, but there was an issue marking them for sale.
-    </p>
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
-      Please contact support with Release ID: <code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${releaseId}</code>
+      Payment received but publishing failed. Contact support with Release ID: <code style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;">${releaseId}</code>
     </p>
     <div class="mint-success-actions" style="margin-top: 20px;">
       <button type="button" class="btn btn-primary" onclick="Modals.close(); Router.navigate('profile');">Go to Profile</button>
     </div>
   `;
-  return; // Exit early - don't show success screen
+  return;
 }
 
-// Success - NFTs minted and ready to sell!
+Modals.pendingReleaseId = null;
+        
+// Success - Release is live!
 Modals.mintingInProgress = false;
-Modals.pendingReleaseId = null;  // Clear - minting succeeded, don't cleanup
 statusEl.innerHTML = `
   <div class="mint-success">
     <div class="mint-success-cover">
@@ -4122,8 +4063,8 @@ statusEl.innerHTML = `
       </div>
     </div>
     <div class="mint-success-title">🎉 ${releaseTitle}</div>
-    <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${mintResult.totalMinted} NFTs minted</div>
-    <p class="mint-success-msg">Your music is now live on the XRP Ledger and ready for fans to collect!</p>
+    <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${editions} editions available</div>
+    <p class="mint-success-msg">Your music is live! NFTs mint automatically when fans purchase.</p>
     <div class="mint-success-actions">
       <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
