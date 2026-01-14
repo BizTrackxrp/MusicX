@@ -3,6 +3,7 @@
  * Main discovery page with top played tracks, all tracks, sorting, and artists
  * 
  * UPDATED: Now fetches real play data from /api/plays endpoint
+ * UPDATED: Uses IpfsHelper for proxied IPFS images
  */
 
 const StreamPage = {
@@ -26,6 +27,15 @@ const StreamPage = {
     { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
+  
+  // Helper to get proxied image URL
+  getImageUrl(url) {
+    if (!url) return '/placeholder.png';
+    if (typeof IpfsHelper !== 'undefined') {
+      return IpfsHelper.toProxyUrl(url);
+    }
+    return url;
+  },
   
   async render() {
     UI.showLoading();
@@ -676,11 +686,12 @@ const StreamPage = {
   },
   
   renderArtistCard(artist) {
+    const avatarUrl = this.getImageUrl(artist.avatar);
     return `
       <div class="artist-card" data-artist-address="${artist.address}">
         <div class="artist-avatar">
           ${artist.avatar 
-            ? `<img src="${artist.avatar}" alt="${artist.name}">`
+            ? `<img src="${avatarUrl}" alt="${artist.name}">`
             : artist.name[0].toUpperCase()
           }
         </div>
@@ -730,14 +741,14 @@ const StreamPage = {
     const available = (release.totalEditions || 0) - (release.soldEditions || 0);
     const isSoldOut = available <= 0;
     const price = release.songPrice || release.albumPrice || 0;
-    // Defensive: check for actual valid URL
     const hasCover = release.coverUrl && release.coverUrl.length > 0 && release.coverUrl !== 'null';
+    const coverUrl = this.getImageUrl(release.coverUrl);
     
     return `
       <div class="release-card top-track-card" data-top-track-index="${index}">
         <div class="release-card-cover">
           ${hasCover 
-            ? `<img src="${release.coverUrl}" alt="${track.displayTitle || 'Track'}" onerror="this.src='/placeholder.png'">`
+            ? `<img src="${coverUrl}" alt="${track.displayTitle || 'Track'}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="rank-badge rank-${rank}">#${rank}</span>
@@ -770,12 +781,13 @@ const StreamPage = {
     const rank = index + 1;
     const isPlaying = AppState.player.currentTrack?.trackId === track.id || 
                       AppState.player.currentTrack?.id === parseInt(track.id);
+    const coverUrl = this.getImageUrl(track.release.coverUrl);
     
     return `
       <div class="top-track-item ${isPlaying ? 'playing' : ''}" data-top-track-index="${index}">
         <div class="top-track-rank ${rank <= 3 ? 'top-3' : ''}">${rank}</div>
         <div class="top-track-cover">
-          <img src="${track.release.coverUrl || '/placeholder.png'}" alt="${track.displayTitle}">
+          <img src="${coverUrl}" alt="${track.displayTitle}" onerror="this.src='/placeholder.png'">
           ${isPlaying && AppState.player.isPlaying ? `
             <div class="track-playing-indicator">
               <div class="track-playing-bars"><span></span><span></span><span></span></div>
@@ -803,14 +815,14 @@ const StreamPage = {
     const available = release.totalEditions - release.soldEditions;
     const isSoldOut = available <= 0;
     const price = release.albumPrice || release.songPrice;
-    // Defensive: check for actual valid URL, not just truthy
     const hasCover = release.coverUrl && release.coverUrl.length > 0 && release.coverUrl !== 'null';
+    const coverUrl = this.getImageUrl(release.coverUrl);
     
     return `
       <div class="release-card" data-release-id="${release.id}">
         <div class="release-card-cover">
           ${hasCover 
-            ? `<img src="${release.coverUrl}" alt="${release.title || 'Release'}" onerror="this.src='/placeholder.png'">`
+            ? `<img src="${coverUrl}" alt="${release.title || 'Release'}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type || 'single'}">${release.type || 'single'}</span>
@@ -834,7 +846,6 @@ const StreamPage = {
   },
   
   renderTrackItem(track, index) {
-    // More robust playing check - compare multiple possible ID fields
     const currentTrack = AppState.player.currentTrack;
     const trackId = track.trackId || track.id;
     const isPlaying = currentTrack && (
@@ -842,16 +853,16 @@ const StreamPage = {
       currentTrack.trackId === track.id ||
       String(currentTrack.trackId) === String(trackId) ||
       String(currentTrack.id) === String(track.id) ||
-      // Also check by title + releaseId as fallback
       (currentTrack.title === track.displayTitle && currentTrack.releaseId === track.release?.id)
     );
     const available = track.release.totalEditions - track.release.soldEditions;
     const isSoldOut = available <= 0;
+    const coverUrl = this.getImageUrl(track.release.coverUrl);
     
     return `
       <div class="track-item ${isPlaying ? 'playing' : ''}" data-track-index="${index}">
         <div class="track-cover">
-          <img src="${track.release.coverUrl || '/placeholder.png'}" alt="${track.displayTitle}">
+          <img src="${coverUrl}" alt="${track.displayTitle}" onerror="this.src='/placeholder.png'">
           ${isPlaying && AppState.player.isPlaying ? `
             <div class="track-playing-indicator">
               <div class="track-playing-bars"><span></span><span></span><span></span></div>
@@ -969,7 +980,6 @@ const StreamPage = {
         const index = parseInt(card.dataset.topTrackIndex, 10);
         const track = this.topTracks[index];
         if (track?.release) {
-          // Try to find full release data from our releases array
           const fullRelease = this.releases.find(r => r.id === track.release.id);
           Modals.showRelease(fullRelease || track.release);
         }
@@ -1007,12 +1017,13 @@ const StreamPage = {
   
   playRelease(release) {
     if (!release.tracks?.length) return;
+    const coverUrl = this.getImageUrl(release.coverUrl);
     const queue = release.tracks.map((t, idx) => ({
       id: parseInt(t.id) || idx,
       trackId: t.id,
       title: release.type === 'single' ? release.title : t.title,
       artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-      cover: release.coverUrl,
+      cover: coverUrl,
       ipfsHash: t.audioCid,
       releaseId: release.id,
       duration: t.duration,
@@ -1026,7 +1037,7 @@ const StreamPage = {
       trackId: t.trackId || t.id,
       title: t.displayTitle || t.title,
       artist: t.release?.artistName || Helpers.truncateAddress(t.release?.artistAddress),
-      cover: t.release?.coverUrl,
+      cover: this.getImageUrl(t.release?.coverUrl),
       ipfsHash: t.audioCid,
       releaseId: t.release?.id || t.releaseId,
       duration: t.duration,
