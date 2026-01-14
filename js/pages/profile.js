@@ -1,6 +1,8 @@
 /**
  * XRP Music - Profile Page
  * User profile with releases, collection, genres, and settings
+ * 
+ * UPDATED: Uses IpfsHelper for proxied IPFS images
  */
 
 const ProfilePage = {
@@ -20,6 +22,15 @@ const ProfilePage = {
     { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
+  
+  // Helper to get proxied image URL
+  getImageUrl(url) {
+    if (!url) return '/placeholder.png';
+    if (typeof IpfsHelper !== 'undefined') {
+      return IpfsHelper.toProxyUrl(url);
+    }
+    return url;
+  },
   
   async render() {
     if (!AppState.user?.address) {
@@ -110,18 +121,21 @@ const ProfilePage = {
       this.activeTab = 'collected';
     }
     
+    const bannerUrl = this.getImageUrl(profile.bannerUrl);
+    const avatarUrl = this.getImageUrl(profile.avatarUrl);
+    
     const html = `
       <div class="profile-page animate-fade-in">
         <!-- Banner -->
         <div class="profile-banner">
-          ${profile.bannerUrl ? `<img src="${profile.bannerUrl}" alt="Banner">` : ''}
+          ${profile.bannerUrl ? `<img src="${bannerUrl}" alt="Banner" onerror="this.style.display='none'">` : ''}
         </div>
         
         <!-- Profile Card -->
         <div class="profile-card">
           <div class="profile-avatar">
             ${profile.avatarUrl 
-              ? `<img src="${profile.avatarUrl}" alt="Avatar">`
+              ? `<img src="${avatarUrl}" alt="Avatar" onerror="this.style.display='none'">`
               : `<span>${getUserInitial()}</span>`
             }
           </div>
@@ -622,7 +636,7 @@ const ProfilePage = {
               id: nftData.trackId || nftData.releaseId,
               title: nftData.trackTitle || nftData.releaseTitle,
               artist: nftData.artistName,
-              coverUrl: nftData.coverUrl,
+              coverUrl: this.getImageUrl(nftData.coverUrl),
               audioUrl: nftData.audioUrl,
             });
           }
@@ -736,6 +750,8 @@ const ProfilePage = {
   },
   
   renderListingCard(listing) {
+    const coverUrl = this.getImageUrl(listing.cover_url);
+    
     // Store listing data for buttons
     const listingData = JSON.stringify({
       id: listing.id,
@@ -752,7 +768,7 @@ const ProfilePage = {
       <div class="collected-nft-card listing-card">
         <div class="collected-nft-cover">
           ${listing.cover_url 
-            ? `<img src="${listing.cover_url}" alt="${listing.track_title || listing.release_title}">`
+            ? `<img src="${coverUrl}" alt="${listing.track_title || listing.release_title}" onerror="this.src='/placeholder.png'">`
             : `<div class="cover-placeholder">🎵</div>`
           }
           <div class="listing-price-badge">${parseFloat(listing.price)} XRP</div>
@@ -839,6 +855,7 @@ const ProfilePage = {
   
   async showEditPriceModal(listing) {
     const currentPrice = parseFloat(listing.price);
+    const coverUrl = this.getImageUrl(listing.coverUrl);
     
     // Create a simple modal for editing price
     const modalHtml = `
@@ -850,7 +867,7 @@ const ProfilePage = {
           </div>
           <div class="modal-body">
             <div style="text-align: center; margin-bottom: 20px;">
-              ${listing.coverUrl ? `<img src="${listing.coverUrl}" style="width:100px;height:100px;border-radius:8px;object-fit:cover;">` : ''}
+              ${listing.coverUrl ? `<img src="${coverUrl}" style="width:100px;height:100px;border-radius:8px;object-fit:cover;" onerror="this.style.display='none'">` : ''}
               <h3 style="margin-top:12px;">${listing.trackTitle || listing.releaseTitle}</h3>
               <p style="color:var(--text-muted);">Current price: ${currentPrice} XRP</p>
             </div>
@@ -963,11 +980,13 @@ const ProfilePage = {
       editionIcon = '⭐';
     }
     
+    const coverUrl = this.getImageUrl(nft.coverUrl);
+    
     return `
       <div class="collected-nft-card" data-nft-id="${nft.nftTokenId}">
         <div class="collected-nft-cover">
           ${nft.coverUrl 
-            ? `<img src="${nft.coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}">`
+            ? `<img src="${coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}" onerror="this.src='/placeholder.png'">`
             : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <div class="collected-nft-overlay">
@@ -1006,6 +1025,7 @@ const ProfilePage = {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
     const isOwner = AppState.user?.address === release.artistAddress;
+    const coverUrl = this.getImageUrl(release.coverUrl);
     
     // Determine listing status
     let statusClass = '';
@@ -1049,7 +1069,7 @@ const ProfilePage = {
       <div class="release-card ${statusClass}" data-release-id="${release.id}">
         <div class="release-card-cover">
           ${release.coverUrl 
-            ? `<img src="${release.coverUrl}" alt="${release.title}">`
+            ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
