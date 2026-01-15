@@ -476,6 +476,10 @@ async function handleAlbumPurchase(req, res, sql) {
           pendingNftRecordIds.push(nftRecordId);
           
           console.log('✅ Lazy minted NFT:', nftTokenId, 'Edition:', editionNumber);
+          
+          // Wait for ledger to settle before creating sell offer
+          console.log('⏳ Waiting for ledger to settle...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
         nftsToTransfer.push({ 
