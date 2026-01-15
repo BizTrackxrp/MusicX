@@ -3,6 +3,7 @@
  * User profile with releases, collection, genres, and settings
  * 
  * UPDATED: Uses IpfsHelper for proxied IPFS images
+ * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live') as "for sale"
  */
 
 const ProfilePage = {
@@ -30,6 +31,17 @@ const ProfilePage = {
       return IpfsHelper.toProxyUrl(url);
     }
     return url;
+  },
+  
+  /**
+   * Check if a release is "for sale" (available for purchase)
+   * With lazy minting, a release is for sale if:
+   * - It has a sellOfferIndex (traditional pre-minted), OR
+   * - It has mintFeePaid = true (lazy mint), OR
+   * - It has status = 'live' (lazy mint)
+   */
+  isForSale(release) {
+    return release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
   },
   
   async render() {
@@ -496,8 +508,9 @@ const ProfilePage = {
       `;
     }
     
-    // Count unlisted releases
-    const unlistedCount = this.releases.filter(r => !r.sellOfferIndex && (r.totalEditions - r.soldEditions) > 0).length;
+    // Count unlisted releases - now uses isForSale() helper
+    // A release is "unlisted" if it's NOT for sale AND has editions available
+    const unlistedCount = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
     
     return `
       ${unlistedCount > 0 ? `
@@ -1027,7 +1040,7 @@ const ProfilePage = {
     const isOwner = AppState.user?.address === release.artistAddress;
     const coverUrl = this.getImageUrl(release.coverUrl);
     
-    // Determine listing status
+    // Determine listing status - NOW RECOGNIZES LAZY MINT!
     let statusClass = '';
     let statusBadge = '';
     let statusOverlay = '';
@@ -1040,8 +1053,8 @@ const ProfilePage = {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           Sold Out
         </span>`;
-      } else if (release.sellOfferIndex) {
-        // Listed for sale - green
+      } else if (this.isForSale(release)) {
+        // Listed for sale (pre-minted OR lazy mint) - green
         statusClass = 'listed';
         statusBadge = `<span class="listing-status-badge green">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -1121,9 +1134,9 @@ const ProfilePage = {
     this.fetchCollectedCount();
     this.fetchForSaleCount();
     
-    // List All button
+    // List All button - only show releases that are truly not for sale
     document.getElementById('list-all-btn')?.addEventListener('click', () => {
-      const unlistedReleases = this.releases.filter(r => !r.sellOfferIndex && (r.totalEditions - r.soldEditions) > 0);
+      const unlistedReleases = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0);
       Modals.showListAllForSale(unlistedReleases);
     });
     
