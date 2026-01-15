@@ -152,28 +152,37 @@ const Router = {
   
   /**
    * Open release modal from direct URL
+   * FIXED: Now properly awaits StreamPage.render() before opening modal
    */
   async openReleaseFromUrl(releaseId) {
-    // Show stream page as background
-    StreamPage.render();
-    
-    if (!releaseId) return;
+    if (!releaseId) {
+      StreamPage.render();
+      return;
+    }
     
     try {
-      // Fetch the release
+      // Fetch the release data first
       const data = await API.getRelease(releaseId);
-      if (data?.release) {
-        // Small delay to let page render first
-        setTimeout(() => {
-          Modals.showRelease(data.release);
-        }, 100);
-      } else {
+      
+      if (!data?.release) {
         console.error('Release not found:', releaseId);
         Modals.showToast('Release not found');
+        StreamPage.render();
+        return;
       }
+      
+      // Now render the stream page as background and wait for it
+      await StreamPage.render();
+      
+      // Small delay to ensure DOM is ready, then show modal
+      setTimeout(() => {
+        Modals.showRelease(data.release);
+      }, 50);
+      
     } catch (error) {
       console.error('Failed to load release:', error);
       Modals.showToast('Failed to load release');
+      StreamPage.render();
     }
   },
   
