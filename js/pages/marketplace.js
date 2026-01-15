@@ -1,20 +1,18 @@
 /**
  * XRP Music - Marketplace Page
- * NFT marketplace with featured sections and analytics
+ * NFT marketplace with featured sections
  * 
  * SECTIONS:
  * 1. Top Selling - Most sales in last 7 days
  * 2. Newest Drops - Most recently released
  * 3. Get Them Before They're Gone - Fewest copies remaining
  * 
- * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live')
+ * UPDATED: View All buttons now navigate to Analytics page
  */
 
 const MarketplacePage = {
   releases: [],
   secondaryListings: [],
-  viewMode: 'featured', // 'featured', 'all', 'analytics'
-  analyticsSort: 'top-selling', // 'top-selling', 'newest', 'scarce'
   marketType: 'primary', // 'primary' or 'secondary'
   
   // Helper to get proxied image URL
@@ -144,13 +142,9 @@ const MarketplacePage = {
   },
   
   /**
-   * Render primary market with featured sections or analytics view
+   * Render primary market with featured sections
    */
   renderPrimaryMarket() {
-    if (this.viewMode === 'analytics') {
-      return this.renderAnalyticsView();
-    }
-    
     const topSelling = this.getTopSelling(5);
     const newestDrops = this.getNewestDrops(5);
     const scarce = this.getScarceReleases(5);
@@ -166,7 +160,7 @@ const MarketplacePage = {
               <p class="section-subtitle">Most popular releases</p>
             </div>
           </div>
-          <button class="view-all-btn" data-view="top-selling">
+          <button class="view-all-btn" data-sort="top-selling">
             View All
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"></polyline>
@@ -191,7 +185,7 @@ const MarketplacePage = {
               <p class="section-subtitle">Fresh releases from artists</p>
             </div>
           </div>
-          <button class="view-all-btn" data-view="newest">
+          <button class="view-all-btn" data-sort="newest">
             View All
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"></polyline>
@@ -216,7 +210,7 @@ const MarketplacePage = {
               <p class="section-subtitle">Limited copies remaining</p>
             </div>
           </div>
-          <button class="view-all-btn" data-view="scarce">
+          <button class="view-all-btn" data-sort="scarce">
             View All
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"></polyline>
@@ -230,70 +224,6 @@ const MarketplacePage = {
           }
         </div>
       </section>
-    `;
-  },
-  
-  /**
-   * Render analytics/list view for "View All"
-   */
-  renderAnalyticsView() {
-    let releases = this.getAvailableReleases();
-    let sortLabel = '';
-    let sortIcon = '';
-    
-    switch (this.analyticsSort) {
-      case 'top-selling':
-        releases = releases.sort((a, b) => (b.soldEditions || 0) - (a.soldEditions || 0));
-        sortLabel = 'Top Selling';
-        sortIcon = '🔥';
-        break;
-      case 'newest':
-        releases = releases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        sortLabel = 'Newest Drops';
-        sortIcon = '✨';
-        break;
-      case 'scarce':
-        releases = releases.sort((a, b) => 
-          (a.totalEditions - a.soldEditions) - (b.totalEditions - b.soldEditions)
-        );
-        sortLabel = 'Most Scarce';
-        sortIcon = '⚡';
-        break;
-    }
-    
-    return `
-      <div class="analytics-view">
-        <div class="analytics-header">
-          <button class="back-btn" id="back-to-featured">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-            Back
-          </button>
-          <h3 class="analytics-title">${sortIcon} ${sortLabel}</h3>
-          <div class="analytics-sort-tabs">
-            <button class="sort-tab ${this.analyticsSort === 'top-selling' ? 'active' : ''}" data-sort="top-selling">🔥 Top Selling</button>
-            <button class="sort-tab ${this.analyticsSort === 'newest' ? 'active' : ''}" data-sort="newest">✨ Newest</button>
-            <button class="sort-tab ${this.analyticsSort === 'scarce' ? 'active' : ''}" data-sort="scarce">⚡ Scarce</button>
-          </div>
-        </div>
-        
-        <div class="analytics-table">
-          <div class="table-header">
-            <span class="col-rank">#</span>
-            <span class="col-cover"></span>
-            <span class="col-title">Title</span>
-            <span class="col-artist">Artist</span>
-            <span class="col-price">Price</span>
-            <span class="col-sold">Sold</span>
-            <span class="col-remaining">Left</span>
-            <span class="col-date">Dropped</span>
-          </div>
-          <div class="table-body">
-            ${releases.map((r, i) => this.renderAnalyticsRow(r, i + 1)).join('')}
-          </div>
-        </div>
-      </div>
     `;
   },
   
@@ -349,34 +279,6 @@ const MarketplacePage = {
             </div>
           </div>
         </div>
-      </div>
-    `;
-  },
-  
-  /**
-   * Render analytics table row
-   */
-  renderAnalyticsRow(release, rank) {
-    const available = release.totalEditions - release.soldEditions;
-    const price = release.albumPrice || release.songPrice;
-    const coverUrl = this.getImageUrl(release.coverUrl);
-    const date = new Date(release.createdAt);
-    
-    return `
-      <div class="table-row" data-release-id="${release.id}">
-        <span class="col-rank">${rank}</span>
-        <span class="col-cover">
-          <img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">
-        </span>
-        <span class="col-title">
-          <div class="title-text">${release.title}</div>
-          <span class="type-badge ${release.type}">${release.type}</span>
-        </span>
-        <span class="col-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
-        <span class="col-price">${price} XRP</span>
-        <span class="col-sold">${release.soldEditions || 0}</span>
-        <span class="col-remaining ${available <= 10 ? 'low' : ''}">${available}</span>
-        <span class="col-date">${this.formatDate(date)}</span>
       </div>
     `;
   },
@@ -763,159 +665,6 @@ const MarketplacePage = {
           border-radius: var(--radius-lg);
         }
         
-        /* Analytics View */
-        .analytics-view {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-          overflow: hidden;
-        }
-        .analytics-header {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--border-color);
-          flex-wrap: wrap;
-        }
-        .back-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 8px 12px;
-          background: var(--bg-hover);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-md);
-          color: var(--text-secondary);
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 150ms;
-        }
-        .back-btn:hover {
-          border-color: var(--accent);
-          color: var(--accent);
-        }
-        .analytics-title {
-          font-size: 18px;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0;
-          flex: 1;
-        }
-        .analytics-sort-tabs {
-          display: flex;
-          gap: 4px;
-          background: var(--bg-primary);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: 4px;
-        }
-        .sort-tab {
-          padding: 8px 14px;
-          border: none;
-          border-radius: var(--radius-md);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 150ms;
-        }
-        .sort-tab:hover { color: var(--text-primary); }
-        .sort-tab.active {
-          background: var(--accent);
-          color: white;
-        }
-        
-        /* Analytics Table */
-        .analytics-table {
-          overflow-x: auto;
-        }
-        .table-header {
-          display: grid;
-          grid-template-columns: 50px 50px 2fr 1.5fr 80px 60px 60px 100px;
-          gap: 12px;
-          padding: 12px 20px;
-          background: var(--bg-hover);
-          font-size: 11px;
-          font-weight: 600;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .table-row {
-          display: grid;
-          grid-template-columns: 50px 50px 2fr 1.5fr 80px 60px 60px 100px;
-          gap: 12px;
-          padding: 12px 20px;
-          align-items: center;
-          border-bottom: 1px solid var(--border-color);
-          cursor: pointer;
-          transition: background 150ms;
-        }
-        .table-row:hover { background: var(--bg-hover); }
-        .table-row:last-child { border-bottom: none; }
-        
-        .col-rank {
-          font-weight: 700;
-          color: var(--text-muted);
-        }
-        .col-cover img {
-          width: 40px;
-          height: 40px;
-          border-radius: 6px;
-          object-fit: cover;
-        }
-        .col-title {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .title-text {
-          font-weight: 600;
-          color: var(--text-primary);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .type-badge {
-          padding: 2px 8px;
-          font-size: 10px;
-          font-weight: 600;
-          border-radius: 4px;
-          text-transform: uppercase;
-          flex-shrink: 0;
-        }
-        .type-badge.single { background: rgba(34, 197, 94, 0.2); color: var(--success); }
-        .type-badge.album { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
-        
-        .col-artist {
-          color: var(--text-secondary);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .col-price { font-weight: 600; color: var(--success); }
-        .col-sold { font-weight: 600; color: var(--text-primary); }
-        .col-remaining { font-weight: 600; color: var(--text-primary); }
-        .col-remaining.low { color: var(--warning); }
-        .col-date { color: var(--text-muted); font-size: 12px; }
-        
-        @media (max-width: 900px) {
-          .table-header, .table-row {
-            grid-template-columns: 40px 40px 1.5fr 1fr 70px 50px 50px;
-          }
-          .col-date { display: none; }
-        }
-        @media (max-width: 640px) {
-          .table-header, .table-row {
-            grid-template-columns: 30px 36px 1fr 60px 50px;
-          }
-          .col-artist, .col-remaining { display: none; }
-          .analytics-sort-tabs { width: 100%; }
-          .sort-tab { flex: 1; text-align: center; font-size: 11px; padding: 8px 8px; }
-        }
-        
         /* Secondary Market Styles */
         .secondary-listing-card {
           background: var(--bg-card);
@@ -987,31 +736,15 @@ const MarketplacePage = {
     document.querySelectorAll('.market-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.marketType = btn.dataset.market;
-        this.viewMode = 'featured';
         this.renderContent();
       });
     });
     
-    // View All buttons
+    // View All buttons - Navigate to Analytics page
     document.querySelectorAll('.view-all-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.analyticsSort = btn.dataset.view;
-        this.viewMode = 'analytics';
-        this.renderContent();
-      });
-    });
-    
-    // Back button
-    document.getElementById('back-to-featured')?.addEventListener('click', () => {
-      this.viewMode = 'featured';
-      this.renderContent();
-    });
-    
-    // Sort tabs in analytics view
-    document.querySelectorAll('.sort-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        this.analyticsSort = tab.dataset.sort;
-        this.renderContent();
+        const sort = btn.dataset.sort;
+        Router.navigate('analytics', { sort: sort, period: '7d' });
       });
     });
     
@@ -1034,15 +767,6 @@ const MarketplacePage = {
         if (release?.tracks?.length > 0) {
           StreamPage.playRelease(release);
         }
-      });
-    });
-    
-    // Table rows - click to open modal
-    document.querySelectorAll('.table-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const releaseId = row.dataset.releaseId;
-        const release = this.releases.find(r => r.id === releaseId);
-        if (release) Modals.showRelease(release);
       });
     });
     
