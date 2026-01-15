@@ -3,6 +3,7 @@
  * NFT marketplace with filtering and views
  * 
  * UPDATED: Uses IpfsHelper for proxied IPFS images
+ * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live') as "for sale"
  */
 
 const MarketplacePage = {
@@ -19,6 +20,17 @@ const MarketplacePage = {
       return IpfsHelper.toProxyUrl(url);
     }
     return url;
+  },
+  
+  /**
+   * Check if a release is "for sale" (available for purchase)
+   * With lazy minting, a release is for sale if:
+   * - It has a sellOfferIndex (traditional pre-minted), OR
+   * - It has mintFeePaid = true (lazy mint), OR
+   * - It has status = 'live' (lazy mint)
+   */
+  isForSale(release) {
+    return release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
   },
   
   /**
@@ -467,15 +479,19 @@ const MarketplacePage = {
   
   /**
    * Get filtered releases
+   * NOW RECOGNIZES LAZY MINT RELEASES!
    */
   getFilteredReleases() {
-    // Only show releases that are listed for sale (have sellOfferIndex)
-    const listedReleases = this.releases.filter(r => r.sellOfferIndex);
+    // Show releases that are for sale:
+    // - Has sellOfferIndex (traditional pre-minted), OR
+    // - Has mintFeePaid = true (lazy mint), OR  
+    // - Has status = 'live' (lazy mint)
+    const listedReleases = this.releases.filter(r => this.isForSale(r));
     
     if (this.activeTab === 'all') return listedReleases;
     if (this.activeTab === 'singles') return listedReleases.filter(r => r.type === 'single');
     if (this.activeTab === 'albums') return listedReleases.filter(r => r.type === 'album');
-    if (this.activeTab === 'soldout') return this.releases.filter(r => r.sellOfferIndex && (r.totalEditions - r.soldEditions) <= 0);
+    if (this.activeTab === 'soldout') return listedReleases.filter(r => (r.totalEditions - r.soldEditions) <= 0);
     return listedReleases;
   },
   
