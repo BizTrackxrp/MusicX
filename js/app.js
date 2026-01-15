@@ -34,6 +34,13 @@ const Router = {
     if (page === 'release' && params.id) {
       return `/release/${params.id}`;
     }
+    if (page === 'analytics') {
+      const queryParams = new URLSearchParams();
+      if (params.sort) queryParams.set('sort', params.sort);
+      if (params.period) queryParams.set('period', params.period);
+      const qs = queryParams.toString();
+      return `/analytics${qs ? '?' + qs : ''}`;
+    }
     if (page === 'purchase') {
       const queryParams = new URLSearchParams();
       if (params.release) queryParams.set('release', params.release);
@@ -69,6 +76,17 @@ const Router = {
       return { page: 'release', params: { id } };
     }
     
+    // Analytics page
+    if (path === '/analytics') {
+      return { 
+        page: 'analytics', 
+        params: { 
+          sort: searchParams.get('sort') || 'streams',
+          period: searchParams.get('period') || '7d'
+        } 
+      };
+    }
+    
     // Purchase page
     if (path === '/purchase') {
       return { 
@@ -96,6 +114,9 @@ const Router = {
         break;
       case 'marketplace':
         MarketplacePage.render();
+        break;
+      case 'analytics':
+        AnalyticsPage.render(this.params);
         break;
       case 'profile':
         ProfilePage.render();
