@@ -4,6 +4,7 @@
  * 
  * UPDATED: Now fetches real play data from /api/plays endpoint
  * UPDATED: Uses IpfsHelper for proxied IPFS images
+ * UPDATED: View All navigates to Analytics page
  */
 
 const StreamPage = {
@@ -163,7 +164,7 @@ const StreamPage = {
                 <button class="period-tab ${this.currentTopPeriod === '365d' ? 'active' : ''}" data-period="365d">365D</button>
               </div>
             </div>
-            <button class="view-all-btn" onclick="StreamPage.viewAllTopTracks()">
+            <button class="view-all-btn" id="view-all-top-tracks">
               View All
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9 18 15 12 9 6"></polyline>
@@ -622,21 +623,20 @@ const StreamPage = {
   },
   
   /**
-   * View all top tracks (could open a modal or navigate to a page)
+   * View all top tracks - Navigate to Analytics page with streams sort
    */
   viewAllTopTracks() {
-    // Option 1: Show a modal with full leaderboard
-    // Option 2: Navigate to a dedicated page
-    // For now, let's show an alert - you can implement the full page later
-    console.log('View all top tracks for period:', this.currentTopPeriod);
+    // Map period tabs to analytics period format
+    const periodMap = {
+      '1d': '24h',
+      '7d': '7d',
+      '30d': '30d',
+      '365d': 'all'
+    };
+    const analyticsPeriod = periodMap[this.currentTopPeriod] || '7d';
     
-    // TODO: Implement full leaderboard page or modal
-    // Router.navigate('top-tracks', { period: this.currentTopPeriod });
-    
-    // Temporary: Show the tracks/popular view
-    this.currentTab = 'tracks';
-    this.currentSort = 'popular';
-    this.renderContent();
+    // Navigate to analytics page with streams sort
+    Router.navigate('analytics', { sort: 'streams', period: analyticsPeriod });
   },
   
   sortTracks(tracks) {
@@ -919,6 +919,11 @@ const StreamPage = {
           this.renderContent();
         }
       });
+    });
+    
+    // View All button for Top Tracks - Navigate to Analytics
+    document.getElementById('view-all-top-tracks')?.addEventListener('click', () => {
+      this.viewAllTopTracks();
     });
     
     // Tab buttons
