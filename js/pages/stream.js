@@ -737,7 +737,8 @@ const StreamPage = {
    */
   renderTopTrackCard(track, index) {
     const rank = index + 1;
-    const release = track.release || {};
+    // Get fresh release data from AppState (has latest soldEditions) instead of stale track.release
+    const release = this.releases.find(r => r.id === track.release?.id) || track.release || {};
     const available = (release.totalEditions || 0) - (release.soldEditions || 0);
     const isSoldOut = available <= 0;
     const price = release.songPrice || release.albumPrice || 0;
