@@ -3,6 +3,7 @@
   "outputDirectory": ".",
   "framework": null,
   "rewrites": [
+    { "source": "/release/:id", "destination": "/app.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
