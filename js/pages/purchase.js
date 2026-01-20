@@ -5,6 +5,9 @@
  * 
  * MOBILE FIX: Added intermediate button tap between signatures
  * Mobile browsers block popups/deep-links not triggered by direct user gesture
+ * 
+ * ALBUM FIX: Sequential mint-and-transfer (no timeout issues)
+ * Each track is minted and transferred one at a time
  */
 
 const PurchasePage = {
@@ -215,6 +218,20 @@ const PurchasePage = {
                   </div>
                 </div>
               </div>
+              
+              <!-- Progress Bar (for albums) -->
+              ${isAlbum ? `
+              <div class="album-progress" id="album-progress" style="display: none;">
+                <div class="progress-header">
+                  <span id="progress-label">Preparing...</span>
+                  <span id="progress-count">0/${trackCount}</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="progress-track" id="progress-track"></div>
+              </div>
+              ` : ''}
               
               <!-- Status Area (hidden initially) -->
               <div class="purchase-status" id="purchase-status" style="display: none;">
@@ -525,6 +542,52 @@ const PurchasePage = {
           line-height: 1.5;
         }
         
+        /* Album Progress */
+        .album-progress {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+          padding: 20px;
+        }
+        
+        .progress-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 12px;
+          font-size: 14px;
+        }
+        
+        #progress-label {
+          color: var(--text-primary);
+          font-weight: 500;
+        }
+        
+        #progress-count {
+          color: var(--accent);
+          font-weight: 600;
+        }
+        
+        .progress-bar {
+          height: 8px;
+          background: var(--bg-tertiary);
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 12px;
+        }
+        
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--accent), #8b5cf6);
+          border-radius: 4px;
+          transition: width 0.3s ease;
+        }
+        
+        .progress-track {
+          font-size: 13px;
+          color: var(--text-muted);
+          min-height: 20px;
+        }
+        
         /* Purchase Status */
         .purchase-status {
           text-align: center;
@@ -618,6 +681,39 @@ const PurchasePage = {
   },
   
   /**
+   * Update album progress UI
+   */
+  updateAlbumProgress(current, total, trackTitle, phase = 'minting') {
+    const progressEl = document.getElementById('album-progress');
+    const labelEl = document.getElementById('progress-label');
+    const countEl = document.getElementById('progress-count');
+    const fillEl = document.getElementById('progress-fill');
+    const trackEl = document.getElementById('progress-track');
+    
+    if (!progressEl) return;
+    
+    progressEl.style.display = 'block';
+    
+    const percent = Math.round((current / total) * 100);
+    fillEl.style.width = `${percent}%`;
+    countEl.textContent = `${current}/${total}`;
+    
+    if (phase === 'minting') {
+      labelEl.textContent = 'Preparing NFT...';
+      trackEl.textContent = `"${trackTitle}"`;
+    } else if (phase === 'ready') {
+      labelEl.textContent = 'Ready to accept';
+      trackEl.textContent = `"${trackTitle}" - tap below to sign`;
+    } else if (phase === 'accepting') {
+      labelEl.textContent = 'Accepting NFT...';
+      trackEl.textContent = `"${trackTitle}"`;
+    } else if (phase === 'complete') {
+      labelEl.textContent = 'NFT received!';
+      trackEl.innerHTML = `<span style="color: var(--success)">✓</span> "${trackTitle}"`;
+    }
+  },
+  
+  /**
    * MOBILE FIX: Show intermediate step requiring user tap before next Xaman signature
    * Mobile browsers block window.open() calls that aren't from direct user gestures
    */
@@ -627,6 +723,11 @@ const PurchasePage = {
       const iconEl = statusEl.querySelector('.status-icon');
       const textEl = document.getElementById('status-text');
       const subEl = document.getElementById('status-sub');
+      
+      // Update album progress if applicable
+      if (this.isAlbum && trackTitle) {
+        this.updateAlbumProgress(current - 1, total, trackTitle, 'ready');
+      }
       
       // Show ready state with button
       iconEl.innerHTML = `
@@ -725,7 +826,7 @@ const PurchasePage = {
       
       // Step 2: Call appropriate API
       if (this.isAlbum) {
-        await this.processAlbumPurchase(paymentResult.txHash, updateStatus);
+        await this.processAlbumPurchaseSequential(paymentResult.txHash, updateStatus);
       } else {
         await this.processSinglePurchase(paymentResult.txHash, updateStatus);
       }
@@ -746,28 +847,18 @@ const PurchasePage = {
   
   async processSinglePurchase(paymentTxHash, updateStatus) {
     // Call broker-sale API
-    updateStatus('Preparing NFT', 'Platform is creating transfer offer... (this may take 30+ seconds)');
+    updateStatus('Preparing NFT', 'Platform is creating transfer offer...');
     
-    // Use AbortController with 2 minute timeout - broker-sale can take a while
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
-    
-    let purchaseResponse;
-    try {
-      purchaseResponse = await fetch('/api/broker-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          releaseId: this.release.id,
-          trackId: this.track?.id,
-          buyerAddress: AppState.user.address,
-          paymentTxHash: paymentTxHash,
-        }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    const purchaseResponse = await fetch('/api/broker-sale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        releaseId: this.release.id,
+        trackId: this.track?.id,
+        buyerAddress: AppState.user.address,
+        paymentTxHash: paymentTxHash,
+      }),
+    });
     
     const purchaseResult = await purchaseResponse.json();
     
@@ -813,86 +904,171 @@ const PurchasePage = {
     }, 2000);
   },
   
-  async processAlbumPurchase(paymentTxHash, updateStatus) {
-    const trackCount = this.release.tracks?.length || 1;
+  /**
+   * NEW: Sequential album purchase - mint and transfer one track at a time
+   * No timeout issues, user sees progress, partial success possible
+   */
+  async processAlbumPurchaseSequential(paymentTxHash, updateStatus) {
+    const tracks = this.release.tracks || [];
+    const trackCount = tracks.length;
     
-    // Call broker-album-sale API
-    updateStatus('Preparing NFTs', `Creating ${trackCount} transfer offers... (this may take 30+ seconds)`);
+    // Step 1: Initialize purchase
+    updateStatus('Initializing', 'Setting up album purchase...');
     
-    // Use AbortController with 2 minute timeout - broker-sale can take a while
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+    const initResponse = await fetch('/api/broker-album-sale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'init',
+        releaseId: this.release.id,
+        buyerAddress: AppState.user.address,
+        paymentTxHash: paymentTxHash,
+      }),
+    });
     
-    let purchaseResponse;
-    try {
-      purchaseResponse = await fetch('/api/broker-album-sale', {
+    const initResult = await initResponse.json();
+    
+    if (!initResult.success) {
+      throw new Error(initResult.error || 'Failed to initialize purchase');
+    }
+    
+    const { sessionId, artistAddress, trackPrice, totalPrice } = initResult;
+    const confirmedSales = [];
+    
+    // Step 2: Process each track sequentially
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      
+      // Update progress UI
+      this.updateAlbumProgress(i, trackCount, track.title, 'minting');
+      updateStatus(
+        `Preparing NFT ${i + 1}/${trackCount}`,
+        `"${track.title}" - minting...`
+      );
+      
+      // Mint/find NFT and create offer
+      const mintResponse = await fetch('/api/broker-album-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'mint-single',
           releaseId: this.release.id,
+          trackId: track.id,
+          trackIndex: i,
           buyerAddress: AppState.user.address,
-          paymentTxHash: paymentTxHash,
+          sessionId: sessionId,
         }),
-        signal: controller.signal,
       });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    
-    const purchaseResult = await purchaseResponse.json();
-    
-    if (!purchaseResult.success) {
-      if (purchaseResult.refunded) {
-        throw new Error('NFT unavailable - payment refunded');
+      
+      const mintResult = await mintResponse.json();
+      
+      if (!mintResult.success) {
+        // If this track fails, we still have the ones we already got
+        if (confirmedSales.length > 0) {
+          console.error(`Track ${i + 1} failed, but got ${confirmedSales.length} NFTs`);
+          updateStatus(
+            `Partial Success`,
+            `Got ${confirmedSales.length}/${trackCount} NFTs. "${track.title}" failed: ${mintResult.error}`,
+            'error'
+          );
+          // Still finalize what we got
+          break;
+        }
+        throw new Error(mintResult.error || `Failed to prepare "${track.title}"`);
       }
-      throw new Error(purchaseResult.error || 'Purchase failed');
-    }
-    
-    // Accept each NFT offer with user tap between each
-    const acceptTxHashes = [];
-    for (let i = 0; i < purchaseResult.offerIndexes.length; i++) {
-      const trackTitle = this.release.tracks[i]?.title || `Track ${i + 1}`;
       
-      // MOBILE FIX: Show button for user to tap before each signature
+      // MOBILE FIX: Show button for user to tap before signature
       await this.showAcceptNFTStep(
-        updateStatus, 
-        i + 1, 
-        purchaseResult.offerIndexes.length,
-        trackTitle
+        updateStatus,
+        i + 1,
+        trackCount,
+        track.title
       );
       
+      // Update progress
+      this.updateAlbumProgress(i, trackCount, track.title, 'accepting');
       updateStatus(
-        `Accepting NFT ${i + 1}/${purchaseResult.offerIndexes.length}`,
-        `"${trackTitle}" - Sign in Xaman`
+        `Accepting NFT ${i + 1}/${trackCount}`,
+        `"${track.title}" - sign in Xaman`
       );
       
-      const acceptResult = await XamanWallet.acceptSellOffer(purchaseResult.offerIndexes[i]);
+      // Accept NFT offer
+      const acceptResult = await XamanWallet.acceptSellOffer(mintResult.offerIndex);
       
       if (!acceptResult.success) {
-        throw new Error(`Failed to accept "${trackTitle}" - check Xaman Requests`);
+        if (confirmedSales.length > 0) {
+          console.error(`Accept failed for track ${i + 1}, but got ${confirmedSales.length} NFTs`);
+          break;
+        }
+        throw new Error(`Failed to accept "${track.title}" - check Xaman Requests`);
       }
-      acceptTxHashes.push(acceptResult.txHash);
+      
+      // Confirm this single sale
+      try {
+        await fetch('/api/broker-album-sale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'confirm-single',
+            pendingSale: mintResult.pendingSale,
+            acceptTxHash: acceptResult.txHash,
+          }),
+        });
+        
+        confirmedSales.push({
+          trackId: track.id,
+          trackTitle: track.title,
+          txHash: acceptResult.txHash,
+        });
+        
+        // Update progress to show completion
+        this.updateAlbumProgress(i + 1, trackCount, track.title, 'complete');
+        
+      } catch (e) {
+        console.error('Failed to confirm sale:', e);
+        // Still count it as confirmed since the NFT transferred
+        confirmedSales.push({
+          trackId: track.id,
+          trackTitle: track.title,
+          txHash: acceptResult.txHash,
+        });
+      }
     }
     
-    // Confirm sales
-    updateStatus('Finalizing', 'Recording purchase...');
-    
-    try {
-      await fetch('/api/broker-album-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'confirm',
-          pendingSales: purchaseResult.pendingSales,
-          acceptTxHashes: acceptTxHashes,
-        }),
-      });
-    } catch (e) {
-      console.error('Failed to confirm:', e);
+    // Step 3: Finalize - pay artist
+    if (confirmedSales.length > 0) {
+      updateStatus('Finalizing', 'Completing purchase...');
+      
+      try {
+        await fetch('/api/broker-album-sale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'finalize',
+            releaseId: this.release.id,
+            artistAddress: artistAddress,
+            totalPrice: trackPrice * confirmedSales.length, // Only pay for what was transferred
+            trackCount: confirmedSales.length,
+            buyerAddress: AppState.user.address,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to finalize:', e);
+      }
     }
     
     // Success!
-    updateStatus('Album Purchased! 🎉', `${trackCount} NFTs are now in your wallet`, 'success');
+    if (confirmedSales.length === trackCount) {
+      updateStatus('Album Purchased! 🎉', `${trackCount} NFTs are now in your wallet`, 'success');
+    } else if (confirmedSales.length > 0) {
+      updateStatus(
+        'Partial Purchase Complete',
+        `${confirmedSales.length}/${trackCount} NFTs are now in your wallet`,
+        'success'
+      );
+    } else {
+      throw new Error('No NFTs were transferred');
+    }
     
     setTimeout(() => {
       Router.navigate('profile');
