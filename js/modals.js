@@ -4598,4 +4598,100 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
       }
     });
   },
+  },
+
+  showTermsOfService() {
+    this.activeModal = 'terms';
+    const html = `
+      <div class="modal-overlay tos-modal-overlay">
+        <div class="modal tos-modal">
+          <div class="modal-header">
+            <div class="modal-title">Terms of Service</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body tos-content">
+            <p class="tos-effective"><em>Effective Date: January 19, 2026</em></p>
+            <p>Welcome to XRP Music. By accessing or using our platform, you agree to be bound by these Terms of Service.</p>
+            
+            <h3>1. Platform Description</h3>
+            <p>XRP Music operates as a marketplace facilitating the minting, buying, and selling of music NFTs on the XRP Ledger (XRPL). We act as an intermediary platform connecting artists and collectors. We do not take custody of, control, or have the ability to reverse any transactions conducted on the XRPL blockchain.</p>
+            
+            <h3>2. Copyright and Content Restrictions</h3>
+            <p><strong>You represent and warrant that you will not upload, mint, or sell any music or content through our platform unless you own the copyright or have obtained all necessary rights, licenses, and permissions to do so.</strong></p>
+            <p>Uploading, minting, or selling copyrighted material that you do not own or have rights to is strictly prohibited and constitutes a material breach of these Terms. Violators may have their content removed and their accounts suspended or terminated without notice.</p>
+            
+            <h3>3. Intellectual Property Rights and NFT Ownership</h3>
+            <p>Purchasing an NFT on XRP Music grants you ownership of the unique digital token recorded on the XRPL blockchain. Unless explicitly stated otherwise by the artist at the point of sale, purchasing an NFT does <strong>not</strong> transfer any intellectual property rights, including but not limited to:</p>
+            <ul>
+              <li>Copyright in the underlying music, artwork, or other content</li>
+              <li>Rights to reproduce, distribute, or create derivative works</li>
+              <li>Commercial use rights or licensing rights</li>
+              <li>Trademark or publicity rights</li>
+            </ul>
+            <p>You receive only the right to own, hold, transfer, and resell the NFT itself.</p>
+            
+            <h3>4. Account Access and Platform Use</h3>
+            <p>XRP Music reserves the right to condition, restrict, suspend, or terminate your access to the platform at any time, for any reason or no reason, in its sole discretion.</p>
+            
+            <h3>5. Platform Fee</h3>
+            <p>XRP Music collects a platform fee of two percent (2%) on all NFT sales conducted through the platform. This fee is automatically deducted at the time of each transaction. XRP Music reserves the right to modify the platform fee percentage at any time.</p>
+            
+            <h3>6. Dispute Resolution and Governing Law</h3>
+            <p>These Terms shall be governed by and construed in accordance with the laws of the State of Washington. Any dispute arising out of these Terms shall be brought exclusively in the state or federal courts located in King County, Washington.</p>
+            
+            <h3>7. Class Action Waiver</h3>
+            <p><strong>YOU AGREE THAT ANY CLAIMS AGAINST XRP MUSIC MUST BE BROUGHT IN YOUR INDIVIDUAL CAPACITY AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS, COLLECTIVE, OR REPRESENTATIVE ACTION.</strong></p>
+            
+            <h3>8. Limitation of Liability</h3>
+            <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL XRP MUSIC BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.</p>
+            <p><strong>Damages Cap:</strong> THE TOTAL CUMULATIVE LIABILITY OF XRP MUSIC SHALL NOT EXCEED ONE HUNDRED UNITED STATES DOLLARS ($100.00).</p>
+            
+            <h3>9. Assumption of Risk</h3>
+            <p>You acknowledge and accept the inherent risks associated with blockchain technology and digital assets, including price volatility, regulatory uncertainty, technological vulnerabilities, and the potential for total loss of value.</p>
+            
+            <h3>10. Modifications to Terms</h3>
+            <p>We reserve the right to modify these Terms at any time. Changes will be effective upon posting to the platform.</p>
+            
+            <h3>11. Contact Information</h3>
+            <p>For questions about these Terms of Service, please contact us through the platform.</p>
+            
+            <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.</em></p>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .tos-modal { max-width: 600px; max-height: 80vh; }
+        .tos-content { 
+          overflow-y: auto; 
+          max-height: 60vh; 
+          padding-right: 8px;
+          font-size: 14px;
+          line-height: 1.6;
+          color: var(--text-secondary);
+        }
+        .tos-content h3 { 
+          font-size: 15px; 
+          font-weight: 600; 
+          color: var(--text-primary); 
+          margin: 20px 0 8px 0; 
+        }
+        .tos-content p { margin: 8px 0; }
+        .tos-content ul { margin: 8px 0 8px 20px; }
+        .tos-content li { margin: 4px 0; }
+        .tos-effective { color: var(--text-muted); margin-bottom: 16px; }
+        .tos-agreement { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+        .tos-content::-webkit-scrollbar { width: 6px; }
+        .tos-content::-webkit-scrollbar-track { background: var(--bg-hover); border-radius: 3px; }
+        .tos-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+      </style>
+    `;
+    this.show(html);
+  },
+};
 };
