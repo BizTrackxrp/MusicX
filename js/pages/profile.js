@@ -4,6 +4,7 @@
  * 
  * UPDATED: Uses IpfsHelper for proxied IPFS images
  * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live') as "for sale"
+ * UPDATED: Added share profile button
  */
 
 const ProfilePage = {
@@ -173,13 +174,25 @@ const ProfilePage = {
             </div>
           </div>
           
-          <button class="btn btn-secondary" id="edit-profile-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-            Edit Profile
-          </button>
+          <div class="profile-actions">
+            <button class="btn btn-secondary" id="share-profile-btn" title="Share Profile">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span class="btn-text-desktop">Share</span>
+            </button>
+            <button class="btn btn-secondary" id="edit-profile-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              <span class="btn-text-desktop">Edit Profile</span>
+            </button>
+          </div>
         </div>
         
         <!-- Tabs -->
@@ -337,6 +350,32 @@ const ProfilePage = {
         }
         .profile-social-link:hover {
           color: var(--accent);
+        }
+        .profile-actions {
+          display: flex;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+        @media (max-width: 640px) {
+          .profile-actions {
+            width: 100%;
+            justify-content: center;
+          }
+          .profile-actions .btn {
+            flex: 1;
+            max-width: 140px;
+            justify-content: center;
+          }
+        }
+        @media (max-width: 400px) {
+          .btn-text-desktop {
+            display: none;
+          }
+          .profile-actions .btn {
+            padding: 10px 14px;
+            max-width: none;
+            flex: 0;
+          }
         }
         .profile-tabs {
           display: flex;
@@ -1128,6 +1167,17 @@ const ProfilePage = {
     
     document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
       Modals.showEditProfile();
+    });
+    
+    // Share profile button
+    document.getElementById('share-profile-btn')?.addEventListener('click', () => {
+      const profile = AppState.profile || {};
+      ShareUtils.shareArtistProfile({
+        address: AppState.user.address,
+        displayName: getDisplayName(),
+        artistName: profile.displayName || profile.artistName,
+        avatarUrl: profile.avatarUrl
+      });
     });
     
     // Fetch collected NFT count (even if on Posted tab)
