@@ -185,7 +185,7 @@ const UI = {
       <div class="search-result-item" data-release-id="${release.id}">
         <img 
           class="search-result-cover" 
-          src="${release.coverUrl || '/placeholder.png'}" 
+          src="${IpfsHelper.toProxyUrl(release.coverUrl) || '/placeholder.png'}"
           alt="${release.title}"
         >
         <div class="search-result-info">
