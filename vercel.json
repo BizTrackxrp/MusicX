@@ -3,8 +3,8 @@
   "outputDirectory": ".",
   "framework": null,
   "rewrites": [
-    { "source": "/release/:id", "destination": "/app.html" },
-    { "source": "/artist/:address", "destination": "/app.html" },
+    { "source": "/release/:id", "destination": "/api/og/release?id=:id" },
+    { "source": "/artist/:address", "destination": "/api/og/artist?address=:address" },
     { "source": "/playlist/:id", "destination": "/app.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
