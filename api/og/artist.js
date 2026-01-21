@@ -28,8 +28,8 @@ export default async function handler(req, res) {
     `;
     
     const profile = profiles[0] || {};
-    const displayName = profile.name || `${address.slice(0, 6)}...${address.slice(-4)}`;
-    const bio = profile.bio || `Check out ${displayName}'s music on XRP Music`;
+    const displayName = escapeHtml(profile.name || `${address.slice(0, 6)}...${address.slice(-4)}`);
+    const bio = escapeHtml(profile.bio || `Check out ${displayName}'s music on XRP Music`);
     const avatarUrl = profile.avatar_url || 'https://xrpmusic.io/og-default.png';
     const bannerUrl = profile.banner_url || avatarUrl;
     const pageUrl = `https://xrpmusic.io/artist/${address}`;
@@ -61,6 +61,7 @@ export default async function handler(req, res) {
   
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@xraboratories">
   <meta name="twitter:url" content="${pageUrl}">
   <meta name="twitter:title" content="${displayName} on XRP Music">
   <meta name="twitter:description" content="${description}">
@@ -70,21 +71,46 @@ export default async function handler(req, res) {
   <meta property="profile:username" content="${displayName}">
   ${releaseCount > 0 ? `<meta name="music:release_count" content="${releaseCount}">` : ''}
   
-  <!-- Redirect to app -->
-  <meta http-equiv="refresh" content="0;url=/app.html">
-  <script>window.location.href = '/app.html';</script>
+  <!-- Redirect to app for regular browsers -->
+  <script>
+    // Only redirect if not a bot/crawler
+    if (!/bot|crawl|spider|facebook|twitter|discord|slack|telegram|whatsapp/i.test(navigator.userAgent)) {
+      window.location.href = '/app.html';
+    }
+  </script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=/app.html">
+  </noscript>
 </head>
-<body>
-  <p>Loading ${displayName}'s profile...</p>
-  <p><a href="/app.html">Click here if not redirected</a></p>
+<body style="font-family: system-ui, sans-serif; background: #0a0a0a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;">
+  <div style="text-align: center; padding: 20px;">
+    <img src="${avatarUrl}" alt="${displayName}" style="width: 150px; height: 150px; border-radius: 50%; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+    <h1 style="font-size: 24px; margin-bottom: 8px;">${displayName}</h1>
+    <p style="color: #888; margin-bottom: 20px;">${releaseCount} release${releaseCount !== 1 ? 's' : ''}</p>
+    <a href="/app.html" style="display: inline-block; padding: 12px 32px; background: #22c55e; color: white; text-decoration: none; border-radius: 24px; font-weight: 600;">View on XRP Music</a>
+  </div>
 </body>
 </html>`;
     
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
     return res.status(200).send(html);
     
   } catch (error) {
     console.error('OG Artist error:', error);
     return res.redirect('/app.html');
   }
+}
+
+/**
+ * Escape HTML special characters to prevent XSS
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
