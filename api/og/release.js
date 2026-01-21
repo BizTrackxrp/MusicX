@@ -31,7 +31,6 @@ export default async function handler(req, res) {
     `;
     
     if (releases.length === 0) {
-      // Release not found, redirect to app anyway
       return res.redirect('/app.html');
     }
     
@@ -65,7 +64,7 @@ export default async function handler(req, res) {
   <meta name="title" content="${title} by ${artistName} | XRP Music">
   <meta name="description" content="${description}">
   
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph / Facebook / Discord -->
   <meta property="og:type" content="music.song">
   <meta property="og:url" content="${pageUrl}">
   <meta property="og:title" content="${title} by ${artistName}">
@@ -102,29 +101,15 @@ export default async function handler(req, res) {
   ${price > 0 ? `<meta property="product:price:amount" content="${price}">
   <meta property="product:price:currency" content="XRP">` : ''}
   
-  <!-- Redirect to app for regular browsers -->
-  <script>
-    // Only redirect if not a bot/crawler
-    if (!/bot|crawl|spider|facebook|twitter|discord|slack|telegram|whatsapp/i.test(navigator.userAgent)) {
-      window.location.href = '/app.html';
-    }
-  </script>
-  <noscript>
-    <meta http-equiv="refresh" content="0;url=/app.html">
-  </noscript>
+  <!-- Redirect to app -->
+  <meta http-equiv="refresh" content="0;url=/app.html">
 </head>
-<body style="font-family: system-ui, sans-serif; background: #0a0a0a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;">
-  <div style="text-align: center; padding: 20px;">
-    <img src="${coverUrl}" alt="${title}" style="width: 200px; height: 200px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-    <h1 style="font-size: 24px; margin-bottom: 8px;">${title}</h1>
-    <p style="color: #888; margin-bottom: 20px;">${artistName}</p>
-    <a href="/app.html" style="display: inline-block; padding: 12px 32px; background: #22c55e; color: white; text-decoration: none; border-radius: 24px; font-weight: 600;">Listen on XRP Music</a>
-  </div>
+<body>
+  <p>Redirecting to XRP Music...</p>
 </body>
 </html>`;
     
     res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
     return res.status(200).send(html);
     
   } catch (error) {
