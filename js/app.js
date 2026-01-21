@@ -494,7 +494,8 @@ const Router = {
   },
   
   /**
-   * Render artist page
+   * Render artist page (public profile)
+   * UPDATED: Added share button
    */
   async renderArtistPage(address) {
     UI.showLoading();
@@ -522,10 +523,22 @@ const Router = {
                 : displayName[0].toUpperCase()
               }
             </div>
-            <div style="padding-bottom: 16px;">
+            <div style="flex: 1; padding-bottom: 16px;">
               <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 4px;">${displayName}</h1>
               <p style="color: var(--text-muted); font-size: 14px;">${Helpers.truncateAddress(address, 8, 6)}</p>
               ${profile?.bio ? `<p style="color: var(--text-secondary); font-size: 14px; margin-top: 8px;">${profile.bio}</p>` : ''}
+            </div>
+            <div style="padding-bottom: 16px;">
+              <button class="btn btn-secondary" id="share-artist-btn" title="Share Artist Profile">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="18" cy="5" r="3"></circle>
+                  <circle cx="6" cy="12" r="3"></circle>
+                  <circle cx="18" cy="19" r="3"></circle>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                Share
+              </button>
             </div>
           </div>
           
@@ -573,6 +586,16 @@ const Router = {
           </div>
         </div>
       `);
+      
+      // Bind share button
+      document.getElementById('share-artist-btn')?.addEventListener('click', () => {
+        ShareUtils.shareArtistProfile({
+          address: address,
+          displayName: displayName,
+          artistName: profile?.name,
+          avatarUrl: profile?.avatarUrl
+        });
+      });
       
       // Bind release clicks
       document.querySelectorAll('.release-card').forEach(card => {
