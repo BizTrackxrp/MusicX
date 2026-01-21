@@ -4598,7 +4598,6 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
       }
     });
   },
-  },
 
   showTermsOfService() {
     this.activeModal = 'terms';
