@@ -101,8 +101,11 @@ export default async function handler(req, res) {
   ${price > 0 ? `<meta property="product:price:amount" content="${price}">
   <meta property="product:price:currency" content="XRP">` : ''}
   
-  <!-- Redirect to app -->
-  <meta http-equiv="refresh" content="0;url=/app.html">
+  <!-- Redirect to app with release context -->
+  <script>window.location.replace('/app.html?redirect=/release/${id}');</script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=/app.html?redirect=/release/${id}">
+  </noscript>
 </head>
 <body>
   <p>Redirecting to XRP Music...</p>
