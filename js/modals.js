@@ -598,7 +598,7 @@ const Modals = {
               trackId: t.id?.toString(),
               title: release.type === 'single' ? release.title : t.title,
               artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-              cover: release.coverUrl,
+              cover: Modals.getImageUrl(release.coverUrl),
               ipfsHash: t.audioCid,
               releaseId: release.id,
               duration: t.duration,
@@ -608,7 +608,7 @@ const Modals = {
               trackId: tr.id?.toString(),
               title: release.type === 'single' ? release.title : tr.title,
               artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-              cover: release.coverUrl,
+              cover: Modals.getImageUrl(release.coverUrl),
               ipfsHash: tr.audioCid,
               releaseId: release.id,
               duration: tr.duration,
@@ -2600,7 +2600,7 @@ async processListNFT(nft, price) {
           id: parseInt(t.id) || i, trackId: t.id?.toString(),
           title: release.type === 'single' ? release.title : t.title,
           artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-          cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+          cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
         }));
         Player.playTrack(queue[0], queue, 0);
       }
@@ -2616,7 +2616,7 @@ async processListNFT(nft, price) {
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-            cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
           }));
           Player.playTrack(queue[idx], queue, idx);
         }
@@ -2633,7 +2633,7 @@ async processListNFT(nft, price) {
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-            cover: release.coverUrl, ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
           }));
           Player.playTrack(queue[idx], queue, idx);
         }
@@ -2830,7 +2830,7 @@ async processListNFT(nft, price) {
       trackId: track.id?.toString(),
       title: release.type === 'single' ? release.title : track.title,
       artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-      cover: release.coverUrl,
+      cover: Modals.getImageUrl(release.coverUrl),
       ipfsHash: track.audioCid,
       releaseId: release.id,
       duration: track.duration,
@@ -2840,7 +2840,7 @@ async processListNFT(nft, price) {
       trackId: release.tracks?.[0]?.id?.toString(),
       title: release.title,
       artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-      cover: release.coverUrl,
+      cover: Modals.getImageUrl(release.coverUrl),
       ipfsHash: release.tracks?.[0]?.audioCid,
       releaseId: release.id,
       duration: release.tracks?.[0]?.duration,
