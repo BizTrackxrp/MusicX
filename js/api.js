@@ -3,6 +3,75 @@
  * Fetch wrappers for all backend endpoints
  */
 
+// IPFS Gateway configuration - MUST be defined before any code uses it
+const IPFS_GATEWAYS = [
+  '/api/ipfs/',  // Our proxy - FIRST choice (bypasses blockers)
+  'https://gateway.lighthouse.storage/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://dweb.link/ipfs/'
+];
+
+/**
+ * IPFS Helper - Centralized IPFS URL handling
+ * Use this for ALL image/audio URLs from IPFS
+ */
+const IpfsHelper = {
+  /**
+   * Convert any IPFS URL to use our proxy
+   * This bypasses security software that blocks IPFS gateways
+   */
+  toProxyUrl(url) {
+    if (!url) return '/placeholder.png';
+    
+    // Already using our proxy
+    if (url.startsWith('/api/ipfs/')) return url;
+    
+    // Extract CID from various formats
+    let cid = null;
+    
+    // Format: ipfs://QmXxx
+    if (url.startsWith('ipfs://')) {
+      cid = url.replace('ipfs://', '');
+    }
+    // Format: https://gateway.../ipfs/QmXxx
+    else if (url.includes('/ipfs/')) {
+      cid = url.split('/ipfs/')[1].split('?')[0].split('#')[0];
+    }
+    // Format: Raw CID (starts with Qm or bafy)
+    else if (url.startsWith('Qm') || url.startsWith('bafy')) {
+      cid = url.split('?')[0].split('#')[0];
+    }
+    
+    if (cid) {
+      return `/api/ipfs/${cid}`;
+    }
+    
+    // Not an IPFS URL, return as-is
+    return url;
+  },
+  
+  /**
+   * Get gateway URL with fallback support
+   * @param {string} cid - The IPFS CID
+   * @param {number} gatewayIndex - Which gateway to use (0 = proxy)
+   */
+  getGatewayUrl(cid, gatewayIndex = 0) {
+    if (!cid) return '/placeholder.png';
+    
+    // Clean the CID
+    if (cid.includes('/ipfs/')) {
+      cid = cid.split('/ipfs/')[1].split('?')[0];
+    }
+    if (cid.startsWith('ipfs://')) {
+      cid = cid.replace('ipfs://', '');
+    }
+    
+    const index = Math.min(gatewayIndex, IPFS_GATEWAYS.length - 1);
+    return `${IPFS_GATEWAYS[index]}${cid}`;
+  }
+};
+
 const API = {
   /**
    * Base fetch with error handling
@@ -440,8 +509,6 @@ const API = {
   },
 };
 
-// Note: IPFS_GATEWAYS is defined in player.js and shared globally
-
 // Helper functions
 const Helpers = {
   /**
@@ -479,7 +546,7 @@ const Helpers = {
   },
   
   /**
-   * Get IPFS URL (uses first gateway, fallback handled by error handler)
+   * Get IPFS URL - uses proxy first for compatibility
    */
   getIPFSUrl(cid) {
     if (!cid) return '';
@@ -487,6 +554,10 @@ const Helpers = {
     if (cid.includes('/ipfs/')) {
       cid = cid.split('/ipfs/')[1].split('?')[0];
     }
+    if (cid.startsWith('ipfs://')) {
+      cid = cid.replace('ipfs://', '');
+    }
+    // Use proxy first (index 0)
     return `${IPFS_GATEWAYS[0]}${cid}`;
   },
   
@@ -494,10 +565,28 @@ const Helpers = {
    * Get next IPFS gateway URL for fallback
    */
   getNextIPFSUrl(currentUrl) {
-    if (!currentUrl || !currentUrl.includes('/ipfs/')) return null;
+    if (!currentUrl) return null;
     
-    const cid = currentUrl.split('/ipfs/')[1].split('?')[0];
-    const currentGatewayIndex = IPFS_GATEWAYS.findIndex(g => currentUrl.startsWith(g));
+    // Extract CID from URL
+    let cid = null;
+    if (currentUrl.includes('/ipfs/')) {
+      cid = currentUrl.split('/ipfs/')[1].split('?')[0].split('#')[0];
+    } else if (currentUrl.startsWith('/api/ipfs/')) {
+      cid = currentUrl.replace('/api/ipfs/', '').split('?')[0].split('#')[0];
+    }
+    
+    if (!cid) return null;
+    
+    // Find current gateway index
+    let currentGatewayIndex = -1;
+    for (let i = 0; i < IPFS_GATEWAYS.length; i++) {
+      if (currentUrl.startsWith(IPFS_GATEWAYS[i]) || 
+          (IPFS_GATEWAYS[i] === '/api/ipfs/' && currentUrl.startsWith('/api/ipfs/'))) {
+        currentGatewayIndex = i;
+        break;
+      }
+    }
+    
     const nextIndex = currentGatewayIndex + 1;
     
     if (nextIndex < IPFS_GATEWAYS.length) {
@@ -576,15 +665,15 @@ document.addEventListener('error', function(e) {
   
   const currentSrc = target.src;
   
-  // Only handle IPFS URLs
-  if (!currentSrc.includes('/ipfs/')) return;
+  // Only handle IPFS URLs (proxy or gateway)
+  if (!currentSrc.includes('/ipfs/') && !currentSrc.includes('/api/ipfs/')) return;
   
   // Prevent infinite loops - track retry count
   const retryCount = parseInt(target.dataset.ipfsRetry || '0', 10);
   if (retryCount >= IPFS_GATEWAYS.length - 1) {
     console.warn('All IPFS gateways failed for image:', currentSrc);
     // Set to placeholder if all gateways fail
-    target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect fill="%23333" width="200" height="200"/><text x="50%" y="50%" fill="%23666" font-size="40" text-anchor="middle" dy=".3em">♪</text></svg>';
+    target.src = '/placeholder.png';
     return;
   }
   
