@@ -3,7 +3,7 @@
  * Fetch wrappers for all backend endpoints
  */
 
-// IPFS Gateway configuration - MUST be defined before any code uses it
+// IPFS Gateway configuration - defined here so it's available globally
 const IPFS_GATEWAYS = [
   '/api/ipfs/',  // Our proxy - FIRST choice (bypasses blockers)
   'https://gateway.lighthouse.storage/ipfs/',
@@ -11,66 +11,6 @@ const IPFS_GATEWAYS = [
   'https://cloudflare-ipfs.com/ipfs/',
   'https://dweb.link/ipfs/'
 ];
-
-/**
- * IPFS Helper - Centralized IPFS URL handling
- * Use this for ALL image/audio URLs from IPFS
- */
-const IpfsHelper = {
-  /**
-   * Convert any IPFS URL to use our proxy
-   * This bypasses security software that blocks IPFS gateways
-   */
-  toProxyUrl(url) {
-    if (!url) return '/placeholder.png';
-    
-    // Already using our proxy
-    if (url.startsWith('/api/ipfs/')) return url;
-    
-    // Extract CID from various formats
-    let cid = null;
-    
-    // Format: ipfs://QmXxx
-    if (url.startsWith('ipfs://')) {
-      cid = url.replace('ipfs://', '');
-    }
-    // Format: https://gateway.../ipfs/QmXxx
-    else if (url.includes('/ipfs/')) {
-      cid = url.split('/ipfs/')[1].split('?')[0].split('#')[0];
-    }
-    // Format: Raw CID (starts with Qm or bafy)
-    else if (url.startsWith('Qm') || url.startsWith('bafy')) {
-      cid = url.split('?')[0].split('#')[0];
-    }
-    
-    if (cid) {
-      return `/api/ipfs/${cid}`;
-    }
-    
-    // Not an IPFS URL, return as-is
-    return url;
-  },
-  
-  /**
-   * Get gateway URL with fallback support
-   * @param {string} cid - The IPFS CID
-   * @param {number} gatewayIndex - Which gateway to use (0 = proxy)
-   */
-  getGatewayUrl(cid, gatewayIndex = 0) {
-    if (!cid) return '/placeholder.png';
-    
-    // Clean the CID
-    if (cid.includes('/ipfs/')) {
-      cid = cid.split('/ipfs/')[1].split('?')[0];
-    }
-    if (cid.startsWith('ipfs://')) {
-      cid = cid.replace('ipfs://', '');
-    }
-    
-    const index = Math.min(gatewayIndex, IPFS_GATEWAYS.length - 1);
-    return `${IPFS_GATEWAYS[index]}${cid}`;
-  }
-};
 
 const API = {
   /**
@@ -546,7 +486,7 @@ const Helpers = {
   },
   
   /**
-   * Get IPFS URL - uses proxy first for compatibility
+   * Get IPFS URL (uses proxy first)
    */
   getIPFSUrl(cid) {
     if (!cid) return '';
@@ -554,10 +494,6 @@ const Helpers = {
     if (cid.includes('/ipfs/')) {
       cid = cid.split('/ipfs/')[1].split('?')[0];
     }
-    if (cid.startsWith('ipfs://')) {
-      cid = cid.replace('ipfs://', '');
-    }
-    // Use proxy first (index 0)
     return `${IPFS_GATEWAYS[0]}${cid}`;
   },
   
@@ -565,22 +501,19 @@ const Helpers = {
    * Get next IPFS gateway URL for fallback
    */
   getNextIPFSUrl(currentUrl) {
-    if (!currentUrl) return null;
+    if (!currentUrl || !currentUrl.includes('/ipfs/')) return null;
     
-    // Extract CID from URL
-    let cid = null;
-    if (currentUrl.includes('/ipfs/')) {
-      cid = currentUrl.split('/ipfs/')[1].split('?')[0].split('#')[0];
-    } else if (currentUrl.startsWith('/api/ipfs/')) {
-      cid = currentUrl.replace('/api/ipfs/', '').split('?')[0].split('#')[0];
+    let cid;
+    if (currentUrl.startsWith('/api/ipfs/')) {
+      cid = currentUrl.replace('/api/ipfs/', '').split('?')[0];
+    } else {
+      cid = currentUrl.split('/ipfs/')[1].split('?')[0];
     }
     
-    if (!cid) return null;
-    
-    // Find current gateway index
-    let currentGatewayIndex = -1;
+    // Find which gateway we're currently using
+    let currentGatewayIndex = 0;
     for (let i = 0; i < IPFS_GATEWAYS.length; i++) {
-      if (currentUrl.startsWith(IPFS_GATEWAYS[i]) || 
+      if (currentUrl.includes(IPFS_GATEWAYS[i]) || 
           (IPFS_GATEWAYS[i] === '/api/ipfs/' && currentUrl.startsWith('/api/ipfs/'))) {
         currentGatewayIndex = i;
         break;
@@ -641,7 +574,6 @@ const Helpers = {
   
   /**
    * Generate a session ID for play deduplication
-   * Stored in sessionStorage so it persists across page loads but not browser sessions
    */
   getSessionId() {
     let sessionId = sessionStorage.getItem('xrp_music_session');
@@ -655,33 +587,28 @@ const Helpers = {
 
 /**
  * Global image error handler for IPFS fallback
- * Automatically tries next gateway when an image fails to load
  */
 document.addEventListener('error', function(e) {
   const target = e.target;
   
-  // Only handle image errors
   if (target.tagName !== 'IMG') return;
   
   const currentSrc = target.src;
   
-  // Only handle IPFS URLs (proxy or gateway)
-  if (!currentSrc.includes('/ipfs/') && !currentSrc.includes('/api/ipfs/')) return;
+  // Only handle IPFS URLs
+  if (!currentSrc.includes('/ipfs/')) return;
   
-  // Prevent infinite loops - track retry count
   const retryCount = parseInt(target.dataset.ipfsRetry || '0', 10);
   if (retryCount >= IPFS_GATEWAYS.length - 1) {
     console.warn('All IPFS gateways failed for image:', currentSrc);
-    // Set to placeholder if all gateways fail
     target.src = '/placeholder.png';
     return;
   }
   
-  // Try next gateway
   const nextUrl = Helpers.getNextIPFSUrl(currentSrc);
   if (nextUrl) {
     console.log(`🔄 Image gateway fallback (attempt ${retryCount + 1}):`, nextUrl);
     target.dataset.ipfsRetry = (retryCount + 1).toString();
     target.src = nextUrl;
   }
-}, true); // Use capture phase to catch errors before they bubble
+}, true);
