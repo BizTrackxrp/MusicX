@@ -71,15 +71,10 @@ export default async function handler(req, res) {
   <meta property="profile:username" content="${displayName}">
   ${releaseCount > 0 ? `<meta name="music:release_count" content="${releaseCount}">` : ''}
   
-  <!-- Redirect to app for regular browsers -->
-  <script>
-    // Only redirect if not a bot/crawler
-    if (!/bot|crawl|spider|facebook|twitter|discord|slack|telegram|whatsapp/i.test(navigator.userAgent)) {
-      window.location.href = '/app.html';
-    }
-  </script>
+  <!-- Redirect to app with artist context -->
+  <script>window.location.replace('/app.html?redirect=/artist/${address}');</script>
   <noscript>
-    <meta http-equiv="refresh" content="0;url=/app.html">
+    <meta http-equiv="refresh" content="0;url=/app.html?redirect=/artist/${address}">
   </noscript>
 </head>
 <body style="font-family: system-ui, sans-serif; background: #0a0a0a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;">
@@ -87,7 +82,7 @@ export default async function handler(req, res) {
     <img src="${avatarUrl}" alt="${displayName}" style="width: 150px; height: 150px; border-radius: 50%; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
     <h1 style="font-size: 24px; margin-bottom: 8px;">${displayName}</h1>
     <p style="color: #888; margin-bottom: 20px;">${releaseCount} release${releaseCount !== 1 ? 's' : ''}</p>
-    <a href="/app.html" style="display: inline-block; padding: 12px 32px; background: #22c55e; color: white; text-decoration: none; border-radius: 24px; font-weight: 600;">View on XRP Music</a>
+    <a href="/app.html?redirect=/artist/${address}" style="display: inline-block; padding: 12px 32px; background: #22c55e; color: white; text-decoration: none; border-radius: 24px; font-weight: 600;">View on XRP Music</a>
   </div>
 </body>
 </html>`;
