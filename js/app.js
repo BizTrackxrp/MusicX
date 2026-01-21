@@ -55,8 +55,16 @@ const Router = {
    * Parse URL and return page/params
    */
   parseUrl() {
-    const path = window.location.pathname;
+    let path = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
+    
+    // Check for redirect parameter (from OG meta pages)
+    const redirectPath = searchParams.get('redirect');
+    if (redirectPath) {
+      path = redirectPath;
+      // Update the URL to the clean path (remove ?redirect=)
+      history.replaceState({}, '', redirectPath);
+    }
     
     // Artist page
     if (path.startsWith('/artist/')) {
