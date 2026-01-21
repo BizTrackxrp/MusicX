@@ -4694,4 +4694,3 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
     this.show(html);
   },
 };
-};
