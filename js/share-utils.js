@@ -1,6 +1,6 @@
 /**
  * XRP Music - Share Utilities
- * Handles sharing releases with a nice modal UI
+ * Handles sharing releases and artist profiles with a nice modal UI
  */
 
 const ShareUtils = {
@@ -10,6 +10,13 @@ const ShareUtils = {
    */
   getReleaseUrl(releaseId) {
     return `${window.location.origin}/release/${releaseId}`;
+  },
+  
+  /**
+   * Get shareable URL for an artist profile
+   */
+  getArtistUrl(artistAddress) {
+    return `${window.location.origin}/artist/${artistAddress}`;
   },
   
   /**
@@ -85,8 +92,102 @@ const ShareUtils = {
       </div>
     `;
     
-    // Add styles
+    this._addShareModalStyles();
+    document.body.appendChild(overlay);
+    this._bindShareModalEvents(overlay, url, `${title} by ${artist}`, `Check out "${title}" by ${artist} on XRP Music!`);
+  },
+  
+  /**
+   * Show share modal for artist profile
+   */
+  shareArtistProfile(profile) {
+    const address = profile.address || AppState.user?.address;
+    const url = this.getArtistUrl(address);
+    const displayName = profile.displayName || profile.artistName || Helpers.truncateAddress(address, 8, 6);
+    const avatarUrl = profile.avatarUrl ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(profile.avatarUrl) : profile.avatarUrl) : null;
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'share-modal-overlay';
+    overlay.innerHTML = `
+      <div class="share-modal">
+        <div class="share-modal-header">
+          <h3>Share Artist Profile</h3>
+          <button class="share-modal-close" id="share-modal-close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="share-modal-content">
+          <!-- Artist preview -->
+          <div class="share-preview">
+            <div class="share-preview-avatar">
+              ${avatarUrl 
+                ? `<img src="${avatarUrl}" alt="${displayName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                   <div class="share-avatar-placeholder" style="display:none;">${displayName.charAt(0).toUpperCase()}</div>`
+                : `<div class="share-avatar-placeholder">${displayName.charAt(0).toUpperCase()}</div>`
+              }
+            </div>
+            <div class="share-preview-info">
+              <div class="share-preview-title">${displayName}</div>
+              <div class="share-preview-artist">Artist on XRP Music</div>
+            </div>
+          </div>
+          
+          <!-- Link input with copy button -->
+          <div class="share-link-container">
+            <input type="text" class="share-link-input" id="share-link-input" value="${url}" readonly>
+            <button class="share-copy-btn" id="share-copy-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy
+            </button>
+          </div>
+          
+          <!-- Success message (hidden initially) -->
+          <div class="share-success" id="share-success">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Copied to clipboard!
+          </div>
+          
+          <!-- Native share button for mobile -->
+          ${navigator.share ? `
+            <button class="share-native-btn" id="share-native-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              More sharing options...
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+    
+    this._addShareModalStyles();
+    document.body.appendChild(overlay);
+    this._bindShareModalEvents(overlay, url, displayName, `Check out ${displayName} on XRP Music!`);
+  },
+  
+  /**
+   * Add share modal styles (only once)
+   */
+  _addShareModalStyles() {
+    if (document.getElementById('share-modal-styles')) return;
+    
     const style = document.createElement('style');
+    style.id = 'share-modal-styles';
     style.textContent = `
       .share-modal-overlay {
         position: fixed;
@@ -155,14 +256,19 @@ const ShareUtils = {
         border-radius: var(--radius-lg);
         margin-bottom: 16px;
       }
-      .share-preview-cover {
+      .share-preview-cover,
+      .share-preview-avatar {
         width: 56px;
         height: 56px;
         border-radius: var(--radius-md);
         overflow: hidden;
         flex-shrink: 0;
       }
-      .share-preview-cover img {
+      .share-preview-avatar {
+        border-radius: 50%;
+      }
+      .share-preview-cover img,
+      .share-preview-avatar img {
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -175,6 +281,17 @@ const ShareUtils = {
         justify-content: center;
         background: var(--bg-card);
         font-size: 24px;
+      }
+      .share-avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--accent), #8b5cf6);
+        color: white;
+        font-size: 22px;
+        font-weight: 700;
       }
       .share-preview-info {
         flex: 1;
@@ -276,12 +393,15 @@ const ShareUtils = {
     `;
     
     document.head.appendChild(style);
-    document.body.appendChild(overlay);
-    
-    // Event handlers
+  },
+  
+  /**
+   * Bind share modal events (reusable for both release and artist)
+   */
+  _bindShareModalEvents(overlay, url, shareTitle, shareText) {
+    // Close modal function
     const closeModal = () => {
       overlay.remove();
-      style.remove();
     };
     
     // Close button
@@ -348,8 +468,8 @@ const ShareUtils = {
     document.getElementById('share-native-btn')?.addEventListener('click', async () => {
       try {
         await navigator.share({
-          title: `${title} by ${artist}`,
-          text: `Check out "${title}" by ${artist} on XRP Music!`,
+          title: shareTitle,
+          text: shareText,
           url: url,
         });
         closeModal();
