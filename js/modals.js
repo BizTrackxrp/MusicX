@@ -72,7 +72,7 @@ const Modals = {
   },
   
   handleEsc(e) {
-    if (e.key === 'Escape' && !Modals.mintingInProgress) Modals.close();
+    if (e.key === 'Escape' && !Modals.mintingInProgress && Modals.activeModal !== 'create') Modals.close();
   },
   
   async showNowPlaying() {
