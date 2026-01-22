@@ -5,6 +5,9 @@
  * UPDATED: Uses IpfsHelper for proxied IPFS images
  * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live') as "for sale"
  * UPDATED: Added share profile button
+ * UPDATED: Fixed banner image scaling on desktop vs mobile
+ * UPDATED: Fixed bio text overflow for long bios
+ * UPDATED: Fixed mobile player positioning
  */
 
 const ProfilePage = {
@@ -157,7 +160,7 @@ const ProfilePage = {
             <h1 class="profile-name">${displayName}</h1>
             ${this.renderGenreBadges(profile)}
             <p class="profile-address">${Helpers.truncateAddress(address, 8, 6)}</p>
-            ${profile.bio ? `<p class="profile-bio">${profile.bio}</p>` : ''}
+            ${profile.bio ? `<div class="profile-bio-container"><p class="profile-bio">${profile.bio}</p></div>` : ''}
             
             <div class="profile-links">
               ${profile.website ? `
@@ -222,19 +225,47 @@ const ProfilePage = {
       </div>
       
       <style>
+        /* ============================================
+           Profile Banner - FIXED for desktop/mobile
+           ============================================ */
         .profile-banner {
-          height: 200px;
+          width: 100%;
+          height: 180px;
           background: linear-gradient(135deg, var(--accent), #8b5cf6);
           border-radius: var(--radius-xl);
           overflow: hidden;
           position: relative;
         }
+        
         .profile-banner img {
           width: 100%;
           height: 100%;
           object-fit: cover;
           object-position: center center;
         }
+        
+        /* Desktop: taller banner to show more of the image */
+        @media (min-width: 768px) {
+          .profile-banner {
+            height: 220px;
+          }
+        }
+        
+        @media (min-width: 1024px) {
+          .profile-banner {
+            height: 260px;
+          }
+        }
+        
+        @media (min-width: 1280px) {
+          .profile-banner {
+            height: 300px;
+          }
+        }
+        
+        /* ============================================
+           Profile Card Layout
+           ============================================ */
         .profile-card {
           display: flex;
           align-items: flex-start;
@@ -243,6 +274,7 @@ const ProfilePage = {
           margin-top: 20px;
           margin-bottom: 32px;
         }
+        
         @media (max-width: 640px) {
           .profile-card {
             flex-direction: column;
@@ -251,6 +283,7 @@ const ProfilePage = {
             padding: 0 16px;
           }
         }
+        
         .profile-avatar {
           width: 156px;
           height: 156px;
@@ -267,32 +300,38 @@ const ProfilePage = {
           overflow: hidden;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
+        
         .profile-avatar img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
+        
         .profile-info {
           flex: 1;
           min-width: 0;
           padding-top: 8px;
         }
+        
         .profile-name {
           font-size: 32px;
           font-weight: 700;
           margin-bottom: 12px;
         }
+        
         .profile-genres {
           display: flex;
           gap: 8px;
           margin-bottom: 12px;
           flex-wrap: wrap;
         }
+        
         @media (max-width: 640px) {
           .profile-genres {
             justify-content: center;
           }
         }
+        
         .profile-genre-badge {
           display: inline-flex;
           align-items: center;
@@ -306,39 +345,93 @@ const ProfilePage = {
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
+        
         .profile-address {
           color: var(--text-muted);
           font-size: 14px;
           margin-bottom: 10px;
         }
+        
+        /* ============================================
+           Profile Bio - FIXED overflow for long text
+           ============================================ */
+        .profile-bio-container {
+          max-width: 500px;
+          margin-bottom: 14px;
+        }
+        
         .profile-bio {
           color: var(--text-secondary);
           font-size: 14px;
-          margin-bottom: 14px;
-          line-height: 1.5;
-          max-width: 500px;
+          line-height: 1.6;
+          max-height: 100px;
+          overflow-y: auto;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          white-space: pre-wrap;
+          padding-right: 8px;
+          margin: 0;
         }
+        
+        /* Custom scrollbar for bio */
+        .profile-bio::-webkit-scrollbar {
+          width: 4px;
+        }
+        
+        .profile-bio::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .profile-bio::-webkit-scrollbar-thumb {
+          background: var(--border-color);
+          border-radius: 2px;
+        }
+        
+        .profile-bio::-webkit-scrollbar-thumb:hover {
+          background: var(--border-light);
+        }
+        
+        @media (max-width: 640px) {
+          .profile-bio-container {
+            max-width: 100%;
+            width: 100%;
+          }
+          
+          .profile-bio {
+            max-height: 120px;
+            text-align: center;
+            padding-right: 0;
+          }
+        }
+        
+        /* ============================================
+           Profile Links
+           ============================================ */
         .profile-links {
           display: flex;
           align-items: center;
           gap: 16px;
           flex-wrap: wrap;
         }
+        
         @media (max-width: 640px) {
           .profile-links {
             justify-content: center;
           }
         }
+        
         .profile-website {
           color: var(--accent);
           font-size: 14px;
           text-decoration: none;
           transition: opacity 150ms;
         }
+        
         .profile-website:hover {
           opacity: 0.8;
           text-decoration: underline;
         }
+        
         .profile-social-link {
           color: var(--text-muted);
           transition: color 150ms;
@@ -348,14 +441,20 @@ const ProfilePage = {
           font-size: 14px;
           text-decoration: none;
         }
+        
         .profile-social-link:hover {
           color: var(--accent);
         }
+        
+        /* ============================================
+           Profile Actions
+           ============================================ */
         .profile-actions {
           display: flex;
           gap: 8px;
           flex-shrink: 0;
         }
+        
         @media (max-width: 640px) {
           .profile-actions {
             width: 100%;
@@ -367,6 +466,7 @@ const ProfilePage = {
             justify-content: center;
           }
         }
+        
         @media (max-width: 400px) {
           .btn-text-desktop {
             display: none;
@@ -377,6 +477,10 @@ const ProfilePage = {
             flex: 0;
           }
         }
+        
+        /* ============================================
+           Profile Tabs
+           ============================================ */
         .profile-tabs {
           display: flex;
           gap: 8px;
@@ -384,6 +488,7 @@ const ProfilePage = {
           padding: 0 24px 4px;
           margin-bottom: 24px;
         }
+        
         .tab-btn {
           display: flex;
           align-items: center;
@@ -398,24 +503,41 @@ const ProfilePage = {
           cursor: pointer;
           transition: all 150ms;
         }
+        
         .tab-btn:hover {
           color: var(--text-secondary);
         }
+        
         .tab-btn.active {
           background: var(--bg-hover);
           color: var(--text-primary);
         }
+        
         .tab-count {
           padding: 2px 8px;
           background: var(--bg-hover);
           border-radius: 10px;
           font-size: 12px;
         }
+        
+        /* ============================================
+           Profile Tab Content - FIXED bottom padding
+           ============================================ */
         .profile-tab-content {
           padding: 0 24px;
+          padding-bottom: 120px;
         }
         
-        /* Listing Status Styles */
+        @media (max-width: 1024px) {
+          .profile-tab-content {
+            padding: 0 16px;
+            padding-bottom: 140px;
+          }
+        }
+        
+        /* ============================================
+           Listing Status Styles
+           ============================================ */
         .listing-status-badge {
           position: absolute;
           bottom: 8px;
@@ -430,14 +552,17 @@ const ProfilePage = {
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
+        
         .listing-status-badge.red {
           background: rgba(239, 68, 68, 0.9);
           color: white;
         }
+        
         .listing-status-badge.green {
           background: rgba(34, 197, 94, 0.9);
           color: white;
         }
+        
         .listing-status-badge.gold {
           background: linear-gradient(135deg, #f59e0b, #d97706);
           color: white;
@@ -452,6 +577,7 @@ const ProfilePage = {
           border-radius: inherit;
           pointer-events: none;
         }
+        
         .release-card.sold-out .release-card-cover::after {
           content: '';
           position: absolute;
@@ -473,9 +599,11 @@ const ProfilePage = {
           opacity: 0;
           transition: opacity 200ms;
         }
+        
         .release-card.not-listed:hover .listing-overlay {
           opacity: 1;
         }
+        
         .list-now-btn {
           display: flex;
           align-items: center;
@@ -490,6 +618,7 @@ const ProfilePage = {
           cursor: pointer;
           transition: transform 150ms, background 150ms;
         }
+        
         .list-now-btn:hover {
           background: var(--accent-hover);
           transform: scale(1.05);
@@ -501,18 +630,22 @@ const ProfilePage = {
           gap: 8px;
           margin-top: 8px;
         }
+        
         .listing-card-actions .btn {
           flex: 1;
           justify-content: center;
         }
+        
         .btn-danger {
           background: rgba(239, 68, 68, 0.1);
           color: var(--error);
           border: 1px solid rgba(239, 68, 68, 0.3);
         }
+        
         .btn-danger:hover {
           background: rgba(239, 68, 68, 0.2);
         }
+        
         .listing-price-badge {
           position: absolute;
           top: 8px;
