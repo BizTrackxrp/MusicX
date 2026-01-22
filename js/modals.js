@@ -37,7 +37,7 @@ const Modals = {
       container.querySelector('.modal-overlay')?.classList.add('visible');
     });
     container.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress) this.close();
+     if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress && this.activeModal !== 'create') this.close();
     });
     container.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
       btn.addEventListener('click', () => this.close());
@@ -48,6 +48,24 @@ const Modals = {
  close() {
     const container = document.getElementById('modals');
     if (!container) return;
+    
+    // Check for unsaved create modal data
+    if (this.activeModal === 'create' && !this.mintingInProgress) {
+      try {
+        const title = document.getElementById('release-title')?.value?.trim();
+        const price = document.getElementById('release-price')?.value;
+        const hasCover = !document.getElementById('cover-preview')?.classList.contains('hidden');
+        const hasTrack = document.getElementById('track-list-upload')?.children?.length > 0;
+        
+        if (title || price || hasCover || hasTrack) {
+          const confirmClose = confirm('You have unsaved changes. Are you sure you want to leave? Your progress will be lost.');
+          if (!confirmClose) return;
+        }
+      } catch (e) {
+        console.log('Create modal check skipped:', e);
+      }
+    }
+    
     if (this.nowPlayingInterval) {
       clearInterval(this.nowPlayingInterval);
       this.nowPlayingInterval = null;
@@ -70,9 +88,27 @@ const Modals = {
     document.removeEventListener('keydown', this.handleEsc);
     this.activeModal = null;
   },
+    
+    // CLEANUP: If we're closing during minting and have a pending release, delete it
+    if (this.pendingReleaseId) {
+      console.log('🧹 Modal closed - cleaning up pending release:', this.pendingReleaseId);
+      fetch(`/api/releases?id=${this.pendingReleaseId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => console.log('Cleanup result:', result))
+        .catch(err => console.error('Cleanup failed:', err));
+      this.pendingReleaseId = null;
+    }
+    const overlay = container.querySelector('.modal-overlay');
+    if (overlay) {
+      overlay.classList.remove('visible');
+      setTimeout(() => { container.innerHTML = ''; }, 200);
+    }
+    document.removeEventListener('keydown', this.handleEsc);
+    this.activeModal = null;
+  },
   
   handleEsc(e) {
-    if (e.key === 'Escape' && !Modals.mintingInProgress) Modals.close();
+    if (e.key === 'Escape' && !Modals.mintingInProgress && Modals.activeModal !== 'create') Modals.close();
   },
   
   async showNowPlaying() {
