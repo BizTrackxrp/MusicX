@@ -37,7 +37,7 @@ const Modals = {
       container.querySelector('.modal-overlay')?.classList.add('visible');
     });
     container.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress) this.close();
+     if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress && this.activeModal !== 'create') this.close();
     });
     container.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
       btn.addEventListener('click', () => this.close());
