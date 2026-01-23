@@ -268,7 +268,7 @@ const Modals = {
 .np-close:hover {
   opacity: 1;
 }
-        }
+        
         .np-layout {
           display: grid;
           grid-template-columns: 1fr;
