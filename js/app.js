@@ -48,6 +48,9 @@ const Router = {
       if (params.album) queryParams.set('album', params.album);
       return `/purchase?${queryParams.toString()}`;
     }
+    if (page === 'sales') {
+      return '/sales';
+    }
     return `/${page === 'stream' ? '' : page}`;
   },
   
@@ -107,6 +110,11 @@ const Router = {
       };
     }
     
+    // Sales page
+    if (path === '/sales') {
+      return { page: 'sales', params: {} };
+    }
+    
     // Other pages
     const pageName = path.replace('/', '') || 'stream';
     return { page: pageName, params: {} };
@@ -152,6 +160,13 @@ const Router = {
         break;
       case 'artist':
         this.renderArtistPage(this.params.address);
+        break;
+      case 'sales':
+        if (typeof ArtistSalesPage !== 'undefined') {
+          ArtistSalesPage.render();
+        } else {
+          StreamPage.render();
+        }
         break;
       default:
         StreamPage.render();
