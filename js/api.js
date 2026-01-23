@@ -390,6 +390,32 @@ const API = {
   },
 
   // ============================================
+  // ARTIST SALES
+  // ============================================
+  
+  /**
+   * Check if artist has any sales
+   */
+  async checkArtistHasSales(artistAddress) {
+    const data = await this.fetch(`/api/artist-sales?action=check&artist=${artistAddress}`);
+    return data.hasSales || false;
+  },
+  
+  /**
+   * Get tracks the artist has sold
+   */
+  async getArtistSoldTracks(artistAddress) {
+    return this.fetch(`/api/artist-sales?action=tracks&artist=${artistAddress}`);
+  },
+  
+  /**
+   * Get buyers for a specific track
+   */
+  async getTrackBuyers(artistAddress, trackId) {
+    return this.fetch(`/api/artist-sales?action=buyers&artist=${artistAddress}&trackId=${trackId}`);
+  },
+
+  // ============================================
   // UPLOADS (IPFS via Lighthouse - Direct)
   // ============================================
   
