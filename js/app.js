@@ -502,8 +502,19 @@ const Router = {
   },
   
   /**
+   * Helper to get proxied image URL (for IPFS)
+   */
+  getImageUrl(url) {
+    if (!url) return '/placeholder.png';
+    if (typeof IpfsHelper !== 'undefined') {
+      return IpfsHelper.toProxyUrl(url);
+    }
+    return url;
+  },
+  
+  /**
    * Render artist page (public profile)
-   * UPDATED: Added share button
+   * UPDATED: Fixed banner scaling, bio overflow, and mobile layout
    */
   async renderArtistPage(address) {
     UI.showLoading();
@@ -515,28 +526,37 @@ const Router = {
       ]);
       
       const displayName = profile?.name || Helpers.truncateAddress(address);
+      const bannerUrl = this.getImageUrl(profile?.bannerUrl);
+      const avatarUrl = this.getImageUrl(profile?.avatarUrl);
       
       UI.renderPage(`
-        <div class="animate-fade-in">
-          <!-- Banner -->
-          <div style="height: 200px; background: linear-gradient(135deg, var(--accent), #8b5cf6); border-radius: var(--radius-xl); margin-bottom: -60px;">
-            ${profile?.bannerUrl ? `<img src="${profile.bannerUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-xl);">` : ''}
+        <div class="artist-page animate-fade-in">
+          <!-- Banner - Now responsive -->
+          <div class="artist-banner">
+            ${profile?.bannerUrl ? `<img src="${bannerUrl}" alt="Banner" onerror="this.style.display='none'">` : ''}
           </div>
           
-          <!-- Profile -->
-          <div style="display: flex; align-items: flex-end; gap: 20px; padding: 0 24px; margin-bottom: 32px;">
-            <div style="width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--bg-primary); background: linear-gradient(135deg, var(--accent), #8b5cf6); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden;">
+          <!-- Profile Card -->
+          <div class="artist-profile-card">
+            <div class="artist-avatar">
               ${profile?.avatarUrl 
-                ? `<img src="${profile.avatarUrl}" style="width: 100%; height: 100%; object-fit: cover;">`
-                : displayName[0].toUpperCase()
+                ? `<img src="${avatarUrl}" alt="Avatar" onerror="this.style.display='none'">`
+                : `<span>${displayName[0].toUpperCase()}</span>`
               }
             </div>
-            <div style="flex: 1; padding-bottom: 16px;">
-              <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 4px;">${displayName}</h1>
-              <p style="color: var(--text-muted); font-size: 14px;">${Helpers.truncateAddress(address, 8, 6)}</p>
-              ${profile?.bio ? `<p style="color: var(--text-secondary); font-size: 14px; margin-top: 8px;">${profile.bio}</p>` : ''}
+            <div class="artist-info">
+              <h1 class="artist-name">${displayName}</h1>
+              <p class="artist-address">${Helpers.truncateAddress(address, 8, 6)}</p>
+              ${profile?.bio ? `
+                <div class="artist-bio-container">
+                  <p class="artist-bio">${profile.bio}</p>
+                </div>
+              ` : ''}
+              ${profile?.website ? `
+                <a href="${profile.website}" target="_blank" class="artist-website">${profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
+              ` : ''}
             </div>
-            <div style="padding-bottom: 16px;">
+            <div class="artist-actions">
               <button class="btn btn-secondary" id="share-artist-btn" title="Share Artist Profile">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="18" cy="5" r="3"></circle>
@@ -545,40 +565,43 @@ const Router = {
                   <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
                   <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                 </svg>
-                Share
+                <span class="btn-text">Share</span>
               </button>
             </div>
           </div>
           
           <!-- Releases -->
-          <div style="padding: 0 24px;">
+          <div class="artist-releases">
             <h2 class="section-title">Releases</h2>
             ${releases.length > 0 ? `
               <div class="release-grid">
-                ${releases.map(release => `
-                  <div class="release-card" data-release-id="${release.id}">
-                    <div class="release-card-cover">
-                      ${release.coverUrl 
-                        ? `<img src="${release.coverUrl}" alt="${release.title}">`
-                        : `<div class="placeholder">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                              <path d="M9 18V5l12-2v13"></path>
-                              <circle cx="6" cy="18" r="3"></circle>
-                              <circle cx="18" cy="16" r="3"></circle>
-                            </svg>
-                          </div>`
-                      }
-                      <span class="release-type-badge ${release.type}">${release.type}</span>
-                    </div>
-                    <div class="release-card-info">
-                      <div class="release-card-title">${release.title}</div>
-                      <div class="release-card-footer">
-                        <span class="release-card-price">${release.songPrice} XRP</span>
-                        <span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>
+                ${releases.map(release => {
+                  const coverUrl = this.getImageUrl(release.coverUrl);
+                  return `
+                    <div class="release-card" data-release-id="${release.id}">
+                      <div class="release-card-cover">
+                        ${release.coverUrl 
+                          ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
+                          : `<div class="placeholder">
+                              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18V5l12-2v13"></path>
+                                <circle cx="6" cy="18" r="3"></circle>
+                                <circle cx="18" cy="16" r="3"></circle>
+                              </svg>
+                            </div>`
+                        }
+                        <span class="release-type-badge ${release.type}">${release.type}</span>
+                      </div>
+                      <div class="release-card-info">
+                        <div class="release-card-title">${release.title}</div>
+                        <div class="release-card-footer">
+                          <span class="release-card-price">${release.songPrice || release.albumPrice} XRP</span>
+                          <span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                `).join('')}
+                  `;
+                }).join('')}
               </div>
             ` : `
               <div class="empty-state">
@@ -593,6 +616,221 @@ const Router = {
             `}
           </div>
         </div>
+        
+        <style>
+          /* ============================================
+             Artist Page Styles
+             ============================================ */
+          .artist-page {
+            padding-bottom: 120px;
+          }
+          
+          @media (max-width: 1024px) {
+            .artist-page {
+              padding-bottom: 140px;
+            }
+          }
+          
+          /* ============================================
+             Artist Banner - Responsive height
+             ============================================ */
+          .artist-banner {
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            margin-bottom: -60px;
+          }
+          
+          .artist-banner img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center center;
+          }
+          
+          @media (min-width: 768px) {
+            .artist-banner {
+              height: 220px;
+            }
+          }
+          
+          @media (min-width: 1024px) {
+            .artist-banner {
+              height: 260px;
+            }
+          }
+          
+          @media (min-width: 1280px) {
+            .artist-banner {
+              height: 300px;
+            }
+          }
+          
+          /* ============================================
+             Artist Profile Card
+             ============================================ */
+          .artist-profile-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 0 24px;
+            margin-bottom: 32px;
+          }
+          
+          @media (max-width: 640px) {
+            .artist-profile-card {
+              flex-direction: column;
+              align-items: center;
+              text-align: center;
+              padding: 0 16px;
+            }
+          }
+          
+          .artist-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 4px solid var(--bg-primary);
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+          }
+          
+          .artist-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          
+          .artist-info {
+            flex: 1;
+            min-width: 0;
+            padding-top: 60px;
+          }
+          
+          @media (max-width: 640px) {
+            .artist-info {
+              padding-top: 0;
+              width: 100%;
+            }
+          }
+          
+          .artist-name {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: var(--text-primary);
+          }
+          
+          .artist-address {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 12px;
+          }
+          
+          /* ============================================
+             Artist Bio - FIXED overflow
+             ============================================ */
+          .artist-bio-container {
+            max-width: 500px;
+            margin-bottom: 12px;
+          }
+          
+          .artist-bio {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: 100px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: pre-wrap;
+            padding-right: 8px;
+            margin: 0;
+          }
+          
+          /* Custom scrollbar for bio */
+          .artist-bio::-webkit-scrollbar {
+            width: 4px;
+          }
+          
+          .artist-bio::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          
+          .artist-bio::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 2px;
+          }
+          
+          .artist-bio::-webkit-scrollbar-thumb:hover {
+            background: var(--border-light);
+          }
+          
+          @media (max-width: 640px) {
+            .artist-bio-container {
+              max-width: 100%;
+              width: 100%;
+            }
+            
+            .artist-bio {
+              max-height: 120px;
+              text-align: center;
+              padding-right: 0;
+            }
+          }
+          
+          .artist-website {
+            color: var(--accent);
+            font-size: 14px;
+            text-decoration: none;
+            transition: opacity 150ms;
+          }
+          
+          .artist-website:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+          }
+          
+          /* ============================================
+             Artist Actions
+             ============================================ */
+          .artist-actions {
+            padding-top: 60px;
+            flex-shrink: 0;
+          }
+          
+          @media (max-width: 640px) {
+            .artist-actions {
+              padding-top: 16px;
+              width: 100%;
+              display: flex;
+              justify-content: center;
+            }
+          }
+          
+          /* ============================================
+             Artist Releases Section
+             ============================================ */
+          .artist-releases {
+            padding: 0 24px;
+          }
+          
+          @media (max-width: 640px) {
+            .artist-releases {
+              padding: 0 16px;
+            }
+          }
+        </style>
       `);
       
       // Bind share button
