@@ -3314,8 +3314,9 @@ showTrackPurchase(release, track, trackIdx) {
                 <input type="hidden" name="type" id="release-type" value="release">
                 
                 <div class="form-group">
-                  <label class="form-label">Title *</label>
-                  <input type="text" class="form-input" name="title" id="release-title" placeholder="Release title" required>
+                  <label class="form-label" id="title-label">Song Title *</label>
+                  <input type="text" class="form-input" name="title" id="release-title" placeholder="Song title" required>
+                  <p class="form-hint" id="title-hint">Don't include your artist name — it's added automatically</p>
                 </div>
                 
                 <div class="form-group">
@@ -3790,7 +3791,7 @@ if (editions > 10000) {
       container.innerHTML = tracks.map((track, idx) => `
         <div class="track-upload-item" data-idx="${idx}">
           <div class="track-num">${idx + 1}</div>
-          <input type="text" class="track-name-input" value="${track.title.replace(/"/g, '&quot;')}" data-idx="${idx}" placeholder="Track name">
+          <input type="text" class="track-name-input" value="${track.title.replace(/"/g, '&quot;')}" data-idx="${idx}" placeholder="Click to edit song title" title="Click to edit">
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
           <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
@@ -3820,7 +3821,23 @@ if (editions > 10000) {
       
       // Recalculate mint fee when tracks change
       updateMintFee();
-    }
+      
+      // Update title label based on track count
+      const titleLabel = document.getElementById('title-label');
+      const titleHint = document.getElementById('title-hint');
+      const titleInput = document.getElementById('release-title');
+      
+      if (tracks.length > 1) {
+        // Album/EP mode
+        if (titleLabel) titleLabel.textContent = 'Album/EP Title *';
+        if (titleInput) titleInput.placeholder = 'Album or EP name';
+        if (titleHint) titleHint.innerHTML = `Don't include your artist name — it's added automatically.<br><span style="color: var(--accent); margin-top: 4px; display: inline-block;">👆 Click track names below to edit song titles</span>`;
+      } else {
+        // Single mode
+        if (titleLabel) titleLabel.textContent = 'Song Title *';
+        if (titleInput) titleInput.placeholder = 'Song title';
+        if (titleHint) titleHint.textContent = "Don't include your artist name — it's added automatically";
+      }
     
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
@@ -3866,7 +3883,7 @@ if (editions > 10000) {
           tracks[i].audioCid = audioResult.cid;
           tracks[i].audioUrl = audioResult.url;
           uploadedTracks.push({
-            title: tracks[i].title,
+            title: tracks.length === 1 ? releaseTitle : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
             audioCid: audioResult.cid,
