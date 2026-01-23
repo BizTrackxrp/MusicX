@@ -5,7 +5,6 @@
  * - Check if artist has any sales (for sidebar visibility)
  * - Get all sold tracks with buyer details
  */
-
 import { neon } from '@neondatabase/serverless';
 
 export default async function handler(req, res) {
@@ -67,7 +66,7 @@ export default async function handler(req, res) {
       return res.json({ tracks });
     }
     
-    // ACTION: buyers - Get buyers for a specific track
+    // ACTION: buyers - Get buyers for a specific track (grouped by buyer)
     if (action === 'buyers') {
       const { trackId } = req.query;
       
@@ -86,17 +85,20 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Track not found or not owned by artist' });
       }
       
+      // Group by buyer and count copies they bought
       const buyers = await sql`
         SELECT 
           s.buyer_address,
           p.name as profile_name,
           p.avatar_url,
-          s.created_at as purchased_at,
-          s.edition_number
+          COUNT(s.id) as copies_bought,
+          MIN(s.created_at) as first_purchase,
+          MAX(s.created_at) as last_purchase
         FROM sales s
         LEFT JOIN profiles p ON s.buyer_address = p.wallet_address
         WHERE s.track_id = ${trackId}
-        ORDER BY s.created_at DESC
+        GROUP BY s.buyer_address, p.name, p.avatar_url
+        ORDER BY copies_bought DESC, first_purchase ASC
       `;
       
       return res.json({ buyers });
