@@ -3838,6 +3838,7 @@ if (editions > 10000) {
         if (titleInput) titleInput.placeholder = 'Song title';
         if (titleHint) titleHint.textContent = "Don't include your artist name — it's added automatically";
       }
+    }
     
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
