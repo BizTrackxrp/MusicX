@@ -526,10 +526,54 @@ const Router = {
     }
     return url;
   },
+
+  /**
+   * Show full bio in a modal
+   */
+  showBioModal(artistName, bio) {
+    const overlay = document.createElement('div');
+    overlay.className = 'bio-modal-overlay';
+    overlay.innerHTML = `
+      <div class="bio-modal">
+        <div class="bio-modal-header">
+          <h3>About ${artistName}</h3>
+          <button class="bio-modal-close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="bio-modal-content">${bio}</div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.querySelector('.bio-modal-close').addEventListener('click', () => {
+      overlay.remove();
+    });
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+    
+    // ESC key to close
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  },
   
   /**
    * Render artist page (public profile)
-   * UPDATED: Fixed banner scaling, bio overflow, and mobile layout
+   * UPDATED: Bio truncated with "more" button and modal popup
    */
   async renderArtistPage(address) {
     UI.showLoading();
@@ -564,7 +608,8 @@ const Router = {
               <p class="artist-address">${Helpers.truncateAddress(address, 8, 6)}</p>
               ${profile?.bio ? `
                 <div class="artist-bio-container">
-                  <p class="artist-bio">${profile.bio}</p>
+                  <p class="artist-bio" id="artist-bio-text">${profile.bio}</p>
+                  <button class="artist-bio-more" id="artist-bio-more-btn" style="display: none;">more</button>
                 </div>
               ` : ''}
               ${profile?.website ? `
@@ -753,42 +798,39 @@ const Router = {
           }
           
           /* ============================================
-             Artist Bio - FIXED overflow
+             Artist Bio - Truncated with "more" button
              ============================================ */
           .artist-bio-container {
-            max-width: 500px;
             margin-bottom: 12px;
+            max-width: 700px;
           }
           
           .artist-bio {
             color: var(--text-secondary);
             font-size: 14px;
             line-height: 1.6;
-            max-height: 100px;
-            overflow-y: auto;
             word-wrap: break-word;
             overflow-wrap: break-word;
             white-space: pre-wrap;
-            padding-right: 8px;
             margin: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
           }
           
-          /* Custom scrollbar for bio */
-          .artist-bio::-webkit-scrollbar {
-            width: 4px;
+          .artist-bio-more {
+            background: none;
+            border: none;
+            color: var(--accent);
+            font-size: 14px;
+            padding: 4px 0;
+            cursor: pointer;
+            margin-top: 4px;
           }
           
-          .artist-bio::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          
-          .artist-bio::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 2px;
-          }
-          
-          .artist-bio::-webkit-scrollbar-thumb:hover {
-            background: var(--border-light);
+          .artist-bio-more:hover {
+            text-decoration: underline;
           }
           
           @media (max-width: 640px) {
@@ -798,10 +840,80 @@ const Router = {
             }
             
             .artist-bio {
-              max-height: 120px;
+              -webkit-line-clamp: 2;
               text-align: center;
-              padding-right: 0;
             }
+            
+            .artist-bio-more {
+              display: block;
+              width: 100%;
+              text-align: center;
+            }
+          }
+          
+          /* Bio Modal */
+          .bio-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+          }
+          
+          .bio-modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+          }
+          
+          .bio-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+          }
+          
+          .bio-modal-header h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+          }
+          
+          .bio-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .bio-modal-close:hover {
+            color: var(--text-primary);
+          }
+          
+          .bio-modal-content {
+            padding: 24px;
+            overflow-y: auto;
+            color: var(--text-secondary);
+            font-size: 15px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-wrap: break-word;
           }
           
           .artist-website {
@@ -857,6 +969,19 @@ const Router = {
           avatarUrl: profile?.avatarUrl
         });
       });
+      
+      // Check if bio needs "more" button
+      const bioText = document.getElementById('artist-bio-text');
+      const bioMoreBtn = document.getElementById('artist-bio-more-btn');
+      if (bioText && bioMoreBtn) {
+        // Check if text is truncated (scrollHeight > clientHeight)
+        if (bioText.scrollHeight > bioText.clientHeight) {
+          bioMoreBtn.style.display = 'block';
+          bioMoreBtn.addEventListener('click', () => {
+            this.showBioModal(displayName, profile.bio);
+          });
+        }
+      }
       
       // Bind release clicks
       document.querySelectorAll('.release-card').forEach(card => {
