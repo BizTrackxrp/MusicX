@@ -255,6 +255,29 @@ const UI = {
     if (isLoggedIn) {
       this.updateUserCard();
       this.updatePlaylists();
+      this.checkAndShowSalesTab();
+    }
+  },
+  
+  /**
+   * Check if user is an artist with sales, show Sales tab if so
+   */
+  async checkAndShowSalesTab() {
+    const salesNavItem = document.getElementById('sales-nav-item');
+    if (!salesNavItem) return;
+    
+    // Hide by default
+    salesNavItem.classList.add('hidden');
+    
+    if (!AppState.user?.address) return;
+    
+    try {
+      const hasSales = await API.checkArtistHasSales(AppState.user.address);
+      if (hasSales) {
+        salesNavItem.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Failed to check artist sales:', error);
     }
   },
   
@@ -300,8 +323,12 @@ const UI = {
   showLoggedOutState() {
     this.updateAuthUI();
     
+    // Hide sales tab
+    const salesNavItem = document.getElementById('sales-nav-item');
+    if (salesNavItem) salesNavItem.classList.add('hidden');
+    
     // Navigate to stream if on profile or other user-only pages
-    if (['profile', 'liked'].includes(AppState.currentPage)) {
+    if (['profile', 'liked', 'sales'].includes(AppState.currentPage)) {
       Router.navigate('stream');
     }
   },
