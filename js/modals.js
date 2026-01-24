@@ -3872,9 +3872,8 @@ if (editions > 10000) {
         document.getElementById('cover-cid').value = coverResult.cid;
         document.getElementById('cover-url').value = coverResult.url;
         
-       // Step 2: Upload audio files to IPFS
+        // Step 2: Upload audio files to IPFS
         const uploadedTracks = [];
-        const releaseTitle = document.getElementById('release-title').value;
         for (let i = 0; i < tracks.length; i++) {
           showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}...`, 'Audio files take longer to upload');
           tracks[i].status = 'uploading';
