@@ -18,6 +18,155 @@ import { neon } from '@neondatabase/serverless';
 import * as xrpl from 'xrpl';
 
 const PLATFORM_FEE_PERCENT = 2;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+
+/**
+ * Send a purchase notification to Discord
+ */
+async function sendDiscordBuyAlert(purchase) {
+  if (!DISCORD_WEBHOOK_URL) {
+    console.log('Discord webhook not configured, skipping notification');
+    return;
+  }
+
+  const {
+    trackTitle,
+    releaseTitle,
+    artistName,
+    buyerAddress,
+    price,
+    editionNumber,
+    totalEditions,
+    coverUrl,
+    releaseType,
+    txHash,
+    isAlbumPurchase,
+    trackCount,
+  } = purchase;
+
+  const buyerShort = `${buyerAddress.slice(0, 6)}...${buyerAddress.slice(-4)}`;
+  
+  // For album purchases, show a special message
+  const title = isAlbumPurchase 
+    ? `🎵 Album Purchase! (${trackCount} tracks)`
+    : '🎵 New NFT Purchase!';
+  
+  const embed = {
+    embeds: [
+      {
+        title,
+        color: isAlbumPurchase ? 0xa855f7 : 0x3b82f6, // Purple for albums, blue for singles
+        thumbnail: {
+          url: coverUrl || 'https://xrpmusic.app/placeholder.png',
+        },
+        fields: [
+          {
+            name: '📀 Release',
+            value: releaseTitle || 'Unknown',
+            inline: true,
+          },
+          {
+            name: '👤 Artist',
+            value: artistName || 'Unknown Artist',
+            inline: true,
+          },
+          {
+            name: '💰 Total',
+            value: `${price} XRP`,
+            inline: true,
+          },
+          {
+            name: '🏷️ Edition',
+            value: `#${editionNumber} of ${totalEditions}`,
+            inline: true,
+          },
+          {
+            name: '🛒 Buyer',
+            value: `\`${buyerShort}\``,
+            inline: true,
+          },
+          {
+            name: '📀 Type',
+            value: releaseType || 'Album',
+            inline: true,
+          },
+        ],
+        footer: {
+          text: 'XRP Music • Powered by XRPL',
+        },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+
+  if (txHash) {
+    embed.embeds[0].fields.push({
+      name: '🔗 Transaction',
+      value: `[View on XRPL](https://livenet.xrpl.org/transactions/${txHash})`,
+      inline: false,
+    });
+  }
+
+  try {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(embed),
+    });
+
+    if (!response.ok) {
+      console.error('Discord webhook failed:', response.status);
+    } else {
+      console.log('✅ Discord album buy alert sent!');
+    }
+  } catch (error) {
+    console.error('Discord webhook error:', error);
+  }
+}
+
+/**
+ * Send milestone notifications (first sale, sold out, etc)
+ */
+async function sendDiscordMilestoneAlert(milestone) {
+  if (!DISCORD_WEBHOOK_URL) return;
+
+  const { type, releaseTitle, artistName, coverUrl, details } = milestone;
+
+  const titles = {
+    'sold_out': '🔥 SOLD OUT!',
+    'first_sale': '🎉 First Album Sale!',
+    'milestone_10': '⭐ 10 Albums Sold!',
+    'milestone_50': '🌟 50 Albums Sold!',
+    'milestone_100': '💫 100 Albums Sold!',
+    'milestone_500': '🚀 500 Albums Sold!',
+    'milestone_1000': '👑 1000 Albums Sold!',
+  };
+
+  const embed = {
+    embeds: [
+      {
+        title: titles[type] || '🎵 Milestone!',
+        description: `**${releaseTitle}** by ${artistName}`,
+        color: type === 'sold_out' ? 0xef4444 : 0x22c55e,
+        thumbnail: { url: coverUrl },
+        fields: details ? [{ name: 'Details', value: details }] : [],
+        footer: { text: 'XRP Music' },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+
+  try {
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(embed),
+    });
+    console.log('✅ Discord milestone alert sent:', type);
+  } catch (error) {
+    console.error('Discord milestone error:', error);
+  }
+}
 
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
@@ -268,6 +417,9 @@ async function handleInitPurchase(req, res, sql) {
       releaseId,
       releaseTitle: release.title,
       artistAddress: release.artist_address,
+      artistName: release.artist_name,
+      coverUrl: release.cover_url,
+      totalEditions: release.total_editions,
       trackCount: tracks.length,
       trackPrice,
       totalPrice,
@@ -625,6 +777,7 @@ async function handleConfirmSingle(req, res, sql) {
 
 /**
  * Finalize album purchase - pay artist after all tracks transferred
+ * 🎉 This is where we send the Discord notification for album purchases!
  */
 async function handleFinalize(req, res, sql) {
   try {
@@ -641,6 +794,15 @@ async function handleFinalize(req, res, sql) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
     
+    // Get release details for Discord notification
+    const releases = await sql`
+      SELECT r.*, 
+        (SELECT MIN(COALESCE(t.sold_count, 0)) FROM tracks t WHERE t.release_id = r.id) as min_sold_count
+      FROM releases r
+      WHERE r.id = ${releaseId}
+    `;
+    const release = releases[0];
+    
     // Update release sold_editions = MIN of all track sold_counts
     await sql`
       UPDATE releases r
@@ -656,15 +818,13 @@ async function handleFinalize(req, res, sql) {
     const platformFeeTotal = totalPrice * (PLATFORM_FEE_PERCENT / 100);
     const artistPayment = totalPrice - platformFeeTotal;
     
+    let paymentTxHash = null;
+    
     if (artistPayment > 0) {
       const client = new xrpl.Client('wss://xrplcluster.com');
       await client.connect();
       
       const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-      
-      // Get release title for memo
-      const releases = await sql`SELECT title FROM releases WHERE id = ${releaseId}`;
-      const releaseTitle = releases[0]?.title || 'Album';
       
       const paymentTx = await client.autofill({
         TransactionType: 'Payment',
@@ -674,30 +834,71 @@ async function handleFinalize(req, res, sql) {
         Memos: [{
           Memo: {
             MemoType: xrpl.convertStringToHex('XRPMusic'),
-            MemoData: xrpl.convertStringToHex(`Album Sale: ${releaseTitle}`),
+            MemoData: xrpl.convertStringToHex(`Album Sale: ${release?.title || 'Album'}`),
           }
         }],
       });
       
       const signedPayment = platformWallet.sign(paymentTx);
       const paymentResult = await client.submitAndWait(signedPayment.tx_blob);
+      paymentTxHash = paymentResult.result.hash;
       
       await client.disconnect();
       
       console.log('💰 Paid artist:', artistPayment, 'XRP for', trackCount, 'tracks');
+    }
+    
+    // 🎉 DISCORD NOTIFICATION - Send album buy alert
+    if (release && buyerAddress) {
+      // Get the edition number (min sold count after this purchase)
+      const editionNumber = (release.min_sold_count || 0) + 1;
       
-      return res.json({
-        success: true,
-        artistPayment,
-        platformFee: platformFeeTotal,
-        paymentTxHash: paymentResult.result.hash,
+      await sendDiscordBuyAlert({
+        trackTitle: null,
+        releaseTitle: release.title,
+        artistName: release.artist_name,
+        buyerAddress: buyerAddress,
+        price: totalPrice,
+        editionNumber: editionNumber,
+        totalEditions: release.total_editions,
+        coverUrl: release.cover_url,
+        releaseType: release.type || 'Album',
+        txHash: paymentTxHash,
+        isAlbumPurchase: true,
+        trackCount: trackCount,
       });
+      
+      // Check for milestones
+      if (editionNumber === 1) {
+        await sendDiscordMilestoneAlert({
+          type: 'first_sale',
+          releaseTitle: release.title,
+          artistName: release.artist_name,
+          coverUrl: release.cover_url,
+        });
+      } else if (editionNumber === release.total_editions) {
+        await sendDiscordMilestoneAlert({
+          type: 'sold_out',
+          releaseTitle: release.title,
+          artistName: release.artist_name,
+          coverUrl: release.cover_url,
+          details: `All ${release.total_editions} editions sold! 🚀`,
+        });
+      } else if ([10, 50, 100, 500, 1000].includes(editionNumber)) {
+        await sendDiscordMilestoneAlert({
+          type: `milestone_${editionNumber}`,
+          releaseTitle: release.title,
+          artistName: release.artist_name,
+          coverUrl: release.cover_url,
+        });
+      }
     }
     
     return res.json({
       success: true,
-      artistPayment: 0,
+      artistPayment,
       platformFee: platformFeeTotal,
+      paymentTxHash,
     });
     
   } catch (error) {
