@@ -20,8 +20,11 @@ import * as xrpl from 'xrpl';
 const PLATFORM_FEE_PERCENT = 2;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
+// 🤖 Buy bot animated gif - host this on your server and update the URL
+const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.app/buybot.gif';
+
 /**
- * Send a purchase notification to Discord
+ * Send a purchase notification to Discord (compact version)
  */
 async function sendDiscordBuyAlert(purchase) {
   if (!DISCORD_WEBHOOK_URL) {
@@ -33,79 +36,42 @@ async function sendDiscordBuyAlert(purchase) {
     trackTitle,
     releaseTitle,
     artistName,
-    buyerAddress,
     price,
     editionNumber,
     totalEditions,
     coverUrl,
-    releaseType,
     txHash,
     isAlbumPurchase,
     trackCount,
   } = purchase;
 
-  const buyerShort = `${buyerAddress.slice(0, 6)}...${buyerAddress.slice(-4)}`;
+  // Build compact description
+  const title = isAlbumPurchase ? `🎵 Album Purchase!` : '🎵 New Purchase!';
+  const trackInfo = isAlbumPurchase ? `${trackCount} tracks` : '';
   
-  // For album purchases, show a special message
-  const title = isAlbumPurchase 
-    ? `🎵 Album Purchase! (${trackCount} tracks)`
-    : '🎵 New NFT Purchase!';
-  
+  const description = [
+    `**${releaseTitle}**${trackInfo ? ` (${trackInfo})` : ''}`,
+    `by ${artistName || 'Unknown Artist'}`,
+    ``,
+    `💰 **${price} XRP** • Edition #${editionNumber}/${totalEditions}`,
+  ].join('\n');
+
   const embed = {
     embeds: [
       {
         title,
-        color: isAlbumPurchase ? 0xa855f7 : 0x3b82f6, // Purple for albums, blue for singles
+        description,
+        color: isAlbumPurchase ? 0xa855f7 : 0x3b82f6,
         thumbnail: {
           url: coverUrl || 'https://xrpmusic.app/placeholder.png',
         },
-        fields: [
-          {
-            name: '📀 Release',
-            value: releaseTitle || 'Unknown',
-            inline: true,
-          },
-          {
-            name: '👤 Artist',
-            value: artistName || 'Unknown Artist',
-            inline: true,
-          },
-          {
-            name: '💰 Total',
-            value: `${price} XRP`,
-            inline: true,
-          },
-          {
-            name: '🏷️ Edition',
-            value: `#${editionNumber} of ${totalEditions}`,
-            inline: true,
-          },
-          {
-            name: '🛒 Buyer',
-            value: `\`${buyerShort}\``,
-            inline: true,
-          },
-          {
-            name: '📀 Type',
-            value: releaseType || 'Album',
-            inline: true,
-          },
-        ],
-        footer: {
-          text: 'XRP Music • Powered by XRPL',
+        image: {
+          url: BUYBOT_GIF_URL,
         },
-        timestamp: new Date().toISOString(),
+        url: txHash ? `https://livenet.xrpl.org/transactions/${txHash}` : undefined,
       },
     ],
   };
-
-  if (txHash) {
-    embed.embeds[0].fields.push({
-      name: '🔗 Transaction',
-      value: `[View on XRPL](https://livenet.xrpl.org/transactions/${txHash})`,
-      inline: false,
-    });
-  }
 
   try {
     const response = await fetch(DISCORD_WEBHOOK_URL, {
@@ -125,33 +91,29 @@ async function sendDiscordBuyAlert(purchase) {
 }
 
 /**
- * Send milestone notifications (first sale, sold out, etc)
+ * Send milestone notifications (first sale, sold out, etc) - compact version
  */
 async function sendDiscordMilestoneAlert(milestone) {
   if (!DISCORD_WEBHOOK_URL) return;
 
-  const { type, releaseTitle, artistName, coverUrl, details } = milestone;
+  const { type, releaseTitle, artistName, coverUrl } = milestone;
 
-  const titles = {
-    'sold_out': '🔥 SOLD OUT!',
-    'first_sale': '🎉 First Album Sale!',
-    'milestone_10': '⭐ 10 Albums Sold!',
-    'milestone_50': '🌟 50 Albums Sold!',
-    'milestone_100': '💫 100 Albums Sold!',
-    'milestone_500': '🚀 500 Albums Sold!',
-    'milestone_1000': '👑 1000 Albums Sold!',
+  const messages = {
+    'sold_out': '🔥 **SOLD OUT!**',
+    'first_sale': '🎉 **First Album Sale!**',
+    'milestone_10': '⭐ **10 Sold!**',
+    'milestone_50': '🌟 **50 Sold!**',
+    'milestone_100': '💫 **100 Sold!**',
+    'milestone_500': '🚀 **500 Sold!**',
+    'milestone_1000': '👑 **1000 Sold!**',
   };
 
   const embed = {
     embeds: [
       {
-        title: titles[type] || '🎵 Milestone!',
-        description: `**${releaseTitle}** by ${artistName}`,
+        description: `${messages[type] || '🎵 Milestone!'}\n\n**${releaseTitle}** by ${artistName}`,
         color: type === 'sold_out' ? 0xef4444 : 0x22c55e,
         thumbnail: { url: coverUrl },
-        fields: details ? [{ name: 'Details', value: details }] : [],
-        footer: { text: 'XRP Music' },
-        timestamp: new Date().toISOString(),
       },
     ],
   };
