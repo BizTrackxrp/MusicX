@@ -3884,7 +3884,7 @@ if (editions > 10000) {
           tracks[i].audioCid = audioResult.cid;
           tracks[i].audioUrl = audioResult.url;
           uploadedTracks.push({
-            title: tracks.length === 1 ? releaseTitle : tracks[i].title,
+  title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
             audioCid: audioResult.cid,
