@@ -63,10 +63,10 @@ async function sendDiscordBuyAlert(purchase) {
         description,
         color: isAlbumPurchase ? 0xa855f7 : 0x3b82f6,
         thumbnail: {
-          url: coverUrl || 'https://xrpmusic.app/placeholder.png',
+          url: BUYBOT_GIF_URL,
         },
         image: {
-          url: BUYBOT_GIF_URL,
+          url: coverUrl || 'https://xrpmusic.app/placeholder.png',
         },
         url: txHash ? `https://livenet.xrpl.org/transactions/${txHash}` : undefined,
       },
