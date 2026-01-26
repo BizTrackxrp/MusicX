@@ -24,6 +24,31 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.app/buybot.gif';
 
 /**
+ * Send artist notification for a sale
+ */
+async function createArtistSaleNotification(sql, sale) {
+  const { artistAddress, releaseTitle, price, editionNumber, totalEditions, trackCount, releaseId } = sale;
+  
+  if (!artistAddress) return;
+  
+  try {
+    const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const title = `Album "${releaseTitle}" sold!`;
+    const message = `${trackCount} tracks • Edition #${editionNumber}${totalEditions ? ` of ${totalEditions}` : ''}`;
+    
+    await sql`
+      INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, amount, created_at)
+      VALUES (${id}, ${artistAddress}, 'sale', ${title}, ${message}, ${releaseId || null}, ${null}, ${price}, NOW())
+    `;
+    
+    console.log('✅ Artist album sale notification created for:', artistAddress);
+  } catch (error) {
+    // Don't fail the sale if notification fails
+    console.error('Failed to create artist notification:', error);
+  }
+}
+
+/**
  * Send a purchase notification to Discord (compact version)
  */
 async function sendDiscordBuyAlert(purchase) {
@@ -810,11 +835,24 @@ async function handleFinalize(req, res, sql) {
       console.log('💰 Paid artist:', artistPayment, 'XRP for', trackCount, 'tracks');
     }
     
+    // Get the edition number (min sold count after this purchase)
+    const editionNumber = (release?.min_sold_count || 0) + 1;
+    
+    // 🔔 ARTIST IN-APP NOTIFICATION
+    if (release) {
+      await createArtistSaleNotification(sql, {
+        artistAddress: artistAddress,
+        releaseTitle: release.title,
+        price: totalPrice,
+        editionNumber: editionNumber,
+        totalEditions: release.total_editions,
+        trackCount: trackCount,
+        releaseId: releaseId,
+      });
+    }
+    
     // 🎉 DISCORD NOTIFICATION - Send album buy alert
     if (release && buyerAddress) {
-      // Get the edition number (min sold count after this purchase)
-      const editionNumber = (release.min_sold_count || 0) + 1;
-      
       await sendDiscordBuyAlert({
         trackTitle: null,
         releaseTitle: release.title,
