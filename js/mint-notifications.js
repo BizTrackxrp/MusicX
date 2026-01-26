@@ -15,7 +15,29 @@ const MintNotifications = {
     this.checkForActiveJobs();
   },
   
-  toggleDropdown() {
+  /**
+   * Cleanup on logout
+   */
+  cleanup() {
+    this.stopPolling();
+    if (this.dropdown) {
+      this.dropdown.style.display = 'none';
+    }
+    // Clear badge
+    const bell = document.getElementById('mint-notifications-bell');
+    const badge = bell?.querySelector('.mint-bell-badge');
+    if (badge) {
+      badge.style.display = 'none';
+    }
+  },
+  
+  toggleDropdown(event) {
+    // Prevent event from bubbling up and causing page reload/navigation
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     if (!this.dropdown) {
       this.createDropdown();
     }
@@ -107,7 +129,7 @@ const MintNotifications = {
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
             </svg>
           </button>
-          <button class="mint-dropdown-close" onclick="MintNotifications.toggleDropdown()">
+          <button class="mint-dropdown-close" onclick="MintNotifications.toggleDropdown(event)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -812,9 +834,29 @@ document.head.appendChild(mintNotificationStyles);
 
 // Auto-check for notifications on page load (only if signed in)
 document.addEventListener('DOMContentLoaded', () => {
+  // Bind the bell click handler properly to prevent event bubbling issues
+  const bell = document.getElementById('mint-notifications-bell');
+  if (bell) {
+    // Remove any existing onclick attribute and use proper event listener
+    bell.removeAttribute('onclick');
+    bell.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      MintNotifications.toggleDropdown(event);
+    });
+  }
+  
   setTimeout(() => {
     if (window.AppState?.user?.address) {
       MintNotifications.checkForActiveJobs();
+    } else {
+      // Also check localStorage session
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          MintNotifications.checkForActiveJobs();
+        }
+      } catch (e) {}
     }
   }, 1500);
 });
