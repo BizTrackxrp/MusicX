@@ -24,8 +24,50 @@ const MintNotifications = {
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       this.fetchAndRender();
+      
+      // Mark all as read when opening dropdown (removes the badge)
+      this.markAllReadOnView();
     } else {
       this.dropdown.style.display = 'none';
+    }
+  },
+  
+  /**
+   * Mark all notifications as read when viewing dropdown
+   */
+  async markAllReadOnView() {
+    let address = window.AppState?.user?.address;
+    
+    if (!address) {
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          address = parsed.address;
+        }
+      } catch (e) {}
+    }
+    
+    if (!address) return;
+    
+    try {
+      await fetch('/api/artist-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'markAllRead',
+          address
+        })
+      });
+      
+      // Hide the badge
+      const bell = document.getElementById('mint-notifications-bell');
+      const badge = bell?.querySelector('.mint-bell-badge');
+      if (badge) {
+        badge.style.display = 'none';
+      }
+    } catch (e) {
+      // Ignore errors
     }
   },
   
@@ -647,8 +689,8 @@ mintNotificationStyles.textContent = `
   }
   
   .notification-icon.sale {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
   }
   
   .notification-icon.mint {
@@ -680,7 +722,7 @@ mintNotificationStyles.textContent = `
   .notification-amount {
     font-size: 13px;
     font-weight: 600;
-    color: #22c55e;
+    color: #3b82f6;
     margin-bottom: 4px;
   }
   
@@ -749,7 +791,7 @@ mintNotificationStyles.textContent = `
   }
   
   .mint-bell-badge.unread {
-    background: #22c55e;
+    background: #3b82f6;
   }
   
   @keyframes mintPulse {
