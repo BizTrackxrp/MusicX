@@ -129,8 +129,8 @@ const UI = {
       // Debounced search
       searchTimeout = setTimeout(async () => {
         try {
-          const results = await API.searchReleases(query);
-          this.showSearchResults(results);
+          const results = await API.search(query);
+          this.showSearchResults(results, query);
         } catch (error) {
           console.error('Search failed:', error);
         }
@@ -157,57 +157,175 @@ const UI = {
         searchResults?.classList.add('hidden');
       }
     });
+    
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchResults?.classList.add('hidden');
+        searchInput.blur();
+      }
+    });
   },
   
   /**
-   * Show search results
+   * Show search results with categories
    */
-  showSearchResults(results) {
+  showSearchResults(results, query) {
     const container = document.getElementById('search-results');
     if (!container) return;
     
-    if (results.length === 0) {
+    const { artists = [], tracks = [], albums = [], singles = [] } = results;
+    const hasResults = artists.length > 0 || tracks.length > 0 || albums.length > 0 || singles.length > 0;
+    
+    if (!hasResults) {
       container.innerHTML = `
-        <div class="empty-state" style="padding: 32px;">
+        <div class="search-empty">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 18V5l12-2v13"></path>
-            <circle cx="6" cy="18" r="3"></circle>
-            <circle cx="18" cy="16" r="3"></circle>
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <p style="margin-top: 8px; color: var(--text-muted);">No results found</p>
+          <p>No results for "${query}"</p>
         </div>
       `;
       container.classList.remove('hidden');
       return;
     }
     
-    container.innerHTML = results.map(release => `
-      <div class="search-result-item" data-release-id="${release.id}">
-        <img 
-          class="search-result-cover" 
-          src="${IpfsHelper.toProxyUrl(release.coverUrl) || '/placeholder.png'}"
-          alt="${release.title}"
-        >
-        <div class="search-result-info">
-          <div class="search-result-title">${release.title}</div>
-          <div class="search-result-artist">
-            ${release.artistName || Helpers.truncateAddress(release.artistAddress)} • ${release.type}
-          </div>
+    let html = '';
+    
+    // Artists section
+    if (artists.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Artists</div>
+          ${artists.map(artist => `
+            <div class="search-result-item" data-type="artist" data-address="${artist.address}">
+              <div class="search-result-avatar">
+                ${artist.avatar 
+                  ? `<img src="${IpfsHelper.toProxyUrl(artist.avatar)}" alt="${artist.name}">`
+                  : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>`
+                }
+              </div>
+              <div class="search-result-info">
+                <div class="search-result-title">${artist.name || Helpers.truncateAddress(artist.address)}</div>
+                <div class="search-result-subtitle">Artist • ${artist.releaseCount} release${artist.releaseCount !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+          `).join('')}
         </div>
-        <div class="search-result-price">${release.songPrice} XRP</div>
-      </div>
-    `).join('');
+      `;
+    }
+    
+    // Albums section
+    if (albums.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Albums</div>
+          ${albums.map(album => `
+            <div class="search-result-item" data-type="album" data-id="${album.id}">
+              <img 
+                class="search-result-cover" 
+                src="${IpfsHelper.toProxyUrl(album.coverUrl) || '/placeholder.png'}"
+                alt="${album.title}"
+              >
+              <div class="search-result-info">
+                <div class="search-result-title">${album.title}</div>
+                <div class="search-result-subtitle">${album.artistName || Helpers.truncateAddress(album.artistAddress)} • ${album.trackCount} tracks</div>
+              </div>
+              <div class="search-result-price">${album.price} XRP</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    // Singles section
+    if (singles.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Singles</div>
+          ${singles.map(single => `
+            <div class="search-result-item" data-type="single" data-id="${single.id}">
+              <img 
+                class="search-result-cover" 
+                src="${IpfsHelper.toProxyUrl(single.coverUrl) || '/placeholder.png'}"
+                alt="${single.title}"
+              >
+              <div class="search-result-info">
+                <div class="search-result-title">${single.title}</div>
+                <div class="search-result-subtitle">${single.artistName || Helpers.truncateAddress(single.artistAddress)} • Single</div>
+              </div>
+              <div class="search-result-price">${single.price} XRP</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    // Tracks section
+    if (tracks.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Tracks</div>
+          ${tracks.map(track => `
+            <div class="search-result-item" data-type="track" data-id="${track.id}" data-release-id="${track.releaseId}">
+              <img 
+                class="search-result-cover" 
+                src="${IpfsHelper.toProxyUrl(track.coverUrl) || '/placeholder.png'}"
+                alt="${track.title}"
+              >
+              <div class="search-result-info">
+                <div class="search-result-title">${track.title}</div>
+                <div class="search-result-subtitle">${track.artistName || Helpers.truncateAddress(track.artistAddress)} • ${track.releaseTitle}</div>
+              </div>
+              <div class="search-result-price">${track.price} XRP</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    container.innerHTML = html;
     
     // Bind click events
     container.querySelectorAll('.search-result-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const releaseId = item.dataset.releaseId;
-        const release = results.find(r => r.id === releaseId);
-        if (release) {
-          Modals.showRelease(release);
-          container.classList.add('hidden');
-          document.getElementById('search-input').value = '';
-          document.getElementById('search-clear')?.classList.add('hidden');
+      item.addEventListener('click', async () => {
+        const type = item.dataset.type;
+        
+        // Close search
+        container.classList.add('hidden');
+        document.getElementById('search-input').value = '';
+        document.getElementById('search-clear')?.classList.add('hidden');
+        
+        if (type === 'artist') {
+          // Navigate to artist profile
+          const address = item.dataset.address;
+          Router.navigate('profile', { address });
+        } else if (type === 'album' || type === 'single') {
+          // Open release modal
+          const releaseId = item.dataset.id;
+          try {
+            const data = await API.getRelease(releaseId);
+            if (data.release) {
+              Modals.showRelease(data.release);
+            }
+          } catch (error) {
+            console.error('Failed to load release:', error);
+          }
+        } else if (type === 'track') {
+          // Open release modal for the track's release
+          const releaseId = item.dataset.releaseId;
+          try {
+            const data = await API.getRelease(releaseId);
+            if (data.release) {
+              Modals.showRelease(data.release);
+            }
+          } catch (error) {
+            console.error('Failed to load release:', error);
+          }
         }
       });
     });
