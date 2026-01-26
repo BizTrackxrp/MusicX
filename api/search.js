@@ -8,6 +8,12 @@
 
 import { neon } from '@neondatabase/serverless';
 
+// Helper for address truncation (server-side) - defined first
+function truncateAddress(address, start = 6, end = 4) {
+  if (!address) return '';
+  return `${address.slice(0, start)}...${address.slice(-end)}`;
+}
+
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
@@ -27,22 +33,21 @@ export default async function handler(req, res) {
     const { q, limit = 10 } = req.query;
     
     if (!q || q.trim().length < 2) {
-      return res.json({ artists: [], tracks: [], albums: [], releases: [] });
+      return res.json({ artists: [], tracks: [], albums: [], singles: [], releases: [] });
     }
     
     const query = q.trim().toLowerCase();
     const searchPattern = `%${query}%`;
     const limitNum = Math.min(parseInt(limit) || 10, 20);
     
-    // Search artists (from profiles and releases)
+    // Search artists (from profiles and releases) - simplified query
     const artists = await sql`
-      SELECT DISTINCT ON (COALESCE(p.wallet_address, r.artist_address))
-        COALESCE(p.wallet_address, r.artist_address) as address,
+      SELECT 
+        r.artist_address as address,
         COALESCE(p.display_name, r.artist_name) as name,
         p.avatar_url as avatar,
         p.bio,
-        (SELECT COUNT(*) FROM releases WHERE artist_address = COALESCE(p.wallet_address, r.artist_address) 
-          AND (is_minted = true OR mint_fee_paid = true OR status = 'live')) as release_count
+        COUNT(DISTINCT r.id) as release_count
       FROM releases r
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
@@ -50,8 +55,10 @@ export default async function handler(req, res) {
           LOWER(COALESCE(p.display_name, r.artist_name, '')) LIKE ${searchPattern}
           OR LOWER(r.artist_address) LIKE ${searchPattern}
         )
-      ORDER BY COALESCE(p.wallet_address, r.artist_address), 
-        CASE WHEN LOWER(COALESCE(p.display_name, r.artist_name, '')) = ${query} THEN 0 ELSE 1 END
+      GROUP BY r.artist_address, p.display_name, r.artist_name, p.avatar_url, p.bio
+      ORDER BY 
+        CASE WHEN LOWER(COALESCE(p.display_name, r.artist_name, '')) = ${query} THEN 0 ELSE 1 END,
+        COUNT(DISTINCT r.id) DESC
       LIMIT ${limitNum}
     `;
     
@@ -139,7 +146,7 @@ export default async function handler(req, res) {
     const formattedArtists = artists.map(a => ({
       type: 'artist',
       address: a.address,
-      name: a.name || Helpers.truncateAddress(a.address),
+      name: a.name || truncateAddress(a.address),
       avatar: a.avatar,
       bio: a.bio,
       releaseCount: parseInt(a.release_count) || 0
@@ -203,20 +210,12 @@ export default async function handler(req, res) {
       tracks: formattedTracks,
       albums: formattedAlbums,
       singles: formattedSingles,
-      releases: allReleases, // backwards compat
+      releases: allReleases,
       query: q
     });
     
   } catch (error) {
     console.error('Search API error:', error);
-    return res.status(500).json({ error: 'Search failed' });
+    return res.status(500).json({ error: 'Search failed', details: error.message });
   }
 }
-
-// Helper for address truncation (server-side)
-const Helpers = {
-  truncateAddress(address, start = 6, end = 4) {
-    if (!address) return '';
-    return `${address.slice(0, start)}...${address.slice(-end)}`;
-  }
-};
