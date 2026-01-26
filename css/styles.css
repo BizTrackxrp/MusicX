@@ -604,26 +604,48 @@ body:not(.light) .toggle-knob {
   color: var(--text-primary);
 }
 
+/* ============================================
+   Search Results Dropdown
+   ============================================ */
 .search-results {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
-  margin-top: 8px;
-  max-height: 400px;
-  overflow-y: auto;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
+  margin-top: 8px;
+  max-height: 480px;
+  overflow-y: auto;
+  z-index: 1000;
   box-shadow: var(--shadow-xl);
-  z-index: 100;
 }
 
+/* Search Section */
+.search-section {
+  padding: 8px 0;
+}
+
+.search-section:not(:last-child) {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-section-title {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+/* Search Result Item */
 .search-result-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 10px 16px;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
@@ -632,17 +654,39 @@ body:not(.light) .toggle-knob {
   background: var(--bg-hover);
 }
 
+/* Cover Image - used for tracks, albums, and artist avatars */
 .search-result-cover {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-md);
   object-fit: cover;
+  flex-shrink: 0;
   background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  overflow: hidden;
 }
 
+/* Artist avatar - circular */
+.search-result-cover.artist-avatar {
+  border-radius: 50%;
+}
+
+.search-result-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Result Info */
 .search-result-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .search-result-title {
@@ -654,17 +698,44 @@ body:not(.light) .toggle-knob {
   text-overflow: ellipsis;
 }
 
-.search-result-artist {
+.search-result-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Price Badge */
+.search-result-price {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Empty State */
+.search-empty {
+  padding: 40px 20px;
+  text-align: center;
   color: var(--text-muted);
 }
 
-.search-result-price {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--accent);
+.search-empty svg {
+  opacity: 0.5;
+  margin-bottom: 12px;
 }
 
+.search-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ============================================
+   Header Actions & Rest of Header
+   ============================================ */
 .header-actions {
   display: flex;
   align-items: center;
