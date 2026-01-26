@@ -114,7 +114,10 @@ const MintNotifications = {
     const content = document.getElementById('mint-dropdown-content');
     if (!content) return;
     
-    const address = window.AppState?.user?.address;
+    // Check multiple sources for user address
+    const address = window.AppState?.user?.address 
+      || localStorage.getItem('walletAddress')
+      || localStorage.getItem('xrp_music_wallet');
     
     if (!address) {
       content.innerHTML = `
@@ -134,12 +137,32 @@ const MintNotifications = {
     try {
       // Fetch both mint jobs and sale notifications in parallel
       const [mintRes, salesRes] = await Promise.all([
-        fetch(`/api/my-mint-jobs?address=${address}`),
-        fetch(`/api/artist-notifications?address=${address}&limit=20`)
+        fetch(`/api/my-mint-jobs?address=${address}`).catch(e => ({ ok: false, error: e })),
+        fetch(`/api/artist-notifications?address=${address}&limit=20`).catch(e => ({ ok: false, error: e }))
       ]);
       
-      const mintData = await mintRes.json();
-      const salesData = await salesRes.json();
+      let mintData = { success: false, jobs: {} };
+      let salesData = { success: false, notifications: [], unreadCount: 0 };
+      
+      // Parse mint response
+      if (mintRes.ok) {
+        try {
+          mintData = await mintRes.json();
+        } catch (e) {
+          console.error('Failed to parse mint response:', e);
+        }
+      }
+      
+      // Parse sales response
+      if (salesRes.ok) {
+        try {
+          salesData = await salesRes.json();
+        } catch (e) {
+          console.error('Failed to parse sales response:', e);
+        }
+      } else {
+        console.log('Artist notifications API not available (this is OK if not deployed yet)');
+      }
       
       // Combine and sort all notifications
       let allItems = [];
@@ -382,7 +405,10 @@ const MintNotifications = {
   
   // Check for active jobs and unread notifications (called on page load if signed in)
   async checkForActiveJobs() {
-    const address = window.AppState?.user?.address;
+    // Check multiple sources for user address
+    const address = window.AppState?.user?.address 
+      || localStorage.getItem('walletAddress')
+      || localStorage.getItem('xrp_music_wallet');
     if (!address) return;
     
     try {
