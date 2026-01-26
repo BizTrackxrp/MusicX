@@ -2329,3 +2329,131 @@ button.release-close-x:hover {
 .tos-link:hover {
   color: var(--text-secondary);
 }
+
+/* =====================================================
+   Playlist Context Menu Styles
+   ===================================================== */
+
+/* Playlist nav item with menu button */
+.playlist-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.playlist-nav-item:hover {
+  background: var(--bg-hover);
+}
+
+.playlist-nav-item .nav-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playlist-nav-item .nav-item-info span:first-child {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-nav-item .track-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 3-dot menu button */
+.playlist-menu-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playlist-nav-item:hover .playlist-menu-btn {
+  opacity: 1;
+}
+
+.playlist-menu-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+/* Context menu dropdown */
+.playlist-context-menu {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  min-width: 180px;
+  animation: menuFadeIn 0.15s ease;
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.playlist-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.playlist-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.playlist-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.playlist-menu-item.delete {
+  color: var(--error);
+}
+
+.playlist-menu-item.delete svg {
+  color: var(--error);
+}
+
+.playlist-menu-item.delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
