@@ -200,7 +200,7 @@ const UI = {
           <div class="search-section-title">Artists</div>
           ${artists.map(artist => `
             <div class="search-result-item" data-type="artist" data-address="${artist.address}">
-              <div class="search-result-avatar">
+              <div class="search-result-cover artist-avatar">
                 ${artist.avatar 
                   ? `<img src="${IpfsHelper.toProxyUrl(artist.avatar)}" alt="${artist.name}">`
                   : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -242,46 +242,33 @@ const UI = {
       `;
     }
     
-    // Singles section
-    if (singles.length > 0) {
-      html += `
-        <div class="search-section">
-          <div class="search-section-title">Singles</div>
-          ${singles.map(single => `
-            <div class="search-result-item" data-type="single" data-id="${single.id}">
-              <img 
-                class="search-result-cover" 
-                src="${IpfsHelper.toProxyUrl(single.coverUrl) || '/placeholder.png'}"
-                alt="${single.title}"
-              >
-              <div class="search-result-info">
-                <div class="search-result-title">${single.title}</div>
-                <div class="search-result-subtitle">${single.artistName || Helpers.truncateAddress(single.artistAddress)} • Single</div>
-              </div>
-              <div class="search-result-price">${single.price} XRP</div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
+    // Songs section (combines singles and tracks, deduped)
+    const allSongs = [...singles.map(s => ({ ...s, type: 'single' })), ...tracks.map(t => ({ ...t, type: 'track' }))];
+    // Dedupe by title + artist to avoid showing same song twice
+    const seenSongs = new Set();
+    const uniqueSongs = allSongs.filter(song => {
+      const key = `${song.title}-${song.artistAddress}`;
+      if (seenSongs.has(key)) return false;
+      seenSongs.add(key);
+      return true;
+    });
     
-    // Tracks section
-    if (tracks.length > 0) {
+    if (uniqueSongs.length > 0) {
       html += `
         <div class="search-section">
-          <div class="search-section-title">Tracks</div>
-          ${tracks.map(track => `
-            <div class="search-result-item" data-type="track" data-id="${track.id}" data-release-id="${track.releaseId}">
+          <div class="search-section-title">Songs</div>
+          ${uniqueSongs.map(song => `
+            <div class="search-result-item" data-type="${song.type}" data-id="${song.id}" ${song.releaseId ? `data-release-id="${song.releaseId}"` : ''}>
               <img 
                 class="search-result-cover" 
-                src="${IpfsHelper.toProxyUrl(track.coverUrl) || '/placeholder.png'}"
-                alt="${track.title}"
+                src="${IpfsHelper.toProxyUrl(song.coverUrl) || '/placeholder.png'}"
+                alt="${song.title}"
               >
               <div class="search-result-info">
-                <div class="search-result-title">${track.title}</div>
-                <div class="search-result-subtitle">${track.artistName || Helpers.truncateAddress(track.artistAddress)} • ${track.releaseTitle}</div>
+                <div class="search-result-title">${song.title}</div>
+                <div class="search-result-subtitle">${song.artistName || Helpers.truncateAddress(song.artistAddress)}</div>
               </div>
-              <div class="search-result-price">${track.price} XRP</div>
+              <div class="search-result-price">${song.price} XRP</div>
             </div>
           `).join('')}
         </div>
