@@ -93,9 +93,25 @@ const API = {
       method: 'DELETE',
     });
   },
+
+  // ============================================
+  // SEARCH
+  // ============================================
   
   /**
-   * Search releases
+   * Search across artists, tracks, and albums
+   * Returns categorized results
+   */
+  async search(query) {
+    if (!query || query.trim().length < 2) {
+      return { artists: [], tracks: [], albums: [], singles: [] };
+    }
+    const data = await this.fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+    return data;
+  },
+  
+  /**
+   * Search releases (backwards compatible - returns flat list)
    */
   async searchReleases(query) {
     if (!query || query.trim().length < 2) return [];
