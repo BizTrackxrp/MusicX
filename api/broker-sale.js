@@ -27,6 +27,31 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.app/buybot.gif';
 
 /**
+ * Send artist notification for a sale
+ */
+async function createArtistSaleNotification(sql, sale) {
+  const { artistAddress, trackTitle, releaseTitle, price, editionNumber, totalEditions } = sale;
+  
+  if (!artistAddress) return;
+  
+  try {
+    const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const title = `1 copy of "${trackTitle || releaseTitle}" sold!`;
+    const message = `Edition #${editionNumber}${totalEditions ? ` of ${totalEditions}` : ''}`;
+    
+    await sql`
+      INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, amount, created_at)
+      VALUES (${id}, ${artistAddress}, 'sale', ${title}, ${message}, ${sale.releaseId || null}, ${sale.trackId || null}, ${price}, NOW())
+    `;
+    
+    console.log('✅ Artist sale notification created for:', artistAddress);
+  } catch (error) {
+    // Don't fail the sale if notification fails
+    console.error('Failed to create artist notification:', error);
+  }
+}
+
+/**
  * Send a purchase notification to Discord (compact version)
  */
 async function sendDiscordBuyAlert(purchase) {
@@ -446,6 +471,20 @@ async function handleConfirmSale(req, res, sql) {
     `;
     
     console.log('✅ Sale confirmed:', saleId, 'Track:', trackId, 'NFT:', nftTokenId, 'Edition #', editionNumber);
+    
+    // 🔔 ARTIST IN-APP NOTIFICATION
+    if (release) {
+      await createArtistSaleNotification(sql, {
+        artistAddress: artistAddress,
+        trackTitle: release.track_title,
+        releaseTitle: release.title,
+        price: price,
+        editionNumber: editionNumber,
+        totalEditions: release.total_editions,
+        releaseId: releaseId,
+        trackId: trackId,
+      });
+    }
     
     // 🎉 DISCORD NOTIFICATION - Send buy alert
     if (release) {
