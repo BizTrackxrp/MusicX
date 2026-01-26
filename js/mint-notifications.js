@@ -1,6 +1,6 @@
 /**
- * XRP Music - Mint Notifications
- * Shows background minting job status
+ * XRP Music - Notifications System
+ * Shows mint status AND artist sale notifications
  */
 
 const MintNotifications = {
@@ -26,7 +26,7 @@ const MintNotifications = {
     if (!bell || !this.dropdown) return;
     
     const rect = bell.getBoundingClientRect();
-    const dropdownWidth = 340;
+    const dropdownWidth = 360;
     
     // Position dropdown below the bell, aligned to right edge of bell
     let rightPos = window.innerWidth - rect.right;
@@ -49,13 +49,26 @@ const MintNotifications = {
     this.dropdown.className = 'mint-notifications-dropdown';
     this.dropdown.innerHTML = `
       <div class="mint-dropdown-header">
-        <span>Mint Status</span>
-        <button class="mint-dropdown-close" onclick="MintNotifications.toggleDropdown()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <span>Notifications</span>
+        <div class="mint-dropdown-header-actions">
+          <button class="mint-mark-all-read" id="mark-all-read-btn" title="Mark all as read">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 11 12 14 22 4"></polyline>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+          </button>
+          <button class="mint-dropdown-close" onclick="MintNotifications.toggleDropdown()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="mint-dropdown-tabs">
+        <button class="mint-tab active" data-tab="all">All</button>
+        <button class="mint-tab" data-tab="sales">Sales</button>
+        <button class="mint-tab" data-tab="mints">Mints</button>
       </div>
       <div class="mint-dropdown-content" id="mint-dropdown-content">
         <div class="mint-dropdown-loading">
@@ -64,6 +77,20 @@ const MintNotifications = {
       </div>
     `;
     document.body.appendChild(this.dropdown);
+    
+    // Bind tab clicks
+    this.dropdown.querySelectorAll('.mint-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        this.dropdown.querySelectorAll('.mint-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        this.fetchAndRender(tab.dataset.tab);
+      });
+    });
+    
+    // Bind mark all read
+    document.getElementById('mark-all-read-btn')?.addEventListener('click', () => {
+      this.markAllRead();
+    });
     
     // Close when clicking outside
     document.addEventListener('click', (e) => {
@@ -83,70 +110,135 @@ const MintNotifications = {
     });
   },
   
-  async fetchAndRender() {
+  async fetchAndRender(filter = 'all') {
     const content = document.getElementById('mint-dropdown-content');
     if (!content) return;
     
-    // IMPORTANT: Only use AppState.user - NOT localStorage
-    // This ensures we don't show data when signed out
     const address = window.AppState?.user?.address;
     
     if (!address) {
       content.innerHTML = `
         <div class="mint-dropdown-empty">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-            <line x1="1" y1="10" x2="23" y2="10"></line>
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
           </svg>
-          <span>Connect wallet to view mint status</span>
+          <span>Connect wallet to view notifications</span>
         </div>
       `;
       return;
     }
     
+    content.innerHTML = `<div class="mint-dropdown-loading"><div class="spinner"></div></div>`;
+    
     try {
-      const res = await fetch(`/api/my-mint-jobs?address=${address}`);
-      const data = await res.json();
+      // Fetch both mint jobs and sale notifications in parallel
+      const [mintRes, salesRes] = await Promise.all([
+        fetch(`/api/my-mint-jobs?address=${address}`),
+        fetch(`/api/artist-notifications?address=${address}&limit=20`)
+      ]);
       
-      if (!data.success) {
-        content.innerHTML = `<div class="mint-dropdown-error">Error loading jobs</div>`;
-        return;
+      const mintData = await mintRes.json();
+      const salesData = await salesRes.json();
+      
+      // Combine and sort all notifications
+      let allItems = [];
+      
+      // Add mint jobs
+      if (mintData.success) {
+        const mintJobs = [
+          ...(mintData.jobs?.active || []),
+          ...(mintData.jobs?.completedUnseen || []),
+          ...(mintData.jobs?.failed || []),
+          ...(mintData.jobs?.recentCompleted || [])
+        ];
+        
+        mintJobs.forEach(job => {
+          allItems.push({
+            type: 'mint',
+            id: job.id,
+            title: job.release_title || 'Untitled Release',
+            status: job.status,
+            progress: job.total_nfts > 0 ? Math.round((job.minted_count / job.total_nfts) * 100) : 0,
+            mintedCount: job.minted_count,
+            totalNfts: job.total_nfts,
+            error: job.error,
+            createdAt: new Date(job.created_at),
+            isRead: job.status === 'complete'
+          });
+        });
       }
       
-      const allJobs = [
-        ...(data.jobs.active || []),
-        ...(data.jobs.completedUnseen || []),
-        ...(data.jobs.failed || []),
-        ...(data.jobs.recentCompleted || [])
-      ];
+      // Add sale notifications
+      if (salesData.success && salesData.notifications) {
+        salesData.notifications.forEach(notif => {
+          allItems.push({
+            type: 'sale',
+            id: notif.id,
+            title: notif.title,
+            message: notif.message,
+            amount: notif.amount,
+            releaseId: notif.release_id,
+            createdAt: new Date(notif.created_at),
+            isRead: notif.is_read
+          });
+        });
+      }
       
-      if (allJobs.length === 0) {
+      // Filter based on tab
+      if (filter === 'sales') {
+        allItems = allItems.filter(item => item.type === 'sale');
+      } else if (filter === 'mints') {
+        allItems = allItems.filter(item => item.type === 'mint');
+      }
+      
+      // Sort by date (newest first)
+      allItems.sort((a, b) => b.createdAt - a.createdAt);
+      
+      // Update badge
+      this.updateBadge(mintData, salesData);
+      
+      if (allItems.length === 0) {
         content.innerHTML = `
           <div class="mint-dropdown-empty">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-              <path d="M2 17l10 5 10-5"></path>
-              <path d="M2 12l10 5 10-5"></path>
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
             </svg>
-            <span>No recent mints</span>
-            <small>Your minting jobs will appear here</small>
+            <span>No notifications yet</span>
+            <small>Sales and minting updates will appear here</small>
           </div>
         `;
         return;
       }
       
-      content.innerHTML = allJobs.map(job => this.renderJob(job)).join('');
+      content.innerHTML = allItems.map(item => this.renderItem(item)).join('');
       
-      // Update bell badge
-      this.updateBadge(data);
+      // Bind click events for sale notifications
+      content.querySelectorAll('.notification-item[data-type="sale"]').forEach(item => {
+        item.addEventListener('click', () => {
+          const notifId = item.dataset.id;
+          this.markAsRead(notifId);
+          item.classList.remove('unread');
+        });
+      });
       
     } catch(e) {
       console.error('Fetch error:', e);
-      content.innerHTML = `<div class="mint-dropdown-error">Failed to load</div>`;
+      content.innerHTML = `<div class="mint-dropdown-error">Failed to load notifications</div>`;
     }
   },
   
-  renderJob(job) {
+  renderItem(item) {
+    if (item.type === 'mint') {
+      return this.renderMintJob(item);
+    } else if (item.type === 'sale') {
+      return this.renderSaleNotification(item);
+    }
+    return '';
+  },
+  
+  renderMintJob(job) {
     const isActive = job.status === 'pending' || job.status === 'minting';
     const isComplete = job.status === 'complete';
     const isFailed = job.status === 'failed';
@@ -154,63 +246,91 @@ const MintNotifications = {
     let statusClass = '';
     let statusHtml = '';
     let progressHtml = '';
-    let timeHtml = '';
     
     if (isActive) {
       statusClass = 'active';
-      const pct = job.total_nfts > 0 ? Math.round((job.minted_count / job.total_nfts) * 100) : 0;
-      statusHtml = `<div class="mint-job-status minting">Minting... ${job.minted_count}/${job.total_nfts} NFTs</div>`;
+      statusHtml = `<div class="notification-status minting">Minting... ${job.mintedCount}/${job.totalNfts} NFTs</div>`;
       progressHtml = `
-        <div class="mint-job-progress">
-          <div class="mint-job-progress-fill" style="width: ${pct}%"></div>
+        <div class="notification-progress">
+          <div class="notification-progress-fill" style="width: ${job.progress}%"></div>
         </div>
       `;
-      
-      // Time estimate
-      if (job.minted_count > 10) {
-        const elapsed = (Date.now() - new Date(job.created_at).getTime()) / 1000;
-        const perNft = elapsed / job.minted_count;
-        const remaining = (job.total_nfts - job.minted_count) * perNft;
-        
-        if (remaining > 3600) {
-          const hrs = Math.floor(remaining / 3600);
-          const mins = Math.ceil((remaining % 3600) / 60);
-          timeHtml = `<div class="mint-job-time">~${hrs}h ${mins}m remaining</div>`;
-        } else if (remaining > 60) {
-          timeHtml = `<div class="mint-job-time">~${Math.ceil(remaining / 60)} min remaining</div>`;
-        } else {
-          timeHtml = `<div class="mint-job-time">Almost done...</div>`;
-        }
-      } else {
-        timeHtml = `<div class="mint-job-time">Calculating...</div>`;
-      }
     } else if (isComplete) {
       statusClass = 'complete';
-      statusHtml = `<div class="mint-job-status complete">✓ ${job.total_nfts} NFTs minted!</div>`;
+      statusHtml = `<div class="notification-status complete">✓ ${job.totalNfts} NFTs minted!</div>`;
     } else if (isFailed) {
       statusClass = 'failed';
-      statusHtml = `<div class="mint-job-status failed">✗ Failed: ${job.error || 'Unknown error'}</div>`;
+      statusHtml = `<div class="notification-status failed">✗ Failed: ${job.error || 'Unknown error'}</div>`;
     }
     
     return `
-      <div class="mint-job-card ${statusClass}">
-        <div class="mint-job-title">${job.release_title || 'Untitled Release'}</div>
-        ${statusHtml}
-        ${progressHtml}
-        ${timeHtml}
+      <div class="notification-item mint ${statusClass}" data-type="mint" data-id="${job.id}">
+        <div class="notification-icon mint">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+        </div>
+        <div class="notification-content">
+          <div class="notification-title">${job.title}</div>
+          ${statusHtml}
+          ${progressHtml}
+          <div class="notification-time">${this.formatTime(job.createdAt)}</div>
+        </div>
       </div>
     `;
   },
   
-  updateBadge(data) {
+  renderSaleNotification(notif) {
+    const unreadClass = notif.isRead ? '' : 'unread';
+    
+    return `
+      <div class="notification-item sale ${unreadClass}" data-type="sale" data-id="${notif.id}">
+        <div class="notification-icon sale">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+        </div>
+        <div class="notification-content">
+          <div class="notification-title">${notif.title}</div>
+          ${notif.message ? `<div class="notification-message">${notif.message}</div>` : ''}
+          ${notif.amount ? `<div class="notification-amount">+${notif.amount} XRP</div>` : ''}
+          <div class="notification-time">${this.formatTime(notif.createdAt)}</div>
+        </div>
+        ${!notif.isRead ? '<div class="notification-unread-dot"></div>' : ''}
+      </div>
+    `;
+  },
+  
+  formatTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  },
+  
+  updateBadge(mintData, salesData) {
     const bell = document.getElementById('mint-notifications-bell');
     const badge = bell?.querySelector('.mint-bell-badge');
     if (!badge) return;
     
-    if (data.hasActive) {
+    const hasActiveMint = mintData?.hasActive;
+    const hasUnreadSales = salesData?.unreadCount > 0;
+    const hasUnreadMint = mintData?.hasUnread;
+    
+    if (hasActiveMint) {
       badge.style.display = 'block';
       badge.className = 'mint-bell-badge active';
-    } else if (data.hasUnread) {
+    } else if (hasUnreadSales || hasUnreadMint) {
       badge.style.display = 'block';
       badge.className = 'mint-bell-badge unread';
     } else {
@@ -218,23 +338,69 @@ const MintNotifications = {
     }
   },
   
-  // Check for active jobs (called on page load if signed in)
+  async markAsRead(notificationId) {
+    const address = window.AppState?.user?.address;
+    if (!address || !notificationId) return;
+    
+    try {
+      await fetch('/api/artist-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'markRead',
+          notificationId,
+          address
+        })
+      });
+    } catch (e) {
+      console.error('Failed to mark notification as read:', e);
+    }
+  },
+  
+  async markAllRead() {
+    const address = window.AppState?.user?.address;
+    if (!address) return;
+    
+    try {
+      await fetch('/api/artist-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'markAllRead',
+          address
+        })
+      });
+      
+      // Refresh the dropdown
+      const activeTab = this.dropdown?.querySelector('.mint-tab.active')?.dataset.tab || 'all';
+      this.fetchAndRender(activeTab);
+      
+    } catch (e) {
+      console.error('Failed to mark all as read:', e);
+    }
+  },
+  
+  // Check for active jobs and unread notifications (called on page load if signed in)
   async checkForActiveJobs() {
     const address = window.AppState?.user?.address;
     if (!address) return;
     
     try {
-      const res = await fetch(`/api/my-mint-jobs?address=${address}`);
-      const data = await res.json();
+      const [mintRes, salesRes] = await Promise.all([
+        fetch(`/api/my-mint-jobs?address=${address}`),
+        fetch(`/api/artist-notifications?address=${address}&unreadOnly=true&limit=1`)
+      ]);
       
-      if (data.success) {
-        this.updateBadge(data);
-        if (data.hasActive) {
-          this.startPolling();
-        }
+      const mintData = await mintRes.json();
+      const salesData = await salesRes.json();
+      
+      this.updateBadge(mintData, salesData);
+      
+      if (mintData.hasActive) {
+        this.startPolling();
       }
     } catch(e) {
-      console.error('Error checking mint jobs:', e);
+      console.error('Error checking notifications:', e);
     }
   },
   
@@ -243,9 +409,9 @@ const MintNotifications = {
     if (this.polling) return;
     this.polling = setInterval(() => {
       if (this.dropdown?.style.display !== 'none') {
-        this.fetchAndRender();
+        const activeTab = this.dropdown?.querySelector('.mint-tab.active')?.dataset.tab || 'all';
+        this.fetchAndRender(activeTab);
       } else {
-        // Still update badge even if dropdown closed
         this.checkForActiveJobs();
       }
     }, 5000);
@@ -266,10 +432,10 @@ mintNotificationStyles.textContent = `
     position: fixed;
     top: 60px;
     right: 20px;
-    width: 340px;
-    max-height: 420px;
-    background: var(--bg-card, #1a1a2e);
-    border: 1px solid var(--border-color, #333);
+    width: 360px;
+    max-height: 500px;
+    background: var(--bg-card, #18181b);
+    border: 1px solid var(--border-color, #27272a);
     border-radius: 16px;
     box-shadow: 0 16px 48px rgba(0,0,0,0.5);
     z-index: 9999;
@@ -282,31 +448,70 @@ mintNotificationStyles.textContent = `
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary, #fff);
-    border-bottom: 1px solid var(--border-color, #333);
-    background: var(--bg-secondary, #15152a);
+    border-bottom: 1px solid var(--border-color, #27272a);
   }
   
+  .mint-dropdown-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .mint-mark-all-read,
   .mint-dropdown-close {
     background: none;
     border: none;
-    color: var(--text-muted, #666);
+    color: var(--text-muted, #71717a);
     cursor: pointer;
-    padding: 4px;
+    padding: 6px;
     border-radius: 6px;
+    transition: all 150ms;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .mint-mark-all-read:hover,
+  .mint-dropdown-close:hover {
+    color: var(--text-primary, #fff);
+    background: var(--bg-hover, #27272a);
+  }
+  
+  .mint-dropdown-tabs {
+    display: flex;
+    padding: 8px 12px;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-color, #27272a);
+  }
+  
+  .mint-tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted, #71717a);
+    background: none;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
     transition: all 150ms;
   }
   
-  .mint-dropdown-close:hover {
+  .mint-tab:hover {
     color: var(--text-primary, #fff);
-    background: var(--bg-hover, #252540);
+    background: var(--bg-hover, #27272a);
+  }
+  
+  .mint-tab.active {
+    color: var(--text-primary, #fff);
+    background: var(--accent, #3b82f6);
   }
   
   .mint-dropdown-content {
-    padding: 12px;
-    max-height: 350px;
+    padding: 8px;
+    max-height: 380px;
     overflow-y: auto;
   }
   
@@ -322,8 +527,8 @@ mintNotificationStyles.textContent = `
     flex-direction: column;
     align-items: center;
     gap: 12px;
-    padding: 32px 20px;
-    color: var(--text-muted, #666);
+    padding: 40px 20px;
+    color: var(--text-muted, #71717a);
     text-align: center;
   }
   
@@ -347,77 +552,128 @@ mintNotificationStyles.textContent = `
     font-size: 14px;
   }
   
-  .mint-job-card {
-    padding: 16px;
-    background: var(--bg-hover, #252540);
+  /* Notification Items */
+  .notification-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
     border-radius: 12px;
-    margin-bottom: 10px;
-    border: 1px solid transparent;
-    transition: border-color 150ms;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background 150ms;
+    position: relative;
   }
   
-  .mint-job-card:last-child {
+  .notification-item:last-child {
     margin-bottom: 0;
   }
   
-  .mint-job-card.active {
-    border-color: rgba(139, 92, 246, 0.3);
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), transparent);
+  .notification-item:hover {
+    background: var(--bg-hover, #27272a);
   }
   
-  .mint-job-card.complete {
-    border-color: rgba(34, 197, 94, 0.3);
+  .notification-item.unread {
+    background: rgba(59, 130, 246, 0.1);
   }
   
-  .mint-job-card.failed {
-    border-color: rgba(239, 68, 68, 0.3);
+  .notification-item.unread:hover {
+    background: rgba(59, 130, 246, 0.15);
   }
   
-  .mint-job-title {
+  .notification-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  
+  .notification-icon.sale {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+  }
+  
+  .notification-icon.mint {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+  }
+  
+  .notification-content {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .notification-title {
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-primary, #fff);
-    margin-bottom: 8px;
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   
-  .mint-job-status {
+  .notification-message {
     font-size: 13px;
-    margin-bottom: 8px;
+    color: var(--text-secondary, #a1a1aa);
+    margin-bottom: 4px;
   }
   
-  .mint-job-status.minting {
+  .notification-amount {
+    font-size: 13px;
+    font-weight: 600;
+    color: #22c55e;
+    margin-bottom: 4px;
+  }
+  
+  .notification-status {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  
+  .notification-status.minting {
     color: #8b5cf6;
   }
   
-  .mint-job-status.complete {
+  .notification-status.complete {
     color: #22c55e;
   }
   
-  .mint-job-status.failed {
+  .notification-status.failed {
     color: #ef4444;
   }
   
-  .mint-job-progress {
-    height: 6px;
+  .notification-progress {
+    height: 4px;
     background: rgba(0,0,0,0.3);
-    border-radius: 3px;
+    border-radius: 2px;
     overflow: hidden;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   
-  .mint-job-progress-fill {
+  .notification-progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #8b5cf6, #a855f7);
-    border-radius: 3px;
+    border-radius: 2px;
     transition: width 300ms ease;
   }
   
-  .mint-job-time {
-    font-size: 12px;
-    color: var(--text-muted, #888);
+  .notification-time {
+    font-size: 11px;
+    color: var(--text-muted, #71717a);
+  }
+  
+  .notification-unread-dot {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent, #3b82f6);
   }
   
   /* Bell badge styles */
@@ -428,7 +684,7 @@ mintNotificationStyles.textContent = `
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    border: 2px solid var(--bg-primary, #0f0f1a);
+    border: 2px solid var(--bg-primary, #000);
   }
   
   .mint-bell-badge.active {
@@ -456,10 +712,9 @@ mintNotificationStyles.textContent = `
 `;
 document.head.appendChild(mintNotificationStyles);
 
-// Auto-check for active jobs on page load (only if signed in)
+// Auto-check for notifications on page load (only if signed in)
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
-    // Only check if actually signed in via AppState
     if (window.AppState?.user?.address) {
       MintNotifications.checkForActiveJobs();
     }
