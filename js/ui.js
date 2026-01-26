@@ -288,9 +288,9 @@ const UI = {
         document.getElementById('search-clear')?.classList.add('hidden');
         
         if (type === 'artist') {
-          // Navigate to artist profile
+          // Navigate to artist profile page
           const address = item.dataset.address;
-          Router.navigate('profile', { address });
+          Router.navigate('artist', { address });
         } else if (type === 'album' || type === 'single') {
           // Open release modal
           const releaseId = item.dataset.id;
