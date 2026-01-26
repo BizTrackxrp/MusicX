@@ -457,10 +457,10 @@ const UI = {
       }
       
       container.innerHTML = playlists.map(playlist => `
-        <button class="nav-item" data-playlist-id="${playlist.id}">
+        <div class="nav-item playlist-nav-item" data-playlist-id="${playlist.id}">
           <div class="playlist-icon">
-            ${playlist.coverUrl 
-              ? `<img src="${playlist.coverUrl}" alt="${playlist.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;">`
+            ${playlist.cover_url 
+              ? `<img src="${playlist.cover_url}" alt="${playlist.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;">`
               : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 18V5l12-2v13"></path>
                   <circle cx="6" cy="18" r="3"></circle>
@@ -470,19 +470,209 @@ const UI = {
           </div>
           <div class="nav-item-info">
             <span>${playlist.name}</span>
-            <span class="track-count">${playlist.trackCount} songs</span>
+            <span class="track-count">${playlist.track_count || 0} songs</span>
           </div>
-        </button>
+          <button class="playlist-menu-btn" data-playlist-id="${playlist.id}" data-playlist-name="${playlist.name}" data-is-public="${playlist.is_public || false}" onclick="event.stopPropagation(); UI.showPlaylistMenu(event, '${playlist.id}', '${playlist.name.replace(/'/g, "\\'")}', ${playlist.is_public || false})">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="1"></circle>
+              <circle cx="12" cy="5" r="1"></circle>
+              <circle cx="12" cy="19" r="1"></circle>
+            </svg>
+          </button>
+        </div>
       `).join('');
       
-      // Bind click events
-      container.querySelectorAll('.nav-item[data-playlist-id]').forEach(item => {
-        item.addEventListener('click', () => {
+      // Bind click events for navigation (not the menu button)
+      container.querySelectorAll('.playlist-nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          // Don't navigate if clicking the menu button
+          if (e.target.closest('.playlist-menu-btn')) return;
+          
           const playlistId = item.dataset.playlistId;
           Router.navigate('playlist', { id: playlistId });
           this.closeSidebar();
         });
       });
+      
+    } catch (error) {
+      console.error('Failed to load playlists:', error);
+    }
+  },
+  
+  /**
+   * Show playlist context menu (3-dot menu)
+   */
+  showPlaylistMenu(event, playlistId, playlistName, isPublic) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Remove existing menu
+    document.querySelector('.playlist-context-menu')?.remove();
+    
+    const rect = event.target.closest('.playlist-menu-btn').getBoundingClientRect();
+    
+    const menu = document.createElement('div');
+    menu.className = 'playlist-context-menu';
+    menu.innerHTML = `
+      <button class="playlist-menu-item" data-action="rename">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+        <span>Rename</span>
+      </button>
+      <button class="playlist-menu-item" data-action="toggle-public">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          ${isPublic 
+            ? `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>`
+            : `<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>`
+          }
+        </svg>
+        <span>${isPublic ? 'Make Private' : 'Make Public'}</span>
+      </button>
+      <button class="playlist-menu-item delete" data-action="delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span>Delete</span>
+      </button>
+    `;
+    
+    // Position the menu
+    menu.style.cssText = `
+      position: fixed;
+      top: ${rect.bottom + 4}px;
+      left: ${rect.left - 140}px;
+      z-index: 10000;
+    `;
+    
+    document.body.appendChild(menu);
+    
+    // Handle menu item clicks
+    menu.querySelectorAll('.playlist-menu-item').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        menu.remove();
+        
+        if (action === 'rename') {
+          this.showRenamePlaylistModal(playlistId, playlistName);
+        } else if (action === 'toggle-public') {
+          await this.togglePlaylistPublic(playlistId, isPublic);
+        } else if (action === 'delete') {
+          await this.confirmDeletePlaylist(playlistId, playlistName);
+        }
+      });
+    });
+    
+    // Close menu on outside click
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+  },
+  
+  /**
+   * Show rename playlist modal
+   */
+  showRenamePlaylistModal(playlistId, currentName) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width: 400px;">
+        <div class="modal-header">
+          <div class="modal-title">Rename Playlist</div>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="text" class="form-input" id="rename-playlist-input" value="${currentName}" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); font-size: 16px;">
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 12px; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border-color);">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" id="rename-playlist-save">Save</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const input = document.getElementById('rename-playlist-input');
+    input.focus();
+    input.select();
+    
+    // Save on Enter
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('rename-playlist-save').click();
+      }
+    });
+    
+    // Save button
+    document.getElementById('rename-playlist-save').addEventListener('click', async () => {
+      const newName = input.value.trim();
+      if (!newName) return;
+      
+      try {
+        await API.updatePlaylist(playlistId, AppState.user.address, { name: newName });
+        modal.remove();
+        showToast('Playlist renamed');
+        this.updatePlaylists();
+      } catch (error) {
+        console.error('Failed to rename playlist:', error);
+        showToast('Failed to rename playlist');
+      }
+    });
+    
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+  },
+  
+  /**
+   * Toggle playlist public/private
+   */
+  async togglePlaylistPublic(playlistId, currentlyPublic) {
+    try {
+      await API.updatePlaylist(playlistId, AppState.user.address, { isPublic: !currentlyPublic });
+      showToast(currentlyPublic ? 'Playlist is now private' : 'Playlist is now public');
+      this.updatePlaylists();
+    } catch (error) {
+      console.error('Failed to update playlist:', error);
+      showToast('Failed to update playlist');
+    }
+  },
+  
+  /**
+   * Confirm and delete playlist
+   */
+  async confirmDeletePlaylist(playlistId, playlistName) {
+    const confirmed = confirm(`Delete "${playlistName}"? This cannot be undone.`);
+    if (!confirmed) return;
+    
+    try {
+      await API.deletePlaylist(playlistId, AppState.user.address);
+      showToast('Playlist deleted');
+      this.updatePlaylists();
+      
+      // If currently viewing this playlist, navigate away
+      if (Router.params?.id === playlistId) {
+        Router.navigate('stream');
+      }
+    } catch (error) {
+      console.error('Failed to delete playlist:', error);
+      showToast('Failed to delete playlist');
+    }
+  },
       
     } catch (error) {
       console.error('Failed to load playlists:', error);
