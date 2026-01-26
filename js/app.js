@@ -2,7 +2,6 @@
  * XRP Music - Main App
  * Initialization and routing
  */
-
 const Router = {
   params: {},
   
@@ -152,7 +151,12 @@ const Router = {
         this.renderPlaylistsPage();
         break;
       case 'playlist':
-        this.renderPlaylistPage(this.params.id);
+        // Use PlaylistPage if available, otherwise fallback
+        if (typeof PlaylistPage !== 'undefined') {
+          PlaylistPage.render(this.params);
+        } else {
+          this.renderPlaylistPage(this.params.id);
+        }
         break;
       case 'release':
         // Direct link to release - show stream page then open modal
@@ -413,7 +417,8 @@ const Router = {
   },
   
   /**
-   * Render single playlist page
+   * Render single playlist page (fallback if PlaylistPage not available)
+   * FIXED: Now correctly gets tracks from data.playlist.tracks
    */
   async renderPlaylistPage(playlistId) {
     UI.showLoading();
@@ -421,7 +426,8 @@ const Router = {
     try {
       const data = await API.getPlaylist(playlistId, true, AppState.user?.address);
       const playlist = data.playlist;
-      const tracks = data.tracks || [];
+      // FIX: tracks are inside data.playlist.tracks, not data.tracks
+      const tracks = data.tracks || data.playlist?.tracks || [];
       
       UI.renderPage(`
         <div class="animate-fade-in">
@@ -450,11 +456,11 @@ const Router = {
               ${tracks.map((track, idx) => `
                 <div class="track-item" data-track-idx="${idx}">
                   <div class="track-cover">
-                    <img src="${track.coverUrl || '/placeholder.png'}" alt="${track.title}">
+                    <img src="${track.cover_url || track.coverUrl || '/placeholder.png'}" alt="${track.title}">
                   </div>
                   <div class="track-info">
                     <div class="track-title">${track.title}</div>
-                    <div class="track-artist">${track.artistName || Helpers.truncateAddress(track.artistAddress)}</div>
+                    <div class="track-artist">${track.artist_name || track.artistName || Helpers.truncateAddress(track.artist_address || track.artistAddress)}</div>
                   </div>
                   <div style="color: var(--text-muted);">${Helpers.formatDuration(track.duration)}</div>
                 </div>
@@ -481,23 +487,23 @@ const Router = {
           const track = tracks[idx];
           if (track) {
             const playTrack = {
-              id: track.id,
-              trackId: track.id,
+              id: track.track_id || track.id,
+              trackId: track.track_id || track.id,
               title: track.title,
-              artist: track.artistName || Helpers.truncateAddress(track.artistAddress),
-              cover: track.coverUrl,
-              ipfsHash: track.audioCid,
-              releaseId: track.releaseId,
+              artist: track.artist_name || track.artistName || Helpers.truncateAddress(track.artist_address || track.artistAddress),
+              cover: track.cover_url || track.coverUrl,
+              ipfsHash: track.audio_cid || track.audioCid,
+              releaseId: track.release_id || track.releaseId,
             };
             
             const queue = tracks.map(t => ({
-              id: t.id,
-              trackId: t.id,
+              id: t.track_id || t.id,
+              trackId: t.track_id || t.id,
               title: t.title,
-              artist: t.artistName || Helpers.truncateAddress(t.artistAddress),
-              cover: t.coverUrl,
-              ipfsHash: t.audioCid,
-              releaseId: t.releaseId,
+              artist: t.artist_name || t.artistName || Helpers.truncateAddress(t.artist_address || t.artistAddress),
+              cover: t.cover_url || t.coverUrl,
+              ipfsHash: t.audio_cid || t.audioCid,
+              releaseId: t.release_id || t.releaseId,
             }));
             
             Player.playTrack(playTrack, queue, idx);
@@ -526,7 +532,7 @@ const Router = {
     }
     return url;
   },
-
+  
   /**
    * Show full bio in a modal
    */
