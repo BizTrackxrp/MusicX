@@ -14,10 +14,30 @@ const MintNotifications = {
     
     if (this.dropdown.style.display === 'none') {
       this.dropdown.style.display = 'block';
+      this.positionDropdown();
       this.fetchAndRender();
     } else {
       this.dropdown.style.display = 'none';
     }
+  },
+  
+  positionDropdown() {
+    const bell = document.getElementById('mint-notifications-bell');
+    if (!bell || !this.dropdown) return;
+    
+    const rect = bell.getBoundingClientRect();
+    const dropdownWidth = 340;
+    
+    // Position dropdown below the bell, aligned to right edge of bell
+    let rightPos = window.innerWidth - rect.right;
+    
+    // Make sure it doesn't go off left edge of screen
+    if (rect.right - dropdownWidth < 10) {
+      rightPos = window.innerWidth - dropdownWidth - 10;
+    }
+    
+    this.dropdown.style.top = `${rect.bottom + 8}px`;
+    this.dropdown.style.right = `${rightPos}px`;
   },
   
   createDropdown() {
@@ -52,6 +72,13 @@ const MintNotifications = {
           !this.dropdown.contains(e.target) && 
           !document.getElementById('mint-notifications-bell')?.contains(e.target)) {
         this.dropdown.style.display = 'none';
+      }
+    });
+    
+    // Reposition on window resize
+    window.addEventListener('resize', () => {
+      if (this.dropdown && this.dropdown.style.display !== 'none') {
+        this.positionDropdown();
       }
     });
   },
