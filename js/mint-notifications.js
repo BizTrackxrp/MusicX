@@ -115,9 +115,20 @@ const MintNotifications = {
     if (!content) return;
     
     // Check multiple sources for user address
-    const address = window.AppState?.user?.address 
-      || localStorage.getItem('walletAddress')
-      || localStorage.getItem('xrp_music_wallet');
+    // xrpmusic_wallet_session stores the session object with address
+    let address = window.AppState?.user?.address;
+    
+    if (!address) {
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
+        }
+      } catch (e) {
+        console.error('Failed to parse wallet session:', e);
+      }
+    }
     
     if (!address) {
       content.innerHTML = `
@@ -406,9 +417,20 @@ const MintNotifications = {
   // Check for active jobs and unread notifications (called on page load if signed in)
   async checkForActiveJobs() {
     // Check multiple sources for user address
-    const address = window.AppState?.user?.address 
-      || localStorage.getItem('walletAddress')
-      || localStorage.getItem('xrp_music_wallet');
+    let address = window.AppState?.user?.address;
+    
+    if (!address) {
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+    
     if (!address) return;
     
     try {
