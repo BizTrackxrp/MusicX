@@ -7,6 +7,14 @@ const MintNotifications = {
   dropdown: null,
   polling: null,
   
+  /**
+   * Initialize notifications - called by xaman.js on session restore
+   */
+  init() {
+    // Check for notifications on init
+    this.checkForActiveJobs();
+  },
+  
   toggleDropdown() {
     if (!this.dropdown) {
       this.createDropdown();
