@@ -8,7 +8,7 @@
 
 import { neon } from '@neondatabase/serverless';
 
-// Helper for address truncation (server-side) - defined first
+// Helper for address truncation (server-side)
 function truncateAddress(address, start = 6, end = 4) {
   if (!address) return '';
   return `${address.slice(0, start)}...${address.slice(-end)}`;
@@ -40,11 +40,11 @@ export default async function handler(req, res) {
     const searchPattern = `%${query}%`;
     const limitNum = Math.min(parseInt(limit) || 10, 20);
     
-    // Search artists (from profiles and releases) - simplified query
+    // Search artists - from releases with optional profile join
     const artists = await sql`
       SELECT 
         r.artist_address as address,
-        COALESCE(p.display_name, r.artist_name) as name,
+        COALESCE(p.name, r.artist_name) as name,
         p.avatar_url as avatar,
         p.bio,
         COUNT(DISTINCT r.id) as release_count
@@ -52,13 +52,11 @@ export default async function handler(req, res) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND (
-          LOWER(COALESCE(p.display_name, r.artist_name, '')) LIKE ${searchPattern}
+          LOWER(COALESCE(p.name, r.artist_name, '')) LIKE ${searchPattern}
           OR LOWER(r.artist_address) LIKE ${searchPattern}
         )
-      GROUP BY r.artist_address, p.display_name, r.artist_name, p.avatar_url, p.bio
-      ORDER BY 
-        CASE WHEN LOWER(COALESCE(p.display_name, r.artist_name, '')) = ${query} THEN 0 ELSE 1 END,
-        COUNT(DISTINCT r.id) DESC
+      GROUP BY r.artist_address, p.name, r.artist_name, p.avatar_url, p.bio
+      ORDER BY COUNT(DISTINCT r.id) DESC
       LIMIT ${limitNum}
     `;
     
@@ -74,19 +72,16 @@ export default async function handler(req, res) {
         r.title as release_title,
         r.cover_url,
         r.artist_address,
-        r.artist_name,
+        COALESCE(p.name, r.artist_name) as artist_name,
         r.song_price,
         r.type as release_type,
-        p.display_name as artist_display_name,
         p.avatar_url as artist_avatar
       FROM tracks t
       JOIN releases r ON r.id = t.release_id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND LOWER(t.title) LIKE ${searchPattern}
-      ORDER BY 
-        CASE WHEN LOWER(t.title) = ${query} THEN 0 ELSE 1 END,
-        t.title
+      ORDER BY t.title
       LIMIT ${limitNum}
     `;
     
@@ -97,13 +92,12 @@ export default async function handler(req, res) {
         r.title,
         r.cover_url,
         r.artist_address,
-        r.artist_name,
+        COALESCE(p.name, r.artist_name) as artist_name,
         r.album_price,
         r.song_price,
         r.total_editions,
         r.type,
         r.created_at,
-        p.display_name as artist_display_name,
         p.avatar_url as artist_avatar,
         (SELECT COUNT(*) FROM tracks WHERE release_id = r.id) as track_count
       FROM releases r
@@ -111,9 +105,7 @@ export default async function handler(req, res) {
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.type = 'album'
         AND LOWER(r.title) LIKE ${searchPattern}
-      ORDER BY 
-        CASE WHEN LOWER(r.title) = ${query} THEN 0 ELSE 1 END,
-        r.created_at DESC
+      ORDER BY r.created_at DESC
       LIMIT ${limitNum}
     `;
     
@@ -124,21 +116,18 @@ export default async function handler(req, res) {
         r.title,
         r.cover_url,
         r.artist_address,
-        r.artist_name,
+        COALESCE(p.name, r.artist_name) as artist_name,
         r.song_price,
         r.total_editions,
         r.type,
         r.created_at,
-        p.display_name as artist_display_name,
         p.avatar_url as artist_avatar
       FROM releases r
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.type = 'single'
         AND LOWER(r.title) LIKE ${searchPattern}
-      ORDER BY 
-        CASE WHEN LOWER(r.title) = ${query} THEN 0 ELSE 1 END,
-        r.created_at DESC
+      ORDER BY r.created_at DESC
       LIMIT ${limitNum}
     `;
     
@@ -147,8 +136,8 @@ export default async function handler(req, res) {
       type: 'artist',
       address: a.address,
       name: a.name || truncateAddress(a.address),
-      avatar: a.avatar,
-      bio: a.bio,
+      avatar: a.avatar || null,
+      bio: a.bio || null,
       releaseCount: parseInt(a.release_count) || 0
     }));
     
@@ -163,8 +152,8 @@ export default async function handler(req, res) {
       releaseTitle: t.release_title,
       coverUrl: t.cover_url,
       artistAddress: t.artist_address,
-      artistName: t.artist_display_name || t.artist_name,
-      artistAvatar: t.artist_avatar,
+      artistName: t.artist_name,
+      artistAvatar: t.artist_avatar || null,
       price: parseFloat(t.song_price) || 0,
       releaseType: t.release_type
     }));
@@ -175,8 +164,8 @@ export default async function handler(req, res) {
       title: a.title,
       coverUrl: a.cover_url,
       artistAddress: a.artist_address,
-      artistName: a.artist_display_name || a.artist_name,
-      artistAvatar: a.artist_avatar,
+      artistName: a.artist_name,
+      artistAvatar: a.artist_avatar || null,
       price: parseFloat(a.album_price) || parseFloat(a.song_price) || 0,
       trackCount: parseInt(a.track_count) || 0,
       totalEditions: a.total_editions
@@ -188,13 +177,13 @@ export default async function handler(req, res) {
       title: s.title,
       coverUrl: s.cover_url,
       artistAddress: s.artist_address,
-      artistName: s.artist_display_name || s.artist_name,
-      artistAvatar: s.artist_avatar,
+      artistName: s.artist_name,
+      artistAvatar: s.artist_avatar || null,
       price: parseFloat(s.song_price) || 0,
       totalEditions: s.total_editions
     }));
-    
-    // Also return a combined "releases" array for backwards compatibility
+
+    // Combined releases for backwards compatibility
     const allReleases = [...formattedAlbums, ...formattedSingles].map(r => ({
       id: r.id,
       title: r.title,
