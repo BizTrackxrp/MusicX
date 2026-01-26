@@ -577,65 +577,137 @@ const UI = {
   },
   
   /**
-   * Show rename playlist modal
+   * Show rename playlist popup (small inline popup near the playlist item)
    */
   showRenamePlaylistModal(playlistId, currentName) {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal" style="max-width: 400px;">
-        <div class="modal-header">
-          <div class="modal-title">Rename Playlist</div>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <input type="text" class="form-input" id="rename-playlist-input" value="${currentName}" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); font-size: 16px;">
-        </div>
-        <div class="modal-footer" style="display: flex; gap: 12px; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border-color);">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-          <button class="btn btn-primary" id="rename-playlist-save">Save</button>
-        </div>
+    // Remove any existing popup
+    document.querySelector('.rename-playlist-popup')?.remove();
+    
+    // Find the playlist item to position near it
+    const playlistItem = document.querySelector(`.playlist-nav-item[data-playlist-id="${playlistId}"]`);
+    if (!playlistItem) return;
+    
+    const rect = playlistItem.getBoundingClientRect();
+    
+    const popup = document.createElement('div');
+    popup.className = 'rename-playlist-popup';
+    popup.innerHTML = `
+      <input type="text" class="rename-input" value="${currentName}" placeholder="Playlist name">
+      <div class="rename-actions">
+        <button class="rename-cancel">Cancel</button>
+        <button class="rename-save">Save</button>
       </div>
     `;
     
-    document.body.appendChild(modal);
+    popup.style.cssText = `
+      position: fixed;
+      top: ${rect.top}px;
+      left: ${rect.right + 8}px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      z-index: 10001;
+      min-width: 200px;
+      animation: menuFadeIn 0.15s ease;
+    `;
     
-    const input = document.getElementById('rename-playlist-input');
+    // Add styles for popup elements
+    const style = document.createElement('style');
+    style.id = 'rename-popup-styles';
+    if (!document.getElementById('rename-popup-styles')) {
+      style.textContent = `
+        .rename-playlist-popup .rename-input {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          background: var(--bg-hover);
+          color: var(--text-primary);
+          font-size: 14px;
+          outline: none;
+          margin-bottom: 10px;
+        }
+        .rename-playlist-popup .rename-input:focus {
+          border-color: var(--accent);
+        }
+        .rename-playlist-popup .rename-actions {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+        }
+        .rename-playlist-popup button {
+          padding: 6px 12px;
+          border-radius: var(--radius-md);
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          border: none;
+        }
+        .rename-playlist-popup .rename-cancel {
+          background: var(--bg-hover);
+          color: var(--text-secondary);
+        }
+        .rename-playlist-popup .rename-cancel:hover {
+          background: var(--border-color);
+        }
+        .rename-playlist-popup .rename-save {
+          background: var(--accent);
+          color: white;
+        }
+        .rename-playlist-popup .rename-save:hover {
+          opacity: 0.9;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(popup);
+    
+    const input = popup.querySelector('.rename-input');
     input.focus();
     input.select();
     
-    // Save on Enter
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('rename-playlist-save').click();
-      }
-    });
-    
-    // Save button
-    document.getElementById('rename-playlist-save').addEventListener('click', async () => {
+    // Save function
+    const saveRename = async () => {
       const newName = input.value.trim();
-      if (!newName) return;
+      if (!newName || newName === currentName) {
+        popup.remove();
+        return;
+      }
       
       try {
         await API.updatePlaylist(playlistId, AppState.user.address, { name: newName });
-        modal.remove();
+        popup.remove();
         showToast('Playlist renamed');
         this.updatePlaylists();
       } catch (error) {
         console.error('Failed to rename playlist:', error);
         showToast('Failed to rename playlist');
       }
+    };
+    
+    // Enter to save
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveRename();
+      if (e.key === 'Escape') popup.remove();
     });
     
-    // Close on overlay click
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.remove();
-    });
+    // Button handlers
+    popup.querySelector('.rename-save').addEventListener('click', saveRename);
+    popup.querySelector('.rename-cancel').addEventListener('click', () => popup.remove());
+    
+    // Close on outside click
+    setTimeout(() => {
+      const closePopup = (e) => {
+        if (!popup.contains(e.target)) {
+          popup.remove();
+          document.removeEventListener('click', closePopup);
+        }
+      };
+      document.addEventListener('click', closePopup);
+    }, 0);
   },
   
   /**
