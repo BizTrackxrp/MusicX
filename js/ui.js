@@ -673,11 +673,6 @@ const UI = {
       showToast('Failed to delete playlist');
     }
   },
-      
-    } catch (error) {
-      console.error('Failed to load playlists:', error);
-    }
-  },
   
   /**
    * Update liked count in sidebar
