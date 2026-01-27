@@ -2266,14 +2266,13 @@ async processListNFT(nft, price) {
           align-items: flex-start;
           padding-top: 40px;
         }
-        .release-modal {
+       .release-modal {
           max-width: 800px;
           width: 100%;
           max-height: calc(100vh - 80px);
           overflow-y: auto;
           border-radius: var(--radius-xl);
           padding: 0;
-           overflow: hidden;  /* ADD THIS LINE */
         }
       .release-close-x {
           position: absolute;
@@ -2680,9 +2679,37 @@ async processListNFT(nft, price) {
       Router.navigate('artist', { address: release.artistAddress });
     });
     
-    // Like release
-    document.getElementById('like-release-btn')?.addEventListener('click', () => {
-      this.showToast('Liked Songs feature coming soon!');
+    // Like release - like the first track
+    document.getElementById('like-release-btn')?.addEventListener('click', async () => {
+      if (!AppState.user?.address) {
+        this.showAuth();
+        return;
+      }
+      const firstTrack = release.tracks?.[0];
+      if (!firstTrack) return;
+      
+      const trackId = firstTrack.id?.toString();
+      const btn = document.getElementById('like-release-btn');
+      const isCurrentlyLiked = isTrackLiked(trackId);
+      
+      try {
+        if (isCurrentlyLiked) {
+          await API.unlikeTrack(AppState.user.address, trackId);
+          removeLikedTrack(trackId);
+          btn.querySelector('svg').setAttribute('fill', 'none');
+          btn.classList.remove('liked');
+          this.showToast('Removed from Liked Songs');
+        } else {
+          await API.likeTrack(AppState.user.address, trackId);
+          addLikedTrack(trackId);
+          btn.querySelector('svg').setAttribute('fill', 'currentColor');
+          btn.classList.add('liked');
+          this.showToast('Added to Liked Songs');
+        }
+      } catch (error) {
+        console.error('Failed to toggle like:', error);
+        this.showToast('Failed to update liked songs');
+      }
     });
     
     // Add to playlist
@@ -2703,11 +2730,39 @@ async processListNFT(nft, price) {
       }
     });
     
-    // Like track buttons
+   // Like track buttons
     document.querySelectorAll('.like-track-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        this.showToast('Liked Songs feature coming soon!');
+        if (!AppState.user?.address) {
+          this.showAuth();
+          return;
+        }
+        const trackIdx = parseInt(btn.dataset.trackIdx, 10);
+        const track = release.tracks?.[trackIdx];
+        if (!track) return;
+        
+        const trackId = track.id?.toString();
+        const isCurrentlyLiked = isTrackLiked(trackId);
+        
+        try {
+          if (isCurrentlyLiked) {
+            await API.unlikeTrack(AppState.user.address, trackId);
+            removeLikedTrack(trackId);
+            btn.querySelector('svg').setAttribute('fill', 'none');
+            btn.classList.remove('liked');
+            this.showToast('Removed from Liked Songs');
+          } else {
+            await API.likeTrack(AppState.user.address, trackId);
+            addLikedTrack(trackId);
+            btn.querySelector('svg').setAttribute('fill', 'currentColor');
+            btn.classList.add('liked');
+            this.showToast('Added to Liked Songs');
+          }
+        } catch (error) {
+          console.error('Failed to toggle like:', error);
+          this.showToast('Failed to update liked songs');
+        }
       });
     });
     
