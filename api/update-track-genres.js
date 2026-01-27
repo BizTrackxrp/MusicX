@@ -1,7 +1,9 @@
 // /api/update-track-genres.js
 // API endpoint for updating track genres (artist only)
 
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
+
+const sql = neon(process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
   // CORS headers
@@ -29,15 +31,15 @@ export default async function handler(req, res) {
     
     // Verify the release exists and optionally check ownership
     const releaseCheck = await sql`
-      SELECT id, artist_address FROM releases WHERE id = ${releaseId}
+      SELECT id, artist_address FROM releases WHERE id = ${parseInt(releaseId)}
     `;
     
-    if (releaseCheck.rows.length === 0) {
+    if (releaseCheck.length === 0) {
       return res.status(404).json({ success: false, error: 'Release not found' });
     }
     
     // Optional: Verify artist ownership if artistAddress is provided
-    if (artistAddress && releaseCheck.rows[0].artist_address !== artistAddress) {
+    if (artistAddress && releaseCheck[0].artist_address !== artistAddress) {
       return res.status(403).json({ 
         success: false, 
         error: 'You can only edit genres for your own releases' 
@@ -45,28 +47,22 @@ export default async function handler(req, res) {
     }
     
     // Update each track's genre
-    const updatePromises = tracks.map(async (track) => {
-      if (!track.trackId) return null;
+    for (const track of tracks) {
+      if (!track.trackId) continue;
       
-      // Update the track genre
-     await sql`
-  UPDATE tracks 
-  SET genre = ${track.genre || null}
-  WHERE id = ${parseInt(track.trackId)} AND release_id = ${parseInt(releaseId)}
-`;
-      
-      return track.trackId;
-    });
+      await sql`
+        UPDATE tracks 
+        SET genre = ${track.genre || null}
+        WHERE id = ${parseInt(track.trackId)} AND release_id = ${parseInt(releaseId)}
+      `;
+    }
     
-    await Promise.all(updatePromises);
-    
-    // Also update the release's primary/secondary genre based on first track
-    // (optional - helps with fallback logic)
+    // Also update the release's primary genre based on first track
     if (tracks.length > 0 && tracks[0].genre) {
       await sql`
         UPDATE releases 
         SET genre_primary = ${tracks[0].genre}
-        WHERE id = ${releaseId}
+        WHERE id = ${parseInt(releaseId)}
       `;
     }
     
