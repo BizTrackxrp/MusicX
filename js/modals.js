@@ -550,15 +550,9 @@ const Modals = {
     });
     
     document.getElementById('np-like-btn')?.addEventListener('click', async () => {
-      await Player.toggleLike();
-      const track = AppState.player.currentTrack;
-      const isLiked = isTrackLiked(track?.trackId || track?.id?.toString());
-      const btn = document.getElementById('np-like-btn');
-      if (btn) {
-        btn.classList.toggle('liked', isLiked);
-        btn.querySelector('svg').setAttribute('fill', isLiked ? 'currentColor' : 'none');
-      }
-    });
+  await Player.toggleLike();
+  // Player.toggleLike() now syncs all like buttons automatically
+});
     
     document.getElementById('np-progress')?.addEventListener('click', (e) => {
       if (!Player.audio?.duration) return;
