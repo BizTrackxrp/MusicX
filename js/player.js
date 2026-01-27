@@ -638,7 +638,7 @@ const Player = {
   
   /**
    * Toggle like for current track
-   * Uses the toggleTrackLike from state.js for optimistic updates
+   * Updates ALL like buttons (player bar, expanded player, Now Playing modal)
    */
   async toggleLike() {
     const track = AppState.player.currentTrack;
@@ -654,28 +654,80 @@ const Player = {
     
     const trackId = track.trackId || track.id?.toString();
     const releaseId = track.releaseId;
+    const isCurrentlyLiked = typeof isTrackLiked === 'function' ? isTrackLiked(trackId) : false;
     
-    // Use the state.js toggleTrackLike which handles optimistic updates
-    if (typeof toggleTrackLike === 'function') {
-      await toggleTrackLike(trackId, releaseId);
-    } else {
-      // Fallback to manual toggle if state function not available
-      const isLiked = isTrackLiked(trackId);
-      
-      try {
-        if (isLiked) {
-          await API.unlikeTrack(AppState.user.address, trackId);
-          removeLikedTrack(trackId);
-        } else {
-          await API.likeTrack(AppState.user.address, trackId, releaseId);
-          addLikedTrack(trackId);
-        }
-        
-        this.updateLikeButton();
-      } catch (error) {
-        console.error('Failed to toggle like:', error);
+    try {
+      if (isCurrentlyLiked) {
+        await API.unlikeTrack(AppState.user.address, trackId);
+        if (typeof removeLikedTrack === 'function') removeLikedTrack(trackId);
+      } else {
+        await API.likeTrack(AppState.user.address, trackId, releaseId);
+        if (typeof addLikedTrack === 'function') addLikedTrack(trackId);
       }
+      
+      // Update ALL like buttons everywhere
+      this.syncAllLikeButtons();
+      
+      // Show toast
+      if (typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast(isCurrentlyLiked ? 'Removed from Liked Songs' : 'Added to Liked Songs');
+      }
+      
+      return !isCurrentlyLiked; // Return new liked state
+    } catch (error) {
+      console.error('Failed to toggle like:', error);
+      if (typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast('Failed to update liked songs');
+      }
+      throw error;
     }
+  },
+  
+  /**
+   * Sync ALL like buttons across the app
+   * Called after any like/unlike action
+   */
+  syncAllLikeButtons() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    const trackId = track.trackId || track.id?.toString();
+    const isLiked = typeof isTrackLiked === 'function' ? isTrackLiked(trackId) : false;
+    
+    // 1. Player bar like button
+    const playerLikeBtn = document.getElementById('player-like-btn');
+    if (playerLikeBtn) {
+      playerLikeBtn.classList.toggle('liked', isLiked);
+      playerLikeBtn.setAttribute('title', isLiked ? 'Unlike' : 'Like');
+      const svg = playerLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
+    
+    // 2. Expanded player like button
+    const expLikeBtn = document.getElementById('expanded-like-btn');
+    if (expLikeBtn) {
+      expLikeBtn.classList.toggle('liked', isLiked);
+      const svg = expLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
+    
+    // 3. Now Playing modal like button
+    const npLikeBtn = document.getElementById('np-like-btn');
+    if (npLikeBtn) {
+      npLikeBtn.classList.toggle('liked', isLiked);
+      const svg = npLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
+    
+    // 4. Release modal like button (for first track)
+    const releaseLikeBtn = document.getElementById('like-release-btn');
+    if (releaseLikeBtn) {
+      releaseLikeBtn.classList.toggle('liked', isLiked);
+      const svg = releaseLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
+    
+    console.log('❤️ Synced all like buttons. Liked:', isLiked);
   },
   
   /**
@@ -838,13 +890,8 @@ const Player = {
     if (expTitle) expTitle.textContent = track.title || 'Unknown Track';
     if (expArtist) expArtist.textContent = track.artist || 'Unknown Artist';
     
-    // Update like button state
-    this.updateLikeButton();
-    
-    // Sync like button if syncPlayerLikeButton exists in state.js
-    if (typeof syncPlayerLikeButton === 'function') {
-      syncPlayerLikeButton();
-    }
+    // Update all like buttons
+    this.syncAllLikeButtons();
     
     // Update document title
     document.title = `${track.title || 'Unknown'} - ${track.artist || 'Unknown'} | XRP Music`;
@@ -883,29 +930,11 @@ const Player = {
     if (volumeMuteIcon) volumeMuteIcon.classList.toggle('hidden', !isMuted);
   },
   
+  /**
+   * Update like button (legacy - now calls syncAllLikeButtons)
+   */
   updateLikeButton() {
-    const track = AppState.player.currentTrack;
-    if (!track) return;
-    
-    const trackId = track.trackId || track.id?.toString();
-    const isLiked = typeof isTrackLiked === 'function' ? isTrackLiked(trackId) : false;
-    
-    // Desktop player like button
-    const likeBtn = document.getElementById('player-like-btn');
-    if (likeBtn) {
-      likeBtn.classList.toggle('liked', isLiked);
-      likeBtn.setAttribute('title', isLiked ? 'Unlike' : 'Like');
-      const svg = likeBtn.querySelector('svg');
-      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
-    }
-    
-    // Expanded player like button
-    const expLikeBtn = document.getElementById('expanded-like-btn');
-    if (expLikeBtn) {
-      expLikeBtn.classList.toggle('liked', isLiked);
-      const svg = expLikeBtn.querySelector('svg');
-      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
-    }
+    this.syncAllLikeButtons();
   },
   
   updateExpandedPlayer() {
@@ -916,7 +945,7 @@ const Player = {
     this.updateTrackInfo(track);
     this.updatePlayButton(AppState.player.isPlaying);
     this.updateVolumeIcon();
-    this.updateLikeButton();
+    this.syncAllLikeButtons();
     this.updateRepeatButton();
     
     // Sync volume slider
