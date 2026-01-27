@@ -186,6 +186,7 @@ const PlaylistPicker = {
       if (data.success) {
         this.close();
         Modals.showToast(`Added "${track.title}" to ${playlist.name}`);
+        UI.updatePlaylists(); // Refresh sidebar
       } else if (data.message === 'Track already in playlist') {
         Modals.showToast('Track already in this playlist');
       } else {
@@ -261,11 +262,7 @@ const PlaylistPicker = {
       if (addData.success) {
         this.close();
         Modals.showToast(`Added "${track.title}" to ${name}`);
-        
-        // Refresh sidebar playlists if function exists
-        if (typeof UI !== 'undefined' && UI.loadUserPlaylists) {
-          UI.loadUserPlaylists();
-        }
+        UI.updatePlaylists(); // Refresh sidebar
       } else {
         throw new Error(addData.error || 'Failed to add track');
       }
