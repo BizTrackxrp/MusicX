@@ -2457,3 +2457,32 @@ button.release-close-x:hover {
 .playlist-menu-item.delete:hover {
   background: rgba(239, 68, 68, 0.1);
 }
+/* ============================================
+   LIKE BUTTON STYLES - Add to your styles.css
+   ============================================ */
+
+/* Player bar like button - red when liked */
+#player-like-btn.liked {
+  color: #ef4444 !important;
+}
+
+/* Expanded player like button - red when liked */
+#expanded-like-btn.liked {
+  color: #ef4444 !important;
+}
+
+/* Now Playing modal like button - red when liked */
+.np-action-btn.liked {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+/* Release modal like button - red when liked */
+.btn-icon-circle.liked {
+  color: #ef4444 !important;
+}
+
+/* Track row like button - red when liked */
+.track-action-btn.liked {
+  color: #ef4444 !important;
+}
