@@ -2160,14 +2160,18 @@ async processListNFT(nft, price) {
               </svg>
             </button>
             <button class="btn-icon-circle" id="share-release-btn" title="Share">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-              </svg>
+              ...
             </button>
+            ${AppState.user?.address && AppState.user.address === release.artistAddress ? `
+              <button class="btn-icon-circle" id="edit-genres-btn" title="Edit Genres">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+              </button>
+            ` : ''}
             <div style="flex: 1;"></div>
             ${canBuyFullAlbum ? `
               <button class="btn btn-primary buy-album-btn" id="buy-album-btn">
@@ -2744,6 +2748,15 @@ document.getElementById('like-release-btn')?.addEventListener('click', async () 
         navigator.clipboard.writeText(url).then(() => {
           this.showToast('Link copied to clipboard!');
         });
+      }
+    });
+
+    // Edit Genres button (only visible to artist)
+    document.getElementById('edit-genres-btn')?.addEventListener('click', () => {
+      if (typeof EditGenresModal !== 'undefined') {
+        EditGenresModal.show(release);
+      } else {
+        this.showToast('Genre editor loading...');
       }
     });
     
