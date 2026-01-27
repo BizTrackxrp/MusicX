@@ -2163,15 +2163,10 @@ async processListNFT(nft, price) {
               ...
             </button>
             ${AppState.user?.address && AppState.user.address === release.artistAddress ? `
-              <button class="btn-icon-circle" id="edit-genres-btn" title="Edit Genres">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
-              </button>
-            ` : ''}
+  <button class="btn btn-sm btn-secondary" id="edit-genres-btn" style="font-size: 13px; padding: 6px 12px;">
+    Genres
+  </button>
+` : ''}
             <div style="flex: 1;"></div>
             ${canBuyFullAlbum ? `
               <button class="btn btn-primary buy-album-btn" id="buy-album-btn">
