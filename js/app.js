@@ -379,7 +379,7 @@ const Router = {
             ${playlists.map(playlist => `
               <div class="release-card" data-playlist-id="${playlist.id}">
                 <div class="release-card-cover">
-                  ${playlist.coverUrl 
+                 ${playlist.cover_url || playlist.coverUrl
                     ? `<img src="${playlist.coverUrl}" alt="${playlist.name}">`
                     : `<div class="placeholder" style="background: linear-gradient(135deg, #a855f7, #ec4899);">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
@@ -390,11 +390,11 @@ const Router = {
                       </div>`
                   }
                 </div>
-                <div class="release-card-info">
+               <div class="release-card-info">
                   <div class="release-card-title">${playlist.name}</div>
-                  <div class="release-card-artist">${Helpers.truncateAddress(playlist.ownerAddress)}</div>
+                  <div class="release-card-artist">${playlist.owner_name || Helpers.truncateAddress(playlist.owner_address || playlist.ownerAddress)}</div>
                   <div class="release-card-footer">
-                    <span class="release-card-tracks">${playlist.trackCount} tracks</span>
+                    <span class="release-card-tracks">${playlist.track_count || playlist.trackCount || 0} tracks</span>
                   </div>
                 </div>
               </div>
