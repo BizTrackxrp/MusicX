@@ -49,11 +49,11 @@ export default async function handler(req, res) {
       if (!track.trackId) return null;
       
       // Update the track genre
-      await sql`
-        UPDATE tracks 
-        SET genre = ${track.genre || null}
-        WHERE id = ${track.trackId} AND release_id = ${releaseId}
-      `;
+     await sql`
+  UPDATE tracks 
+  SET genre = ${track.genre || null}
+  WHERE id = ${parseInt(track.trackId)} AND release_id = ${parseInt(releaseId)}
+`;
       
       return track.trackId;
     });
