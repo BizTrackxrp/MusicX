@@ -1,0 +1,162 @@
+/**
+ * XRP Music - Genre Styles
+ * Styles for genre chips, selectors, and related components
+ */
+
+/* Genre Chip Base Styles */
+.genre-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 100px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms;
+  white-space: nowrap;
+}
+
+.genre-chip:hover {
+  border-color: var(--genre-color);
+  color: var(--genre-color);
+}
+
+.genre-chip.selected {
+  border-color: var(--genre-color);
+  background: color-mix(in srgb, var(--genre-color) 15%, transparent);
+  color: var(--genre-color);
+}
+
+.genre-chip-clickable:hover {
+  transform: translateY(-1px);
+}
+
+/* Size Variants */
+.genre-chip-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.genre-chip-sm .genre-icon {
+  font-size: 12px;
+}
+
+.genre-chip-md {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.genre-chip-lg {
+  padding: 10px 20px;
+  font-size: 15px;
+  gap: 8px;
+}
+
+.genre-chip-lg .genre-icon {
+  font-size: 18px;
+}
+
+/* Genre Icon */
+.genre-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Genre Selector Grid */
+.genre-selector {
+  width: 100%;
+}
+
+.genre-selector.grouped .genre-category {
+  margin-bottom: 20px;
+}
+
+.genre-selector .genre-category-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+.genre-selector .genre-category-chips,
+.genre-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Genre Badge (for displaying on cards) */
+.genre-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--genre-color) 20%, transparent);
+  color: var(--genre-color);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Genre Tag (minimal style) */
+.genre-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.genre-tag:hover {
+  background: var(--bg-card);
+  color: var(--genre-color);
+}
+
+/* Loading animation for genre content */
+.genre-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+/* Genre color utility classes */
+.genre-text {
+  color: var(--genre-color);
+}
+
+.genre-bg {
+  background-color: var(--genre-color);
+}
+
+.genre-border {
+  border-color: var(--genre-color);
+}
+
+.genre-bg-soft {
+  background-color: color-mix(in srgb, var(--genre-color) 15%, transparent);
+}
+
+/* Loading dots animation */
+.loading-dots::after {
+  content: '';
+  animation: loadingDots 1.5s infinite;
+}
+
+@keyframes loadingDots {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
+}
