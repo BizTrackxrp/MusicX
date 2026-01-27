@@ -33,6 +33,14 @@ const Router = {
     if (page === 'release' && params.id) {
       return `/release/${params.id}`;
     }
+    // Genre page URL
+    if (page === 'genre' && params.id) {
+      return `/genre/${params.id}`;
+    }
+    // Browse genres page
+    if (page === 'genres') {
+      return '/genres';
+    }
     if (page === 'analytics') {
       const queryParams = new URLSearchParams();
       if (params.sort) queryParams.set('sort', params.sort);
@@ -84,6 +92,17 @@ const Router = {
     if (path.startsWith('/release/')) {
       const id = path.replace('/release/', '');
       return { page: 'release', params: { id } };
+    }
+    
+    // Genre page (single genre)
+    if (path.startsWith('/genre/')) {
+      const id = path.replace('/genre/', '');
+      return { page: 'genre', params: { id } };
+    }
+    
+    // Browse genres page
+    if (path === '/genres') {
+      return { page: 'genres', params: {} };
     }
     
     // Analytics page
@@ -172,6 +191,26 @@ const Router = {
           StreamPage.render();
         }
         break;
+      // ========== GENRE ROUTES ==========
+      case 'genres':
+        // Browse all genres page
+        if (typeof BrowseGenresPage !== 'undefined') {
+          BrowseGenresPage.render();
+        } else {
+          console.error('BrowseGenresPage not loaded');
+          StreamPage.render();
+        }
+        break;
+      case 'genre':
+        // Single genre page (shows all tracks in that genre)
+        if (typeof GenrePage !== 'undefined') {
+          GenrePage.render(this.params);
+        } else {
+          console.error('GenrePage not loaded');
+          StreamPage.render();
+        }
+        break;
+      // ===================================
       default:
         StreamPage.render();
     }
