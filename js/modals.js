@@ -2700,7 +2700,7 @@ async processListNFT(nft, price) {
           btn.classList.remove('liked');
           this.showToast('Removed from Liked Songs');
         } else {
-          await API.likeTrack(AppState.user.address, trackId);
+          await API.likeTrack(AppState.user.address, trackId, release.id);
           addLikedTrack(trackId);
           btn.querySelector('svg').setAttribute('fill', 'currentColor');
           btn.classList.add('liked');
@@ -2753,7 +2753,7 @@ async processListNFT(nft, price) {
             btn.classList.remove('liked');
             this.showToast('Removed from Liked Songs');
           } else {
-            await API.likeTrack(AppState.user.address, trackId);
+            await API.likeTrack(AppState.user.address, trackId, release.id);
             addLikedTrack(trackId);
             btn.querySelector('svg').setAttribute('fill', 'currentColor');
             btn.classList.add('liked');
