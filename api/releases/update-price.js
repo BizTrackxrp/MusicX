@@ -62,7 +62,6 @@ export default async function handler(req, res) {
       SET 
         song_price = ${newPrice},
         album_price = ${newAlbumPrice},
-        updated_at = NOW()
       WHERE id = ${releaseId}
     `;
     
