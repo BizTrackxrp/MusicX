@@ -1,8 +1,13 @@
 /**
- * XRP Music - IPFS Image Proxy
+ * XRP Music - IPFS Proxy with Range Request Support
  * 
  * Proxies IPFS content through our domain to bypass security software
  * that blocks IPFS gateways directly.
+ * 
+ * NOW SUPPORTS:
+ * - Range requests for audio/video seeking
+ * - Proper Content-Length headers
+ * - Accept-Ranges header
  * 
  * Usage: /api/ipfs/[cid]
  * Example: /api/ipfs/QmZw9HdDHPZrvJwqrhfM9is3YaxSNLYvQUuav15LqMg
@@ -31,24 +36,38 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid IPFS CID format' });
   }
   
+  // Check for Range header (for seeking in audio/video)
+  const rangeHeader = req.headers.range;
+  
   // Try each gateway until one works
   let lastError = null;
   
   for (const gateway of GATEWAYS) {
     try {
+      // Build request headers
+      const fetchHeaders = {
+        'User-Agent': 'XRPMusic/1.0',
+      };
+      
+      // Forward Range header if present
+      if (rangeHeader) {
+        fetchHeaders['Range'] = rangeHeader;
+      }
+      
       const response = await fetch(`${gateway}${cid}`, {
-        headers: {
-          'User-Agent': 'XRPMusic/1.0',
-        },
+        headers: fetchHeaders,
       });
       
-      if (!response.ok) {
+      if (!response.ok && response.status !== 206) {
         lastError = `${gateway} returned ${response.status}`;
         continue;
       }
       
-      // Get content type
+      // Get content info from response headers
       const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      const contentLength = response.headers.get('content-length');
+      const contentRange = response.headers.get('content-range');
+      const acceptRanges = response.headers.get('accept-ranges');
       
       // Get the content as buffer
       const buffer = await response.arrayBuffer();
@@ -58,7 +77,23 @@ export default async function handler(req, res) {
       res.setHeader('Content-Type', contentType);
       res.setHeader('X-IPFS-Gateway', gateway);
       
-      // Send the content
+      // IMPORTANT: Enable range requests for seeking
+      res.setHeader('Accept-Ranges', 'bytes');
+      
+      // Set content length
+      if (contentLength) {
+        res.setHeader('Content-Length', buffer.byteLength);
+      }
+      
+      // Handle Range response (206 Partial Content)
+      if (response.status === 206 && contentRange) {
+        res.setHeader('Content-Range', contentRange);
+        res.status(206);
+        return res.send(Buffer.from(buffer));
+      }
+      
+      // Regular response (200 OK)
+      res.status(200);
       return res.send(Buffer.from(buffer));
       
     } catch (error) {
