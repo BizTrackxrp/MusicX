@@ -2591,43 +2591,39 @@ async processListNFT(nft, price) {
           .release-track-list { 
             padding: 0 16px 24px;
           }
-          .track-row { 
-            grid-template-columns: 32px 1fr auto; 
-            padding: 10px 12px;
-            gap: 8px;
-          }
-          .track-col-actions, .track-col-duration, .track-col-avail { display: none; }
-          .track-col-title {
-            min-width: 0;
-          }
-          .track-name {
-            font-size: 13px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .track-artist {
-            font-size: 11px;
-          }
-          .track-col-buy { 
-            flex-shrink: 0;
-          }
-          .track-col-buy .btn { 
-            font-size: 11px; 
-            padding: 6px 10px;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-          .track-col-buy .btn svg {
-            width: 12px;
-            height: 12px;
-            flex-shrink: 0;
-          }
-          .sold-out-label {
-            font-size: 10px;
-          }
+        .track-row { 
+  grid-template-columns: 32px 1fr auto; 
+  padding: 10px 12px;
+  gap: 8px;
+}
+.track-col-actions, .track-col-duration, .track-col-avail { display: none; }
+.track-col-title {
+  min-width: 0;
+}
+.track-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-artist {
+  font-size: 11px;
+}
+.track-col-buy { 
+  flex-shrink: 0;
+}
+.track-col-buy .btn { 
+  font-size: 12px; 
+  padding: 8px 12px;
+  white-space: nowrap;
+  min-width: 75px;
+}
+.track-col-buy .btn svg {
+  display: none;
+}
+.sold-out-label {
+  font-size: 10px;
+}
           .buy-album-btn { 
             font-size: 13px; 
             padding: 10px 14px;
