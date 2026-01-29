@@ -277,26 +277,53 @@ const PlaylistPage = {
   },
   
   buildCompositeCover(covers) {
-    if (covers.length === 0) {
+    // Proxy all cover URLs
+    var fallbackImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23333' width='200' height='200'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' font-size='48' text-anchor='middle' dy='.3em'%3E♪%3C/text%3E%3C/svg%3E";
+    var proxiedCovers = covers.map(c => this.getProxiedImageUrl(c)).filter(Boolean);
+    
+    if (proxiedCovers.length === 0) {
       return '<div class="playlist-header-cover empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>';
-    } else if (covers.length === 1) {
-      return '<img class="single-cover" src="' + covers[0] + '" alt="" onerror="this.src=\'/placeholder.png\'">';
-    } else if (covers.length < 4) {
-      return '<div class="playlist-header-cover duo" style="display:grid;grid-template-columns:1fr 1fr;">' + covers.slice(0, 2).map(function(c) { return '<img src="' + c + '" alt="" onerror="this.src=\'/placeholder.png\'">'; }).join('') + '</div>';
+    } else if (proxiedCovers.length === 1) {
+      return '<img class="single-cover" src="' + proxiedCovers[0] + '" alt="" onerror="this.src=\'' + fallbackImg + '\'">';
+    } else if (proxiedCovers.length < 4) {
+      return '<div class="playlist-header-cover duo" style="display:grid;grid-template-columns:1fr 1fr;">' + proxiedCovers.slice(0, 2).map(function(c) { return '<img src="' + c + '" alt="" onerror="this.src=\'' + fallbackImg + '\'">'; }).join('') + '</div>';
     } else {
-      return '<div class="playlist-header-cover quad" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;">' + covers.slice(0, 4).map(function(c) { return '<img src="' + c + '" alt="" onerror="this.src=\'/placeholder.png\'">'; }).join('') + '</div>';
+      return '<div class="playlist-header-cover quad" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;">' + proxiedCovers.slice(0, 4).map(function(c) { return '<img src="' + c + '" alt="" onerror="this.src=\'' + fallbackImg + '\'">'; }).join('') + '</div>';
     }
   },
   
   renderTrackRow(track, idx, isOwner) {
     var playlistTrackId = track.playlist_track_id || track.id || track.track_id;
+    // Use IPFS proxy for cover images
+    var coverUrl = this.getProxiedImageUrl(track.cover_url);
+    var fallbackImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect fill='%23333' width='40' height='40'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' font-size='16' text-anchor='middle' dy='.3em'%3E♪%3C/text%3E%3C/svg%3E";
     return '<div class="playlist-track-row" data-track-idx="' + idx + '" data-release-id="' + (track.release_id || '') + '">' +
       '<span class="track-col-num"><span class="track-num">' + (idx + 1) + '</span><button class="track-play-btn" data-track-idx="' + idx + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button></span>' +
-      '<div class="track-col-title"><img class="track-cover" src="' + (track.cover_url || '/placeholder.png') + '" alt="" onerror="this.src=\'/placeholder.png\'"><div class="track-info"><span class="track-name">' + (track.title || 'Unknown Track') + '</span><span class="track-artist">' + (track.artist_name || 'Unknown Artist') + '</span></div></div>' +
+      '<div class="track-col-title"><img class="track-cover" src="' + coverUrl + '" alt="" onerror="this.src=\'' + fallbackImg + '\'"><div class="track-info"><span class="track-name">' + (track.title || 'Unknown Track') + '</span><span class="track-artist">' + (track.artist_name || 'Unknown Artist') + '</span></div></div>' +
       '<span class="track-col-album">' + (track.release_title || '') + '</span>' +
       '<span class="track-col-duration">' + Helpers.formatDuration(track.duration || 0) + '</span>' +
       (isOwner ? '<span class="track-col-actions"><button class="track-remove-btn" data-playlist-track-id="' + playlistTrackId + '" title="Remove from playlist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></span>' : '<span class="track-col-actions"></span>') +
       '</div>';
+  },
+  
+  /**
+   * Convert IPFS URL to proxied URL
+   */
+  getProxiedImageUrl(url) {
+    if (!url) {
+      return "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect fill='%23333' width='40' height='40'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' font-size='16' text-anchor='middle' dy='.3em'%3E♪%3C/text%3E%3C/svg%3E";
+    }
+    // Already proxied
+    if (url.startsWith('/api/ipfs/')) {
+      return url;
+    }
+    // Extract CID from IPFS gateway URL
+    if (url.includes('/ipfs/')) {
+      var cid = url.split('/ipfs/')[1].split('?')[0];
+      return '/api/ipfs/' + cid;
+    }
+    // Regular URL, return as-is
+    return url;
   },
   
   bindEvents() {
