@@ -16,10 +16,15 @@ const Genres = {
     { id: 'electronic', name: 'Electronic', color: '#3b82f6', icon: '⚡' },
     { id: 'edm', name: 'EDM', color: '#2563eb', icon: '🎛️' },
     { id: 'house', name: 'House', color: '#1d4ed8', icon: '🏠' },
+    { id: 'deephouse', name: 'Deep House', color: '#0ea5e9', icon: '🌊' },
+    { id: 'afrohouse', name: 'Afro House', color: '#14b8a6', icon: '🌍' },
     { id: 'techno', name: 'Techno', color: '#1e40af', icon: '🤖' },
     { id: 'dubstep', name: 'Dubstep', color: '#7c3aed', icon: '💥' },
     { id: 'dnb', name: 'Drum & Bass', color: '#6d28d9', icon: '🥁' },
     { id: 'trance', name: 'Trance', color: '#8b5cf6', icon: '🌀' },
+    { id: 'breakbeat', name: 'Breakbeat', color: '#f472b6', icon: '💿' },
+    { id: 'garage', name: 'Garage', color: '#a3e635', icon: '🎚️' },
+    { id: 'synthwave', name: 'Synthwave', color: '#c084fc', icon: '🌆' },
     
     // R&B & Soul
     { id: 'rnb', name: 'R&B', color: '#a855f7', icon: '💜' },
@@ -96,7 +101,7 @@ const Genres = {
   getGrouped() {
     return {
       'Hip Hop & Rap': this.list.filter(g => ['hiphop', 'rap', 'trap', 'drill'].includes(g.id)),
-      'Electronic & Dance': this.list.filter(g => ['electronic', 'edm', 'house', 'techno', 'dubstep', 'dnb', 'trance'].includes(g.id)),
+      'Electronic & Dance': this.list.filter(g => ['electronic', 'edm', 'house', 'deephouse', 'afrohouse', 'techno', 'dubstep', 'dnb', 'trance', 'breakbeat', 'garage', 'synthwave'].includes(g.id)),
       'R&B & Soul': this.list.filter(g => ['rnb', 'soul', 'funk'].includes(g.id)),
       'Pop & Mainstream': this.list.filter(g => ['pop', 'kpop', 'indie', 'hyperpop'].includes(g.id)),
       'Rock & Alternative': this.list.filter(g => ['rock', 'alternative', 'punk', 'metal', 'grunge'].includes(g.id)),
