@@ -24,14 +24,30 @@ export default async function handler(req, res) {
     
     // Get counts for all genres
     if (allCounts === 'true') {
+      // Use UNION to count both primary and secondary genres
       const result = await sql`
-        SELECT 
-          COALESCE(t.genre, r.genre_primary, 'other') as genre,
-          COUNT(DISTINCT t.id) as count
-        FROM tracks t
-        JOIN releases r ON t.release_id = r.id
-        WHERE r.status = 'live' OR r.mint_fee_paid = true
-        GROUP BY COALESCE(t.genre, r.genre_primary, 'other')
+        SELECT genre, SUM(count) as count FROM (
+          SELECT 
+            COALESCE(t.genre, r.genre_primary, 'other') as genre,
+            COUNT(DISTINCT t.id) as count
+          FROM tracks t
+          JOIN releases r ON t.release_id = r.id
+          WHERE r.status = 'live' OR r.mint_fee_paid = true
+          GROUP BY COALESCE(t.genre, r.genre_primary, 'other')
+          
+          UNION ALL
+          
+          SELECT 
+            t.genre_secondary as genre,
+            COUNT(DISTINCT t.id) as count
+          FROM tracks t
+          JOIN releases r ON t.release_id = r.id
+          WHERE t.genre_secondary IS NOT NULL
+            AND (r.status = 'live' OR r.mint_fee_paid = true)
+          GROUP BY t.genre_secondary
+        ) combined
+        WHERE genre IS NOT NULL
+        GROUP BY genre
         ORDER BY count DESC
       `;
       
