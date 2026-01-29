@@ -2616,10 +2616,16 @@ async processListNFT(nft, price) {
   flex-shrink: 0;
 }
 .track-col-buy .btn { 
-  font-size: 12px; 
-  padding: 8px 12px;
+  font-size: 13px; 
+  padding: 10px 14px;
   white-space: nowrap;
-  min-width: 75px;
+  min-width: 70px;
+  background: var(--accent) !important;
+  border: none !important;
+  color: white !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .track-col-buy .btn svg {
   display: none;
