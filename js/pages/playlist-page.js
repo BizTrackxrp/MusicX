@@ -319,7 +319,16 @@ const PlaylistPage = {
     }
     // Extract CID from IPFS gateway URL
     if (url.includes('/ipfs/')) {
-      var cid = url.split('/ipfs/')[1].split('?')[0];
+      var cid = url.split('/ipfs/')[1].split('?')[0].split('/')[0];
+      return '/api/ipfs/' + cid;
+    }
+    // Raw CID (starts with Qm or bafy)
+    if (url.startsWith('Qm') || url.startsWith('bafy')) {
+      return '/api/ipfs/' + url.split('?')[0].split('/')[0];
+    }
+    // ipfs:// protocol
+    if (url.startsWith('ipfs://')) {
+      var cid = url.replace('ipfs://', '').split('?')[0].split('/')[0];
       return '/api/ipfs/' + cid;
     }
     // Regular URL, return as-is
