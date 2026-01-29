@@ -17,6 +17,10 @@
  * IPFS PROXY:
  * - All IPFS content (audio + images) routes through /api/ipfs/[cid]
  * - This bypasses security software that blocks IPFS gateways directly
+ * 
+ * SEEK BAR:
+ * - Click anywhere on progress bar to seek
+ * - Drag the progress ball to scrub through track
  */
 
 /**
@@ -45,6 +49,12 @@ const Player = {
   audio: null,
   progressInterval: null,
   allTracksCache: [], // Cache of all available tracks for shuffle
+  
+  // Seek/drag state
+  seeking: {
+    isDragging: false,
+    activeBar: null, // 'desktop' or 'expanded'
+  },
   
   // Play tracking state
   playTracking: {
@@ -146,13 +156,9 @@ const Player = {
       expVolumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
     }
     
-    // Progress seeking
-    if (progressBar) {
-      progressBar.addEventListener('click', (e) => this.seek(e));
-    }
-    if (expProgressBar) {
-      expProgressBar.addEventListener('click', (e) => this.seekExpanded(e));
-    }
+    // Progress seeking - CLICK AND DRAG support
+    this.bindSeekBar(progressBar, 'desktop');
+    this.bindSeekBar(expProgressBar, 'expanded');
     
     // Expand/Collapse mobile player - NOW OPENS RELEASE MODAL
     if (expandBtn) expandBtn.addEventListener('click', () => this.openReleaseModal());
@@ -191,6 +197,139 @@ const Player = {
         await this.openReleaseModal();
       });
       playerTrack.style.cursor = 'pointer';
+    }
+  },
+  
+  /**
+   * Bind seek bar for click and drag
+   */
+  bindSeekBar(progressBar, barType) {
+    if (!progressBar) return;
+    
+    const self = this;
+    
+    // Click to seek
+    progressBar.addEventListener('click', (e) => {
+      // Don't seek if we were dragging (mouseup handles that)
+      if (self.seeking.isDragging) return;
+      self.seekToPosition(e, progressBar);
+    });
+    
+    // Mouse down - start drag
+    progressBar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      self.seeking.isDragging = true;
+      self.seeking.activeBar = barType;
+      self.seekToPosition(e, progressBar);
+      
+      // Add window listeners for drag
+      window.addEventListener('mousemove', self.onSeekDrag);
+      window.addEventListener('mouseup', self.onSeekEnd);
+    });
+    
+    // Touch support for mobile
+    progressBar.addEventListener('touchstart', (e) => {
+      self.seeking.isDragging = true;
+      self.seeking.activeBar = barType;
+      const touch = e.touches[0];
+      self.seekToPosition(touch, progressBar);
+      
+      window.addEventListener('touchmove', self.onSeekTouchDrag);
+      window.addEventListener('touchend', self.onSeekTouchEnd);
+    });
+    
+    // Make progress bar look interactive
+    progressBar.style.cursor = 'pointer';
+  },
+  
+  /**
+   * Seek to position based on click/touch event
+   */
+  seekToPosition(e, progressBar) {
+    if (!this.audio.duration) return;
+    
+    const rect = progressBar.getBoundingClientRect();
+    let percent = (e.clientX - rect.left) / rect.width;
+    
+    // Clamp between 0 and 1
+    percent = Math.max(0, Math.min(1, percent));
+    
+    this.audio.currentTime = percent * this.audio.duration;
+    
+    // Update UI immediately for responsive feel
+    this.updateProgressUI(percent * 100);
+  },
+  
+  /**
+   * Handle mouse drag for seeking
+   */
+  onSeekDrag: function(e) {
+    if (!Player.seeking.isDragging) return;
+    
+    const barType = Player.seeking.activeBar;
+    const progressBar = barType === 'expanded' 
+      ? document.getElementById('expanded-progress')
+      : document.getElementById('player-progress');
+    
+    if (progressBar) {
+      Player.seekToPosition(e, progressBar);
+    }
+  },
+  
+  /**
+   * Handle mouse up - end drag
+   */
+  onSeekEnd: function() {
+    Player.seeking.isDragging = false;
+    Player.seeking.activeBar = null;
+    window.removeEventListener('mousemove', Player.onSeekDrag);
+    window.removeEventListener('mouseup', Player.onSeekEnd);
+  },
+  
+  /**
+   * Handle touch drag for seeking
+   */
+  onSeekTouchDrag: function(e) {
+    if (!Player.seeking.isDragging) return;
+    
+    const touch = e.touches[0];
+    const barType = Player.seeking.activeBar;
+    const progressBar = barType === 'expanded' 
+      ? document.getElementById('expanded-progress')
+      : document.getElementById('player-progress');
+    
+    if (progressBar) {
+      Player.seekToPosition(touch, progressBar);
+    }
+  },
+  
+  /**
+   * Handle touch end - end drag
+   */
+  onSeekTouchEnd: function() {
+    Player.seeking.isDragging = false;
+    Player.seeking.activeBar = null;
+    window.removeEventListener('touchmove', Player.onSeekTouchDrag);
+    window.removeEventListener('touchend', Player.onSeekTouchEnd);
+  },
+  
+  /**
+   * Update progress bar UI directly (for responsive dragging)
+   */
+  updateProgressUI(percent) {
+    const progressFill = document.getElementById('player-progress-fill');
+    const expProgressFill = document.getElementById('expanded-progress-fill');
+    
+    if (progressFill) progressFill.style.width = `${percent}%`;
+    if (expProgressFill) expProgressFill.style.width = `${percent}%`;
+    
+    // Update time displays
+    if (this.audio.duration) {
+      const currentTime = (percent / 100) * this.audio.duration;
+      const currentTimeEl = document.getElementById('expanded-current-time');
+      if (currentTimeEl && typeof Helpers !== 'undefined') {
+        currentTimeEl.textContent = Helpers.formatDuration(currentTime);
+      }
     }
   },
   
@@ -615,25 +754,23 @@ const Player = {
   },
   
   /**
-   * Seek in track
+   * Legacy seek method (kept for compatibility)
    */
   seek(e) {
-    if (!this.audio.duration) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    this.audio.currentTime = percent * this.audio.duration;
+    const progressBar = document.getElementById('player-progress');
+    if (progressBar) {
+      this.seekToPosition(e, progressBar);
+    }
   },
   
   /**
-   * Seek in expanded player
+   * Legacy seek expanded method (kept for compatibility)
    */
   seekExpanded(e) {
-    if (!this.audio.duration) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    this.audio.currentTime = percent * this.audio.duration;
+    const progressBar = document.getElementById('expanded-progress');
+    if (progressBar) {
+      this.seekToPosition(e, progressBar);
+    }
   },
   
   /**
@@ -808,25 +945,19 @@ const Player = {
   },
   
   onTimeUpdate() {
+    // Don't update UI while user is dragging
+    if (this.seeking.isDragging) return;
+    
     if (!this.audio.duration) return;
     
     const progress = (this.audio.currentTime / this.audio.duration) * 100;
     updatePlayer({ progress });
     
     // Update progress bars
-    const progressFill = document.getElementById('player-progress-fill');
-    const expProgressFill = document.getElementById('expanded-progress-fill');
+    this.updateProgressUI(progress);
     
-    if (progressFill) progressFill.style.width = `${progress}%`;
-    if (expProgressFill) expProgressFill.style.width = `${progress}%`;
-    
-    // Update times in expanded player
-    const currentTimeEl = document.getElementById('expanded-current-time');
+    // Update duration display
     const durationEl = document.getElementById('expanded-duration');
-    
-    if (currentTimeEl && typeof Helpers !== 'undefined') {
-      currentTimeEl.textContent = Helpers.formatDuration(this.audio.currentTime);
-    }
     if (durationEl && typeof Helpers !== 'undefined') {
       durationEl.textContent = Helpers.formatDuration(this.audio.duration);
     }
