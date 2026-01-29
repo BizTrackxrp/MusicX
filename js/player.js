@@ -208,56 +208,76 @@ const Player = {
     
     const self = this;
     
-    // Click to seek
-    progressBar.addEventListener('click', (e) => {
-      // Don't seek if we were dragging (mouseup handles that)
-      if (self.seeking.isDragging) return;
-      self.seekToPosition(e, progressBar);
-    });
+    // Store reference to the bar for calculations
+    self.seeking[barType + 'Bar'] = progressBar;
     
-    // Mouse down - start drag
-    progressBar.addEventListener('mousedown', (e) => {
+    // Handle click/mousedown on the progress bar AND its children (fill, knob)
+    const handleSeekStart = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      
       self.seeking.isDragging = true;
       self.seeking.activeBar = barType;
+      
+      // Always use the container for position calculation, not the child element
       self.seekToPosition(e, progressBar);
       
       // Add window listeners for drag
       window.addEventListener('mousemove', self.onSeekDrag);
       window.addEventListener('mouseup', self.onSeekEnd);
-    });
+    };
     
-    // Touch support for mobile
-    progressBar.addEventListener('touchstart', (e) => {
+    const handleTouchStart = (e) => {
+      e.stopPropagation();
+      
       self.seeking.isDragging = true;
       self.seeking.activeBar = barType;
+      
       const touch = e.touches[0];
       self.seekToPosition(touch, progressBar);
       
-      window.addEventListener('touchmove', self.onSeekTouchDrag);
+      window.addEventListener('touchmove', self.onSeekTouchDrag, { passive: false });
       window.addEventListener('touchend', self.onSeekTouchEnd);
-    });
+    };
+    
+    // Bind to progress bar container
+    progressBar.addEventListener('mousedown', handleSeekStart);
+    progressBar.addEventListener('touchstart', handleTouchStart);
     
     // Make progress bar look interactive
     progressBar.style.cursor = 'pointer';
+    
+    // Also make child elements clickable (fill, knob)
+    const children = progressBar.querySelectorAll('*');
+    children.forEach(child => {
+      child.style.pointerEvents = 'none'; // Let clicks pass through to parent
+    });
   },
   
   /**
    * Seek to position based on click/touch event
    */
   seekToPosition(e, progressBar) {
-    if (!this.audio.duration) return;
+    if (!this.audio || !this.audio.duration || isNaN(this.audio.duration)) return;
     
     const rect = progressBar.getBoundingClientRect();
-    let percent = (e.clientX - rect.left) / rect.width;
+    const clientX = e.clientX !== undefined ? e.clientX : (e.touches ? e.touches[0].clientX : 0);
+    
+    let percent = (clientX - rect.left) / rect.width;
     
     // Clamp between 0 and 1
     percent = Math.max(0, Math.min(1, percent));
     
-    this.audio.currentTime = percent * this.audio.duration;
+    // Calculate new time
+    const newTime = percent * this.audio.duration;
+    
+    // Set the audio time
+    this.audio.currentTime = newTime;
     
     // Update UI immediately for responsive feel
     this.updateProgressUI(percent * 100);
+    
+    console.log('🎯 Seek to:', Math.round(percent * 100) + '%', 'Time:', newTime.toFixed(1) + 's');
   },
   
   /**
@@ -266,20 +286,42 @@ const Player = {
   onSeekDrag: function(e) {
     if (!Player.seeking.isDragging) return;
     
+    e.preventDefault();
+    
     const barType = Player.seeking.activeBar;
     const progressBar = barType === 'expanded' 
       ? document.getElementById('expanded-progress')
       : document.getElementById('player-progress');
     
-    if (progressBar) {
-      Player.seekToPosition(e, progressBar);
+    if (progressBar && Player.audio && Player.audio.duration) {
+      const rect = progressBar.getBoundingClientRect();
+      let percent = (e.clientX - rect.left) / rect.width;
+      percent = Math.max(0, Math.min(1, percent));
+      
+      Player.audio.currentTime = percent * Player.audio.duration;
+      Player.updateProgressUI(percent * 100);
     }
   },
   
   /**
    * Handle mouse up - end drag
    */
-  onSeekEnd: function() {
+  onSeekEnd: function(e) {
+    if (Player.seeking.isDragging) {
+      // Final seek position
+      const barType = Player.seeking.activeBar;
+      const progressBar = barType === 'expanded' 
+        ? document.getElementById('expanded-progress')
+        : document.getElementById('player-progress');
+      
+      if (progressBar && Player.audio && Player.audio.duration && e.clientX) {
+        const rect = progressBar.getBoundingClientRect();
+        let percent = (e.clientX - rect.left) / rect.width;
+        percent = Math.max(0, Math.min(1, percent));
+        Player.audio.currentTime = percent * Player.audio.duration;
+      }
+    }
+    
     Player.seeking.isDragging = false;
     Player.seeking.activeBar = null;
     window.removeEventListener('mousemove', Player.onSeekDrag);
@@ -292,14 +334,21 @@ const Player = {
   onSeekTouchDrag: function(e) {
     if (!Player.seeking.isDragging) return;
     
+    e.preventDefault();
+    
     const touch = e.touches[0];
     const barType = Player.seeking.activeBar;
     const progressBar = barType === 'expanded' 
       ? document.getElementById('expanded-progress')
       : document.getElementById('player-progress');
     
-    if (progressBar) {
-      Player.seekToPosition(touch, progressBar);
+    if (progressBar && Player.audio && Player.audio.duration) {
+      const rect = progressBar.getBoundingClientRect();
+      let percent = (touch.clientX - rect.left) / rect.width;
+      percent = Math.max(0, Math.min(1, percent));
+      
+      Player.audio.currentTime = percent * Player.audio.duration;
+      Player.updateProgressUI(percent * 100);
     }
   },
   
@@ -319,12 +368,14 @@ const Player = {
   updateProgressUI(percent) {
     const progressFill = document.getElementById('player-progress-fill');
     const expProgressFill = document.getElementById('expanded-progress-fill');
+    const expProgressKnob = document.getElementById('expanded-progress-knob');
     
     if (progressFill) progressFill.style.width = `${percent}%`;
     if (expProgressFill) expProgressFill.style.width = `${percent}%`;
+    if (expProgressKnob) expProgressKnob.style.left = `${percent}%`;
     
     // Update time displays
-    if (this.audio.duration) {
+    if (this.audio && this.audio.duration && !isNaN(this.audio.duration)) {
       const currentTime = (percent / 100) * this.audio.duration;
       const currentTimeEl = document.getElementById('expanded-current-time');
       if (currentTimeEl && typeof Helpers !== 'undefined') {
