@@ -12,7 +12,9 @@
     { "source": "/profile", "destination": "/app.html" },
     { "source": "/liked", "destination": "/app.html" },
     { "source": "/playlists", "destination": "/app.html" },
-    { "source": "/purchase", "destination": "/app.html" }
+    { "source": "/purchase", "destination": "/app.html" },
+    { "source": "/genres", "destination": "/app.html" },
+    { "source": "/genre/:id", "destination": "/app.html" }
   ],
   "functions": {
     "api/batch-mint.js": {
