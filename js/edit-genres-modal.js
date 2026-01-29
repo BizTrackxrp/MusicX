@@ -15,20 +15,28 @@ const EditGenresModal = {
     this.currentRelease = release;
     this.trackGenres = {};
     
-    // Initialize track genres from current data
-    if (release.tracks) {
-      release.tracks.forEach(track => {
-        const genres = [];
-        if (track.genre) genres.push(track.genre);
-        // If track has no genre, fall back to release genre
-        if (genres.length === 0 && release.genrePrimary) {
-          genres.push(release.genrePrimary);
-        }
-        if (genres.length < 2 && release.genreSecondary) {
-          genres.push(release.genreSecondary);
-        }
-        this.trackGenres[track.id] = genres;
-      });
+    // Fetch current genres from database (not from stale release object)
+    try {
+      const response = await fetch(`/api/get-track-genres?releaseId=${release.id}`);
+      const data = await response.json();
+      
+      if (data.success && data.tracks) {
+        data.tracks.forEach(track => {
+          const genres = [];
+          if (track.genre) genres.push(track.genre);
+          this.trackGenres[track.id] = genres;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch track genres:', error);
+      // Fall back to release data if fetch fails
+      if (release.tracks) {
+        release.tracks.forEach(track => {
+          const genres = [];
+          if (track.genre) genres.push(track.genre);
+          this.trackGenres[track.id] = genres;
+        });
+      }
     }
     
     const html = `
@@ -99,25 +107,20 @@ const EditGenresModal = {
         .edit-genres-release-details h3 {
           font-size: 18px;
           font-weight: 600;
-          margin-bottom: 4px;
+          margin: 0 0 4px 0;
         }
         
         .edit-genres-release-details p {
           font-size: 14px;
           color: var(--text-muted);
-        }
-        
-        .edit-genres-tracks {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          margin-bottom: 24px;
+          margin: 0;
         }
         
         .edit-genres-track {
-          background: var(--bg-hover);
-          border-radius: var(--radius-lg);
+          background: var(--bg-elevated);
+          border-radius: var(--radius-md);
           padding: 16px;
+          margin-bottom: 12px;
         }
         
         .edit-genres-track-header {
@@ -130,8 +133,8 @@ const EditGenresModal = {
         .edit-genres-track-number {
           width: 24px;
           height: 24px;
+          background: var(--bg-secondary);
           border-radius: 50%;
-          background: var(--bg-card);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -141,13 +144,12 @@ const EditGenresModal = {
         }
         
         .edit-genres-track-title {
-          font-size: 15px;
-          font-weight: 500;
           flex: 1;
+          font-weight: 500;
         }
         
         .edit-genres-track-current {
-          font-size: 12px;
+          font-size: 13px;
           color: var(--text-muted);
         }
         
@@ -160,42 +162,44 @@ const EditGenresModal = {
         .edit-genre-chip {
           display: inline-flex;
           align-items: center;
-          gap: 5px;
+          gap: 6px;
           padding: 6px 12px;
-          border: 1px solid var(--border-color);
           border-radius: 100px;
-          background: transparent;
-          color: var(--text-secondary);
+          border: 1px solid var(--border-color);
+          background: var(--bg-primary);
+          color: var(--text-primary);
           font-size: 12px;
           cursor: pointer;
           transition: all 150ms;
         }
         
         .edit-genre-chip:hover {
-          border-color: var(--genre-color);
-          color: var(--genre-color);
+          border-color: var(--genre-color, var(--accent-primary));
+          background: color-mix(in srgb, var(--genre-color, var(--accent-primary)) 10%, transparent);
         }
         
         .edit-genre-chip.selected {
-          border-color: var(--genre-color);
-          background: color-mix(in srgb, var(--genre-color) 15%, transparent);
-          color: var(--genre-color);
+          border-color: var(--genre-color, var(--accent-primary));
+          background: color-mix(in srgb, var(--genre-color, var(--accent-primary)) 25%, transparent);
+          color: var(--genre-color, var(--accent-primary));
+          font-weight: 500;
         }
         
         .edit-genre-chip .genre-icon {
-          font-size: 12px;
+          font-size: 14px;
         }
         
         .edit-genres-hint {
-          font-size: 11px;
+          font-size: 12px;
           color: var(--text-muted);
-          margin-top: 8px;
+          margin-top: 10px;
         }
         
         .edit-genres-actions {
           display: flex;
           gap: 12px;
-          padding-top: 16px;
+          margin-top: 20px;
+          padding-top: 20px;
           border-top: 1px solid var(--border-color);
         }
         
@@ -287,7 +291,7 @@ const EditGenresModal = {
             <span class="edit-genres-track-title">${track.title}</span>
             <span class="edit-genres-track-current">
               ${selectedGenres.length > 0 
-                ? selectedGenres.map(g => Genres.get(g).name).join(', ')
+                ? selectedGenres.map(g => Genres.get(g)?.name || g).join(', ')
                 : 'No genre'
               }
             </span>
@@ -301,9 +305,9 @@ const EditGenresModal = {
                 <button type="button" 
                   class="edit-genre-chip ${isSelected ? 'selected' : ''}" 
                   data-genre="${genreId}"
-                  style="--genre-color: ${genre.color}">
-                  <span class="genre-icon">${genre.icon}</span>
-                  <span>${genre.name}</span>
+                  style="--genre-color: ${genre?.color || '#888'}">
+                  <span class="genre-icon">${genre?.icon || '🎵'}</span>
+                  <span>${genre?.name || genreId}</span>
                 </button>
               `;
             }).join('')}
@@ -350,54 +354,12 @@ const EditGenresModal = {
   },
   
   /**
-   * Bind event listeners
+   * Bind event handlers
    */
   bindEvents() {
-    const modal = document.querySelector('.edit-genres-modal');
-    if (!modal) return;
-    
-    // Genre chip clicks
-    modal.addEventListener('click', (e) => {
-      const chip = e.target.closest('.edit-genre-chip');
-      if (chip) {
-        const selector = chip.closest('.edit-genres-selector');
-        const trackId = selector?.dataset.trackId;
-        const genreId = chip.dataset.genre;
-        
-        if (trackId && genreId) {
-          this.toggleGenre(trackId, genreId, chip);
-        }
-        return;
-      }
-      
-      // Expand button
-      const expandBtn = e.target.closest('.genre-selector-expand');
-      if (expandBtn) {
-        const trackId = expandBtn.dataset.trackId;
-        const expanded = document.getElementById(`expanded-genres-${trackId}`);
-        if (expanded) {
-          const isVisible = expanded.style.display !== 'none';
-          expanded.style.display = isVisible ? 'none' : 'block';
-          expandBtn.textContent = isVisible ? 'More...' : 'Less';
-        }
-        return;
-      }
-    });
-    
     // Close button
-    document.getElementById('edit-genres-close')?.addEventListener('click', () => {
-      this.close();
-    });
-    
-    // Cancel button
-    document.getElementById('edit-genres-cancel')?.addEventListener('click', () => {
-      this.close();
-    });
-    
-    // Save button
-    document.getElementById('edit-genres-save')?.addEventListener('click', () => {
-      this.save();
-    });
+    document.getElementById('edit-genres-close')?.addEventListener('click', () => this.close());
+    document.getElementById('edit-genres-cancel')?.addEventListener('click', () => this.close());
     
     // Click outside to close
     document.querySelector('.edit-genres-modal-overlay')?.addEventListener('click', (e) => {
@@ -405,47 +367,93 @@ const EditGenresModal = {
         this.close();
       }
     });
+    
+    // Save button
+    document.getElementById('edit-genres-save')?.addEventListener('click', () => this.save());
+    
+    // Genre chip clicks
+    document.querySelectorAll('.edit-genre-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => this.toggleGenre(e));
+    });
+    
+    // Expand buttons
+    document.querySelectorAll('.genre-selector-expand').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const trackId = e.target.dataset.trackId;
+        const expanded = document.getElementById(`expanded-genres-${trackId}`);
+        if (expanded) {
+          const isHidden = expanded.style.display === 'none';
+          expanded.style.display = isHidden ? 'block' : 'none';
+          e.target.textContent = isHidden ? 'Less...' : 'More...';
+        }
+      });
+    });
   },
   
   /**
-   * Toggle a genre selection for a track
+   * Toggle genre selection for a track
    */
-  toggleGenre(trackId, genreId, chipElement) {
+  toggleGenre(e) {
+    const chip = e.target.closest('.edit-genre-chip');
+    if (!chip) return;
+    
+    const selector = chip.closest('.edit-genres-selector');
+    const trackId = selector?.dataset.trackId;
+    const genreId = chip.dataset.genre;
+    
+    if (!trackId || !genreId) return;
+    
+    // Initialize if needed
     if (!this.trackGenres[trackId]) {
       this.trackGenres[trackId] = [];
     }
     
-    const genres = this.trackGenres[trackId];
-    const idx = genres.indexOf(genreId);
+    const currentGenres = this.trackGenres[trackId];
+    const isSelected = currentGenres.includes(genreId);
     
-    if (idx > -1) {
+    if (isSelected) {
       // Remove genre
-      genres.splice(idx, 1);
-      // Update all chips with this genre for this track
-      document.querySelectorAll(`.edit-genres-selector[data-track-id="${trackId}"] .edit-genre-chip[data-genre="${genreId}"]`)
-        .forEach(chip => chip.classList.remove('selected'));
-    } else if (genres.length < 2) {
-      // Add genre (max 2)
-      genres.push(genreId);
-      document.querySelectorAll(`.edit-genres-selector[data-track-id="${trackId}"] .edit-genre-chip[data-genre="${genreId}"]`)
-        .forEach(chip => chip.classList.add('selected'));
+      this.trackGenres[trackId] = currentGenres.filter(g => g !== genreId);
     } else {
-      // Already have 2 genres - replace the first one
-      const oldGenre = genres.shift();
-      document.querySelectorAll(`.edit-genres-selector[data-track-id="${trackId}"] .edit-genre-chip[data-genre="${oldGenre}"]`)
-        .forEach(chip => chip.classList.remove('selected'));
-      genres.push(genreId);
-      document.querySelectorAll(`.edit-genres-selector[data-track-id="${trackId}"] .edit-genre-chip[data-genre="${genreId}"]`)
-        .forEach(chip => chip.classList.add('selected'));
+      // Add genre (max 2)
+      if (currentGenres.length >= 2) {
+        // Remove oldest, add new
+        this.trackGenres[trackId] = [currentGenres[1], genreId];
+      } else {
+        this.trackGenres[trackId] = [...currentGenres, genreId];
+      }
     }
     
-    // Update the "current" display
-    const trackEl = document.querySelector(`.edit-genres-track[data-track-id="${trackId}"]`);
-    const currentEl = trackEl?.querySelector('.edit-genres-track-current');
-    if (currentEl) {
-      currentEl.textContent = genres.length > 0 
-        ? genres.map(g => Genres.get(g).name).join(', ')
-        : 'No genre';
+    // Update UI - find all chips with this genre for this track and update them
+    const trackContainer = document.querySelector(`.edit-genres-track[data-track-id="${trackId}"]`);
+    if (trackContainer) {
+      // Update all chips in both quick selector and expanded
+      trackContainer.querySelectorAll(`.edit-genre-chip[data-genre="${genreId}"]`).forEach(c => {
+        if (this.trackGenres[trackId].includes(genreId)) {
+          c.classList.add('selected');
+        } else {
+          c.classList.remove('selected');
+        }
+      });
+      
+      // Also update other chips if we removed one due to max 2 limit
+      trackContainer.querySelectorAll('.edit-genre-chip').forEach(c => {
+        const gId = c.dataset.genre;
+        if (this.trackGenres[trackId].includes(gId)) {
+          c.classList.add('selected');
+        } else {
+          c.classList.remove('selected');
+        }
+      });
+      
+      // Update the "current genre" text
+      const currentText = trackContainer.querySelector('.edit-genres-track-current');
+      if (currentText) {
+        const selectedGenres = this.trackGenres[trackId];
+        currentText.textContent = selectedGenres.length > 0 
+          ? selectedGenres.map(g => Genres.get(g)?.name || g).join(', ')
+          : 'No genre';
+      }
     }
   },
   
