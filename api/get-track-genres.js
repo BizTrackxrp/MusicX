@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     
     // Get all tracks with their genres for this release
     const tracks = await sql`
-      SELECT id, title, genre
+      SELECT id, title, genre, genre_secondary
       FROM tracks 
       WHERE release_id = ${releaseId}
       ORDER BY track_number ASC
@@ -42,7 +42,8 @@ export default async function handler(req, res) {
       tracks: tracks.map(t => ({
         id: t.id,
         title: t.title,
-        genre: t.genre || null
+        genre: t.genre || null,
+        genreSecondary: t.genre_secondary || null
       }))
     });
     
