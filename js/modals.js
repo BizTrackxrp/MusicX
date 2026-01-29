@@ -2563,33 +2563,75 @@ async processListNFT(nft, price) {
           }
           .release-modal {
             max-height: calc(100vh - 40px);
-            max-height: calc(100dvh - 40px); /* Dynamic viewport height for mobile */
+            max-height: calc(100dvh - 40px);
             overflow-y: auto;
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            -webkit-overflow-scrolling: touch;
           }
           .release-header-content { flex-direction: column; align-items: center; text-align: center; gap: 16px; }
           .release-cover-small { width: 140px; height: 140px; }
           .release-header { padding: 20px 16px 16px; }
           .release-title-large { font-size: 22px; margin: 4px 0 12px; }
           .release-meta { justify-content: center; font-size: 13px; }
-          .release-actions-bar { padding: 12px 16px; gap: 10px; flex-wrap: wrap; }
+          .release-actions-bar { 
+            padding: 12px 16px; 
+            gap: 10px; 
+            flex-wrap: wrap;
+            justify-content: flex-start;
+          }
           .btn-play-large { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
           .btn-icon-circle { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
           .btn-icon-circle svg { width: 20px; height: 20px; }
           .track-list-header { display: none; }
           .release-track-list { 
-            padding: 0 16px 24px; /* Add bottom padding for scroll space */
+            padding: 0 16px 24px;
           }
-          .track-row { grid-template-columns: 32px 1fr auto; }
+          .track-row { 
+            grid-template-columns: 32px 1fr auto; 
+            padding: 10px 12px;
+            gap: 8px;
+          }
           .track-col-actions, .track-col-duration, .track-col-avail { display: none; }
-          .track-col-buy .btn { font-size: 11px; padding: 4px 8px; }
-          .buy-album-btn { font-size: 13px; padding: 10px 14px; }
+          .track-col-title {
+            min-width: 0;
+          }
+          .track-name {
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .track-artist {
+            font-size: 11px;
+          }
+          .track-col-buy { 
+            flex-shrink: 0;
+          }
+          .track-col-buy .btn { 
+            font-size: 11px; 
+            padding: 6px 10px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          }
+          .track-col-buy .btn svg {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+          }
+          .sold-out-label {
+            font-size: 10px;
+          }
+          .buy-album-btn { 
+            font-size: 13px; 
+            padding: 10px 14px;
+            width: 100%;
+            margin-top: 8px;
+            order: 10;
+          }
         }
-
-
       </style>
     `;
-    
     this.show(html);
     this.bindReleaseModalEvents(release);
   },
