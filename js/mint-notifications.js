@@ -65,7 +65,8 @@ const MintNotifications = {
         const session = localStorage.getItem('xrpmusic_wallet_session');
         if (session) {
           const parsed = JSON.parse(session);
-          address = parsed.address;
+          // FIXED: Check all possible address field names
+          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
         }
       } catch (e) {}
     }
@@ -444,8 +445,20 @@ const MintNotifications = {
     }
   },
   
+  // FIXED: Added localStorage fallback for mobile
   async markAsRead(notificationId) {
-    const address = window.AppState?.user?.address;
+    let address = window.AppState?.user?.address;
+    
+    if (!address) {
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
+        }
+      } catch (e) {}
+    }
+    
     if (!address || !notificationId) return;
     
     try {
@@ -463,8 +476,20 @@ const MintNotifications = {
     }
   },
   
+  // FIXED: Added localStorage fallback for mobile
   async markAllRead() {
-    const address = window.AppState?.user?.address;
+    let address = window.AppState?.user?.address;
+    
+    if (!address) {
+      try {
+        const session = localStorage.getItem('xrpmusic_wallet_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
+        }
+      } catch (e) {}
+    }
+    
     if (!address) return;
     
     try {
