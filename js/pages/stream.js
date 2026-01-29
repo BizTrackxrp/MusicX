@@ -5,29 +5,15 @@
  * UPDATED: Now fetches real play data from /api/plays endpoint
  * UPDATED: Uses IpfsHelper for proxied IPFS images
  * UPDATED: View All navigates to Analytics page
+ * UPDATED: Cleaned up - removed sort buttons, defaults to Artists tab
  */
 
 const StreamPage = {
   releases: [],
   artists: [],
   topTracks: [],
-  currentTab: 'tracks', // 'tracks' or 'artists'
-  currentSort: 'alphabetical',
+  currentTab: 'artists', // 'tracks' or 'artists' - default to artists for cleaner view
   currentTopPeriod: '7d', // '1d', '7d', '30d', '365d'
-  selectedGenre: null,
-  
-  genres: [
-    { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
-    { id: 'rap', name: 'Rap', color: '#ef4444' },
-    { id: 'electronic', name: 'Electronic', color: '#3b82f6' },
-    { id: 'rnb', name: 'R&B', color: '#a855f7' },
-    { id: 'pop', name: 'Pop', color: '#ec4899' },
-    { id: 'rock', name: 'Rock', color: '#84cc16' },
-    { id: 'country', name: 'Country', color: '#f59e0b' },
-    { id: 'jazz', name: 'Jazz', color: '#06b6d4' },
-    { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
-    { id: 'other', name: 'Other', color: '#6b7280' },
-  ],
   
   // Helper to get proxied image URL
   getImageUrl(url) {
@@ -193,32 +179,13 @@ const StreamPage = {
                 <span class="tab-count">${this.artists.length}</span>
               </button>
             </div>
-            <div class="sort-controls">
-              <div class="sort-buttons">
-                <button class="sort-btn ${this.currentSort === 'alphabetical' ? 'active' : ''}" data-sort="alphabetical">A-Z</button>
-                <button class="sort-btn ${this.currentSort === 'genre' ? 'active' : ''}" data-sort="genre">Genre</button>
-                <button class="sort-btn ${this.currentSort === 'popular' ? 'active' : ''}" data-sort="popular">Popular</button>
-              </div>
-            </div>
           </div>
-          
-          ${this.currentSort === 'genre' ? `
-            <div class="genre-filter">
-              ${this.genres.map(genre => `
-                <button class="genre-chip ${this.selectedGenre === genre.id ? 'active' : ''}" 
-                        data-genre="${genre.id}"
-                        style="--genre-color: ${genre.color}">
-                  ${genre.name}
-                </button>
-              `).join('')}
-            </div>
-          ` : ''}
           
           ${this.currentTab === 'tracks' ? `
             <div class="track-list">
               ${sortedTracks.length > 0 
                 ? sortedTracks.map((track, index) => this.renderTrackItem(track, index)).join('')
-                : '<div class="empty-message">No tracks found for this genre yet</div>'
+                : '<div class="empty-message">No tracks found</div>'
               }
             </div>
           ` : `
@@ -432,71 +399,6 @@ const StreamPage = {
           color: var(--text-muted);
         }
         
-        /* Sort Controls */
-        .sort-controls {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .sort-buttons {
-          display: flex;
-          gap: 4px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: 4px;
-        }
-        .sort-btn {
-          padding: 8px 16px;
-          border: none;
-          border-radius: var(--radius-md);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 150ms;
-        }
-        .sort-btn:hover {
-          color: var(--text-primary);
-        }
-        .sort-btn.active {
-          background: var(--accent);
-          color: white;
-        }
-        
-        /* Genre Filter */
-        .genre-filter {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-bottom: 16px;
-          padding: 12px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-        }
-        .genre-chip {
-          padding: 6px 14px;
-          border: 1px solid var(--border-color);
-          border-radius: 20px;
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 150ms;
-        }
-        .genre-chip:hover {
-          border-color: var(--genre-color);
-          color: var(--genre-color);
-        }
-        .genre-chip.active {
-          background: var(--genre-color);
-          border-color: var(--genre-color);
-          color: white;
-        }
-        
         /* Artists Grid */
         .artists-grid {
           display: grid;
@@ -592,16 +494,6 @@ const StreamPage = {
             flex: 1;
             justify-content: center;
           }
-          .sort-controls {
-            width: 100%;
-          }
-          .sort-buttons {
-            width: 100%;
-          }
-          .sort-btn {
-            flex: 1;
-            text-align: center;
-          }
           .top-track-item {
             grid-template-columns: 32px 48px 1fr auto;
             gap: 8px;
@@ -641,47 +533,13 @@ const StreamPage = {
   
   sortTracks(tracks) {
     let sorted = [...tracks];
-    
-    switch (this.currentSort) {
-      case 'alphabetical':
-        sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
-        break;
-      case 'popular':
-        // Sort by sales (until we have play counts on all tracks)
-        sorted.sort((a, b) => (b.release.soldEditions || 0) - (a.release.soldEditions || 0));
-        break;
-      case 'genre':
-        if (this.selectedGenre) {
-          sorted = sorted.filter(track => {
-            const artistGenres = track.release.artistGenres || [];
-            return artistGenres.includes(this.selectedGenre);
-          });
-        }
-        sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
-        break;
-    }
-    
+    sorted.sort((a, b) => a.displayTitle.localeCompare(b.displayTitle));
     return sorted;
   },
   
   sortArtists() {
     let sorted = [...this.artists];
-    
-    switch (this.currentSort) {
-      case 'alphabetical':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'popular':
-        // Sort by total streams (or sold as proxy for now)
-        sorted.sort((a, b) => b.totalStreams - a.totalStreams);
-        break;
-      case 'genre':
-        // For genre filter on artists, we'd need to filter by releases with that genre
-        // For now, just sort alphabetically
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-    }
-    
+    sorted.sort((a, b) => a.name.localeCompare(b.name));
     return sorted;
   },
   
@@ -935,27 +793,6 @@ const StreamPage = {
           this.currentTab = newTab;
           this.renderContent();
         }
-      });
-    });
-    
-    // Sort buttons
-    document.querySelectorAll('.sort-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const newSort = btn.dataset.sort;
-        if (newSort !== this.currentSort) {
-          this.currentSort = newSort;
-          this.selectedGenre = null;
-          this.renderContent();
-        }
-      });
-    });
-    
-    // Genre chips
-    document.querySelectorAll('.genre-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const genre = chip.dataset.genre;
-        this.selectedGenre = this.selectedGenre === genre ? null : genre;
-        this.renderContent();
       });
     });
     
