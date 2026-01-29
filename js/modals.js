@@ -2174,7 +2174,10 @@ async processListNFT(nft, price) {
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
               </svg>
             </button>
-            ${AppState.user?.address && AppState.user.address === release.artistAddress ? `
+           ${AppState.user?.address && AppState.user.address === release.artistAddress ? `
+  <button class="btn btn-sm btn-secondary" id="edit-price-btn" style="font-size: 13px; padding: 6px 12px;">
+    Price
+  </button>
   <button class="btn btn-sm btn-secondary" id="edit-genres-btn" style="font-size: 13px; padding: 6px 12px;">
     Genres
   </button>
@@ -2810,7 +2813,14 @@ document.getElementById('like-release-btn')?.addEventListener('click', async () 
         });
       }
     });
-
+// Edit Price button (only visible to artist)
+document.getElementById('edit-price-btn')?.addEventListener('click', () => {
+  if (typeof EditPriceModal !== 'undefined') {
+    EditPriceModal.show(release);
+  } else {
+    this.showToast('Price editor loading...');
+  }
+});
     // Edit Genres button (only visible to artist)
     document.getElementById('edit-genres-btn')?.addEventListener('click', () => {
       if (typeof EditGenresModal !== 'undefined') {
