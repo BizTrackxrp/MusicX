@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     
     // Verify the release exists and optionally check ownership
     const releaseCheck = await sql`
-      SELECT id, artist_address FROM releases WHERE id = ${parseInt(releaseId)}
+      SELECT id, artist_address FROM releases WHERE id = ${releaseId}
     `;
     
     if (releaseCheck.length === 0) {
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       await sql`
         UPDATE tracks 
         SET genre = ${track.genre || null}
-        WHERE id = ${parseInt(track.trackId)} AND release_id = ${parseInt(releaseId)}
+        WHERE id = ${track.trackId} AND release_id = ${releaseId}
       `;
     }
     
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
       await sql`
         UPDATE releases 
         SET genre_primary = ${tracks[0].genre}
-        WHERE id = ${parseInt(releaseId)}
+        WHERE id = ${releaseId}
       `;
     }
     
