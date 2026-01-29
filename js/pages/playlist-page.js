@@ -1,6 +1,8 @@
 /**
  * XRP Music - Playlist Page
  * Shows a single playlist with its tracks
+ * 
+ * UPDATED: Track row click opens release modal, play button plays track
  */
 
 const PlaylistPage = {
@@ -288,7 +290,7 @@ const PlaylistPage = {
   
   renderTrackRow(track, idx, isOwner) {
     var playlistTrackId = track.playlist_track_id || track.id || track.track_id;
-    return '<div class="playlist-track-row" data-track-idx="' + idx + '">' +
+    return '<div class="playlist-track-row" data-track-idx="' + idx + '" data-release-id="' + (track.release_id || '') + '">' +
       '<span class="track-col-num"><span class="track-num">' + (idx + 1) + '</span><button class="track-play-btn" data-track-idx="' + idx + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button></span>' +
       '<div class="track-col-title"><img class="track-cover" src="' + (track.cover_url || '/placeholder.png') + '" alt="" onerror="this.src=\'/placeholder.png\'"><div class="track-info"><span class="track-name">' + (track.title || 'Unknown Track') + '</span><span class="track-artist">' + (track.artist_name || 'Unknown Artist') + '</span></div></div>' +
       '<span class="track-col-album">' + (track.release_title || '') + '</span>' +
@@ -299,16 +301,38 @@ const PlaylistPage = {
   
   bindEvents() {
     var self = this;
-    document.getElementById('play-playlist-btn')?.addEventListener('click', function() { self.playAll(false); });
-    document.getElementById('shuffle-playlist-btn')?.addEventListener('click', function() { self.playAll(true); });
-    document.getElementById('delete-playlist-btn')?.addEventListener('click', function() { self.confirmDelete(); });
+    
+    // Play all button
+    document.getElementById('play-playlist-btn')?.addEventListener('click', function() { 
+      self.playAll(false); 
+    });
+    
+    // Shuffle button
+    document.getElementById('shuffle-playlist-btn')?.addEventListener('click', function() { 
+      self.playAll(true); 
+    });
+    
+    // Delete button
+    document.getElementById('delete-playlist-btn')?.addEventListener('click', function() { 
+      self.confirmDelete(); 
+    });
+    
+    // Track row click - OPEN RELEASE MODAL (not play)
     document.querySelectorAll('.playlist-track-row').forEach(function(row) {
       row.addEventListener('click', function(e) {
+        // Skip if clicking remove button or play button
         if (e.target.closest('.track-remove-btn')) return;
-        var idx = parseInt(row.dataset.trackIdx, 10);
-        self.playFromIndex(idx);
+        if (e.target.closest('.track-play-btn')) return;
+        
+        // Open release modal to show details
+        var releaseId = row.dataset.releaseId;
+        if (releaseId) {
+          self.openReleaseModal(releaseId);
+        }
       });
     });
+    
+    // Play button - PLAYS the track
     document.querySelectorAll('.track-play-btn').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -316,6 +340,8 @@ const PlaylistPage = {
         self.playFromIndex(idx);
       });
     });
+    
+    // Remove button
     document.querySelectorAll('.track-remove-btn').forEach(function(btn) {
       btn.addEventListener('click', async function(e) {
         e.stopPropagation();
@@ -325,15 +351,55 @@ const PlaylistPage = {
     });
   },
   
+  /**
+   * Open release modal to show track details and purchase options
+   */
+  async openReleaseModal(releaseId) {
+    try {
+      // First check if we have releases loaded in AppState
+      if (typeof getReleases === 'function') {
+        const releases = getReleases();
+        const release = releases.find(r => r.id === releaseId);
+        if (release) {
+          Modals.showRelease(release);
+          return;
+        }
+      }
+      
+      // Otherwise fetch from API
+      const response = await fetch(`/api/releases?id=${releaseId}`);
+      const data = await response.json();
+      if (data.release) {
+        Modals.showRelease(data.release);
+      }
+    } catch (error) {
+      console.error('Failed to load release:', error);
+      if (typeof showToast === 'function') {
+        showToast('Failed to load track details');
+      }
+    }
+  },
+  
   playAll(shuffle) {
     if (this.tracks.length === 0) return;
     var queue = this.tracks.map(function(t) {
-      return { id: t.track_id, trackId: t.track_id?.toString(), title: t.title, artist: t.artist_name || 'Unknown Artist', cover: t.cover_url, ipfsHash: t.audio_cid, releaseId: t.release_id, duration: t.duration };
+      return { 
+        id: t.track_id, 
+        trackId: t.track_id?.toString(), 
+        title: t.title, 
+        artist: t.artist_name || 'Unknown Artist', 
+        cover: t.cover_url, 
+        ipfsHash: t.audio_cid, 
+        releaseId: t.release_id, 
+        duration: t.duration 
+      };
     });
     if (shuffle) {
       for (var i = queue.length - 1; i > 0; i--) {
         var j = Math.floor(Math.random() * (i + 1));
-        var temp = queue[i]; queue[i] = queue[j]; queue[j] = temp;
+        var temp = queue[i]; 
+        queue[i] = queue[j]; 
+        queue[j] = temp;
       }
       AppState.player.isShuffled = true;
     }
@@ -343,7 +409,16 @@ const PlaylistPage = {
   playFromIndex(idx) {
     if (idx < 0 || idx >= this.tracks.length) return;
     var queue = this.tracks.map(function(t) {
-      return { id: t.track_id, trackId: t.track_id?.toString(), title: t.title, artist: t.artist_name || 'Unknown Artist', cover: t.cover_url, ipfsHash: t.audio_cid, releaseId: t.release_id, duration: t.duration };
+      return { 
+        id: t.track_id, 
+        trackId: t.track_id?.toString(), 
+        title: t.title, 
+        artist: t.artist_name || 'Unknown Artist', 
+        cover: t.cover_url, 
+        ipfsHash: t.audio_cid, 
+        releaseId: t.release_id, 
+        duration: t.duration 
+      };
     });
     Player.playTrack(queue[idx], queue, idx);
   },
@@ -354,7 +429,12 @@ const PlaylistPage = {
       var response = await fetch('/api/playlists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'removeTrack', playlistId: this.playlist.id, ownerAddress: AppState.user.address, playlistTrackId: playlistTrackId })
+        body: JSON.stringify({ 
+          action: 'removeTrack', 
+          playlistId: this.playlist.id, 
+          ownerAddress: AppState.user.address, 
+          playlistTrackId: playlistTrackId 
+        })
       });
       var data = await response.json();
       if (data.success) {
