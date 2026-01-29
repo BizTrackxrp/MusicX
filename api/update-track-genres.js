@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     
     // Verify the release exists and optionally check ownership
     const releaseCheck = await sql`
-      SELECT id, artist_address FROM releases WHERE id = ${releaseId}
+      SELECT id, artist_address FROM releases WHERE id = ${parseInt(releaseId)}
     `;
     
     if (releaseCheck.length === 0) {
@@ -46,13 +46,14 @@ export default async function handler(req, res) {
       });
     }
     
-    // Update each track's genre
+    // Update each track's genre (both primary and secondary)
     for (const track of tracks) {
       if (!track.trackId) continue;
       
       await sql`
         UPDATE tracks 
-        SET genre = ${track.genre || null}
+        SET genre = ${track.genre || null},
+            genre_secondary = ${track.genreSecondary || null}
         WHERE id = ${track.trackId} AND release_id = ${releaseId}
       `;
     }
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
       await sql`
         UPDATE releases 
         SET genre_primary = ${tracks[0].genre}
-        WHERE id = ${releaseId}
+        WHERE id = ${parseInt(releaseId)}
       `;
     }
     
