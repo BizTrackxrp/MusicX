@@ -24,6 +24,7 @@ const EditGenresModal = {
         data.tracks.forEach(track => {
           const genres = [];
           if (track.genre) genres.push(track.genre);
+          if (track.genreSecondary) genres.push(track.genreSecondary);
           this.trackGenres[track.id] = genres;
         });
       }
@@ -34,6 +35,7 @@ const EditGenresModal = {
         release.tracks.forEach(track => {
           const genres = [];
           if (track.genre) genres.push(track.genre);
+          if (track.genreSecondary) genres.push(track.genreSecondary);
           this.trackGenres[track.id] = genres;
         });
       }
