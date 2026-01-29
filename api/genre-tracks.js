@@ -1,7 +1,9 @@
 // /api/genre-tracks.js
 // API endpoint for fetching tracks by genre
 
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
+
+const sql = neon(process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
   // CORS headers
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
       
       return res.status(200).json({
         success: true,
-        genres: result.rows.map(row => ({
+        genres: result.map(row => ({
           genre: row.genre,
           count: parseInt(row.count)
         }))
@@ -54,7 +56,7 @@ export default async function handler(req, res) {
       
       return res.status(200).json({
         success: true,
-        count: parseInt(result.rows[0]?.count || 0)
+        count: parseInt(result[0]?.count || 0)
       });
     }
     
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
     
     return res.status(200).json({
       success: true,
-      tracks: result.rows
+      tracks: result
     });
     
   } catch (error) {
