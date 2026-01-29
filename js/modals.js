@@ -9,7 +9,7 @@ const Modals = {
   mintingInProgress: false,
   
   genres: [
-    { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
+     { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
     { id: 'rap', name: 'Rap', color: '#ef4444' },
     { id: 'electronic', name: 'Electronic', color: '#3b82f6' },
     { id: 'rnb', name: 'R&B', color: '#a855f7' },
@@ -18,6 +18,12 @@ const Modals = {
     { id: 'country', name: 'Country', color: '#f59e0b' },
     { id: 'jazz', name: 'Jazz', color: '#06b6d4' },
     { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
+    { id: 'breakbeat', name: 'Breakbeat', color: '#f472b6' },
+    { id: 'synthwave', name: 'Synthwave', color: '#c084fc' },
+    { id: 'hyperpop', name: 'Hyperpop', color: '#fb7185' },
+    { id: 'deephouse', name: 'Deep House', color: '#2dd4bf' },
+    { id: 'afrohouse', name: 'Afro House', color: '#fbbf24' },
+    { id: 'garage', name: 'Garage', color: '#a3e635' },
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
 
