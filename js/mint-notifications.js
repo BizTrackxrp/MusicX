@@ -62,10 +62,10 @@ const MintNotifications = {
     
     if (!address) {
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
-          // FIXED: Check all possible address field names
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
         }
       } catch (e) {}
@@ -188,12 +188,13 @@ const MintNotifications = {
     if (!content) return;
     
     // Check multiple sources for user address
-    // xrpmusic_wallet_session stores the session object with address
+    // xrpmusic_session stores the session object with address in sessionStorage
     let address = window.AppState?.user?.address;
     
     if (!address) {
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
@@ -445,13 +446,13 @@ const MintNotifications = {
     }
   },
   
-  // FIXED: Added localStorage fallback for mobile
+  // FIXED: Use sessionStorage with correct key for mobile
   async markAsRead(notificationId) {
     let address = window.AppState?.user?.address;
     
     if (!address) {
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
@@ -476,13 +477,13 @@ const MintNotifications = {
     }
   },
   
-  // FIXED: Added localStorage fallback for mobile
+  // FIXED: Use sessionStorage with correct key for mobile
   async markAllRead() {
     let address = window.AppState?.user?.address;
     
     if (!address) {
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
@@ -518,7 +519,8 @@ const MintNotifications = {
     
     if (!address) {
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
@@ -875,9 +877,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.AppState?.user?.address) {
       MintNotifications.checkForActiveJobs();
     } else {
-      // Also check localStorage session
+      // Also check sessionStorage session
       try {
-        const session = localStorage.getItem('xrpmusic_wallet_session');
+        const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           MintNotifications.checkForActiveJobs();
         }
