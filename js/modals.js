@@ -2181,6 +2181,9 @@ async processListNFT(nft, price) {
   <button class="btn btn-sm btn-secondary" id="edit-genres-btn" style="font-size: 13px; padding: 6px 12px;">
     Genres
   </button>
+  <button class="btn btn-sm btn-secondary" id="gift-track-btn" style="font-size: 13px; padding: 6px 12px;">
+    🎁 Gift
+  </button>
 ` : ''}
             <div style="flex: 1;"></div>
             ${canBuyFullAlbum ? `
@@ -2871,6 +2874,10 @@ document.getElementById('edit-price-btn')?.addEventListener('click', () => {
       } else {
         this.showToast('Genre editor loading...');
       }
+    });
+    // Gift button (only visible to artist)
+    document.getElementById('gift-track-btn')?.addEventListener('click', () => {
+      this.showGiftTrack(release);
     });
     
    // Like track buttons
@@ -4923,5 +4930,249 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
       </style>
     `;
     this.show(html);
+  },
+  /**
+   * Show Gift Track Modal - Artist gives away a copy
+   */
+  showGiftTrack(release, track = null) {
+    this.activeModal = 'gift-track';
+    
+    const tracks = release.tracks || [];
+    const trackOptions = tracks.map((t, idx) => {
+      const remaining = release.totalEditions - (t.soldCount || 0);
+      return `<option value="${t.id}" ${remaining <= 0 ? 'disabled' : ''} ${track?.id === t.id ? 'selected' : ''}>
+        ${release.type === 'single' ? release.title : t.title} (${remaining} available)
+      </option>`;
+    }).join('');
+    
+    const html = `
+      <div class="modal-overlay gift-modal-overlay">
+        <div class="modal gift-modal">
+          <div class="modal-header">
+            <div class="modal-title">🎁 Gift a Track</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <!-- Release Preview -->
+            <div class="gift-preview">
+              <div class="gift-cover">
+                ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}">` : '<div class="cover-placeholder">🎵</div>'}
+              </div>
+              <div class="gift-info">
+                <div class="gift-title">${release.title}</div>
+                <div class="gift-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
+              </div>
+            </div>
+            
+            <!-- Track Selection -->
+            ${tracks.length > 1 ? `
+              <div class="form-group">
+                <label class="form-label">Select Track</label>
+                <select class="form-input" id="gift-track-select">
+                  ${trackOptions}
+                </select>
+              </div>
+            ` : `<input type="hidden" id="gift-track-select" value="${tracks[0]?.id || ''}">`}
+            
+            <!-- Recipient Address -->
+            <div class="form-group">
+              <label class="form-label">Recipient Wallet Address</label>
+              <input type="text" class="form-input" id="gift-recipient" placeholder="rXXXX..." autocomplete="off">
+              <p class="form-hint">Enter the XRPL wallet address of the person you want to gift this to</p>
+            </div>
+            
+            <!-- Info -->
+            <div class="gift-info-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>This will send a free NFT to the recipient. They'll need to accept it in their Xaman wallet. This uses one of your available editions.</span>
+            </div>
+            
+            <!-- Status -->
+            <div class="gift-status hidden" id="gift-status">
+              <div class="spinner"></div>
+              <p id="gift-status-text">Processing gift...</p>
+            </div>
+            
+            <!-- Actions -->
+            <div class="gift-actions" id="gift-actions">
+              <button class="btn btn-secondary close-modal-btn">Cancel</button>
+              <button class="btn btn-primary" id="confirm-gift-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6"></path>
+                  <path d="M12 3v12"></path>
+                  <path d="M12 3l4 4"></path>
+                  <path d="M12 3L8 7"></path>
+                </svg>
+                Send Gift
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .gift-modal { max-width: 420px; }
+        .gift-preview {
+          display: flex;
+          gap: 16px;
+          padding: 16px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-lg);
+          margin-bottom: 20px;
+        }
+        .gift-cover {
+          width: 64px;
+          height: 64px;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        .gift-cover img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .gift-info {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+        .gift-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .gift-artist {
+          font-size: 14px;
+          color: var(--text-secondary);
+        }
+        .gift-info-box {
+          display: flex;
+          gap: 10px;
+          padding: 12px;
+          background: rgba(139, 92, 246, 0.1);
+          border: 1px solid rgba(139, 92, 246, 0.2);
+          border-radius: var(--radius-lg);
+          font-size: 13px;
+          color: var(--text-secondary);
+          margin-bottom: 20px;
+        }
+        .gift-info-box svg {
+          flex-shrink: 0;
+          color: #8b5cf6;
+          margin-top: 2px;
+        }
+        .gift-status {
+          text-align: center;
+          padding: 20px;
+        }
+        .gift-status.hidden { display: none; }
+        .gift-status .spinner { margin: 0 auto 12px; }
+        .gift-status p { color: var(--text-secondary); font-size: 14px; margin: 0; }
+        .gift-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .gift-actions .btn { flex: 1; }
+      </style>
+    `;
+    
+    this.show(html);
+    
+    // Bind confirm button
+    document.getElementById('confirm-gift-btn')?.addEventListener('click', async () => {
+      const trackId = document.getElementById('gift-track-select')?.value;
+      const recipient = document.getElementById('gift-recipient')?.value?.trim();
+      
+      if (!recipient) {
+        alert('Please enter a recipient wallet address');
+        return;
+      }
+      
+      // Basic XRPL address validation
+      if (!recipient.startsWith('r') || recipient.length < 25 || recipient.length > 35) {
+        alert('Please enter a valid XRPL wallet address (starts with r)');
+        return;
+      }
+      
+      const selectedTrack = tracks.find(t => t.id == trackId) || tracks[0];
+      await this.processGift(release, selectedTrack, recipient);
+    });
+  },
+  
+  /**
+   * Process the gift - lazy mint an NFT for the recipient
+   */
+  async processGift(release, track, recipientAddress) {
+    const statusEl = document.getElementById('gift-status');
+    const statusTextEl = document.getElementById('gift-status-text');
+    const actionsEl = document.getElementById('gift-actions');
+    
+    statusEl?.classList.remove('hidden');
+    if (actionsEl) actionsEl.style.display = 'none';
+    
+    try {
+      // Step 1: Create gift record and trigger lazy mint
+      statusTextEl.textContent = 'Creating gift...';
+      
+      const response = await fetch('/api/gifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderAddress: AppState.user.address,
+          recipientAddress: recipientAddress,
+          releaseId: release.id,
+          trackId: track.id,
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create gift');
+      }
+      
+      // Success!
+      statusEl.innerHTML = `
+        <div style="color: var(--success); margin-bottom: 12px;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <p style="font-weight: 600; color: var(--text-primary); font-size: 16px;">Gift Sent! 🎁</p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">
+          ${Helpers.truncateAddress(recipientAddress)} will receive a notification to claim their NFT.
+        </p>
+        <button class="btn btn-primary" style="margin-top: 20px;" onclick="Modals.close()">Done</button>
+      `;
+      
+    } catch (error) {
+      console.error('Gift failed:', error);
+      statusEl.innerHTML = `
+        <div style="color: var(--error); margin-bottom: 12px;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <p style="font-weight: 600; color: var(--text-primary);">Gift Failed</p>
+        <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">${error.message}</p>
+      `;
+      if (actionsEl) actionsEl.style.display = 'flex';
+    }
   },
 };
