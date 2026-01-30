@@ -2204,8 +2204,16 @@ async processListNFT(nft, price) {
             ` : ''}
           </div>
           
+          <!-- Description -->
+          \${release.description ? \`
+            <div class="release-description">
+              <p>\${release.description}</p>
+            </div>
+          \` : ''}
+          
           <!-- Track List -->
           <div class="release-track-list">
+
            <div class="track-list-header">
               <span class="track-col-num">#</span>
               <span class="track-col-title">Title</span>
@@ -2391,6 +2399,17 @@ async processListNFT(nft, price) {
           gap: 12px;
           padding: 16px 24px;
           background: var(--bg-primary);
+        }
+        .release-description {
+          padding: 0 24px 20px;
+          background: var(--bg-primary);
+        }
+        .release-description p {
+          margin: 0;
+          font-size: 14px;
+          line-height: 1.7;
+          color: var(--text-secondary);
+          white-space: pre-wrap;
         }
         .btn-play-large {
           width: 56px;
@@ -2597,6 +2616,13 @@ async processListNFT(nft, price) {
             gap: 10px; 
             flex-wrap: wrap;
             justify-content: flex-start;
+          }
+           .release-description {
+            padding: 0 16px 16px;
+          }
+          .release-description p {
+            font-size: 13px;
+            line-height: 1.6;
           }
           .btn-play-large { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
           .btn-icon-circle { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
