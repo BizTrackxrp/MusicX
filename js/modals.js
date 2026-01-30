@@ -2204,12 +2204,12 @@ async processListNFT(nft, price) {
             ` : ''}
           </div>
           
-          <!-- Description -->
-          \${release.description ? \`
+         <!-- Description -->
+          ${release.description ? `
             <div class="release-description">
-              <p>\${release.description}</p>
+              <p>${release.description}</p>
             </div>
-          \` : ''}
+          ` : ''}
           
           <!-- Track List -->
           <div class="release-track-list">
