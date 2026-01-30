@@ -2279,10 +2279,12 @@ async processListNFT(nft, price) {
       </div>
       
       <style>
-        .release-modal-overlay {
-          align-items: flex-start;
-          padding-top: 40px;
-        }
+       .release-modal-overlay {
+  align-items: flex-start;
+  padding-top: 40px;
+  padding-bottom: 40px;
+  overflow-y: auto;
+}
        .release-modal {
           max-width: 800px;
           width: 100%;
