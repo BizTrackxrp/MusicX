@@ -138,11 +138,7 @@ const MintNotifications = {
           </button>
         </div>
       </div>
-      <div class="mint-dropdown-tabs">
-        <button class="mint-tab active" data-tab="all">All</button>
-        <button class="mint-tab" data-tab="sales">Sales</button>
-        <button class="mint-tab" data-tab="mints">Mints</button>
-      </div>
+
       <div class="mint-dropdown-content" id="mint-dropdown-content">
         <div class="mint-dropdown-loading">
           <div class="spinner"></div>
@@ -150,15 +146,6 @@ const MintNotifications = {
       </div>
     `;
     document.body.appendChild(this.dropdown);
-    
-    // Bind tab clicks
-    this.dropdown.querySelectorAll('.mint-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        this.dropdown.querySelectorAll('.mint-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this.fetchAndRender(tab.dataset.tab);
-      });
-    });
     
     // Bind mark all read
     document.getElementById('mark-all-read-btn')?.addEventListener('click', () => {
@@ -183,7 +170,7 @@ const MintNotifications = {
     });
   },
   
-  async fetchAndRender(filter = 'all') {
+  async fetchAndRender() {
     const content = document.getElementById('mint-dropdown-content');
     if (!content) return;
     
@@ -291,13 +278,6 @@ const MintNotifications = {
             isRead: notif.is_read
           });
         });
-      }
-      
-      // Filter based on tab
-      if (filter === 'sales') {
-        allItems = allItems.filter(item => item.type === 'sale');
-      } else if (filter === 'mints') {
-        allItems = allItems.filter(item => item.type === 'mint');
       }
       
       // Sort by date (newest first)
@@ -504,8 +484,7 @@ const MintNotifications = {
       });
       
       // Refresh the dropdown
-      const activeTab = this.dropdown?.querySelector('.mint-tab.active')?.dataset.tab || 'all';
-      this.fetchAndRender(activeTab);
+      this.fetchAndRender();
       
     } catch (e) {
       console.error('Failed to mark all as read:', e);
@@ -556,8 +535,7 @@ const MintNotifications = {
     if (this.polling) return;
     this.polling = setInterval(() => {
       if (this.dropdown?.style.display !== 'none') {
-        const activeTab = this.dropdown?.querySelector('.mint-tab.active')?.dataset.tab || 'all';
-        this.fetchAndRender(activeTab);
+        this.fetchAndRender();
       } else {
         this.checkForActiveJobs();
       }
@@ -625,35 +603,6 @@ mintNotificationStyles.textContent = `
   .mint-dropdown-close:hover {
     color: var(--text-primary, #fff);
     background: var(--bg-hover, #27272a);
-  }
-  
-  .mint-dropdown-tabs {
-    display: flex;
-    padding: 8px 12px;
-    gap: 4px;
-    border-bottom: 1px solid var(--border-color, #27272a);
-  }
-  
-  .mint-tab {
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted, #71717a);
-    background: none;
-    border: none;
-    border-radius: 20px;
-    cursor: pointer;
-    transition: all 150ms;
-  }
-  
-  .mint-tab:hover {
-    color: var(--text-primary, #fff);
-    background: var(--bg-hover, #27272a);
-  }
-  
-  .mint-tab.active {
-    color: var(--text-primary, #fff);
-    background: var(--accent, #3b82f6);
   }
   
   .mint-dropdown-content {
