@@ -1,6 +1,6 @@
 /**
  * XRP Music - Notifications System
- * Shows mint status AND artist sale notifications
+ * Shows mint status, artist sale notifications, AND gift notifications
  */
 
 const MintNotifications = {
@@ -11,7 +11,6 @@ const MintNotifications = {
    * Initialize notifications - called by xaman.js on session restore
    */
   init() {
-    // Check for notifications on init
     this.checkForActiveJobs();
   },
   
@@ -23,7 +22,6 @@ const MintNotifications = {
     if (this.dropdown) {
       this.dropdown.style.display = 'none';
     }
-    // Clear badge
     const bell = document.getElementById('mint-notifications-bell');
     const badge = bell?.querySelector('.mint-bell-badge');
     if (badge) {
@@ -32,7 +30,6 @@ const MintNotifications = {
   },
   
   toggleDropdown(event) {
-    // Prevent event from bubbling up and causing page reload/navigation
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -46,8 +43,6 @@ const MintNotifications = {
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       this.fetchAndRender();
-      
-      // Mark all as read when opening dropdown (removes the badge)
       this.markAllReadOnView();
     } else {
       this.dropdown.style.display = 'none';
@@ -56,21 +51,10 @@ const MintNotifications = {
   
   /**
    * Mark all notifications as read when viewing dropdown
+   * (Does NOT mark gift notifications as read — those need explicit accept/decline)
    */
   async markAllReadOnView() {
-    let address = window.AppState?.user?.address;
-    
-    if (!address) {
-      try {
-        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
-        const session = sessionStorage.getItem('xrpmusic_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
-        }
-      } catch (e) {}
-    }
-    
+    let address = this.getAddress();
     if (!address) return;
     
     try {
@@ -83,15 +67,8 @@ const MintNotifications = {
         })
       });
       
-      // Hide the badge
-      const bell = document.getElementById('mint-notifications-bell');
-      const badge = bell?.querySelector('.mint-bell-badge');
-      if (badge) {
-        badge.style.display = 'none';
-      }
-    } catch (e) {
-      // Ignore errors
-    }
+      // Badge update happens in fetchAndRender
+    } catch (e) {}
   },
   
   positionDropdown() {
@@ -101,10 +78,8 @@ const MintNotifications = {
     const rect = bell.getBoundingClientRect();
     const dropdownWidth = 360;
     
-    // Position dropdown below the bell, aligned to right edge of bell
     let rightPos = window.innerWidth - rect.right;
     
-    // Make sure it doesn't go off left edge of screen
     if (rect.right - dropdownWidth < 10) {
       rightPos = window.innerWidth - dropdownWidth - 10;
     }
@@ -114,7 +89,6 @@ const MintNotifications = {
   },
   
   createDropdown() {
-    // Remove if exists
     document.getElementById('mint-dropdown')?.remove();
     
     this.dropdown = document.createElement('div');
@@ -147,12 +121,10 @@ const MintNotifications = {
     `;
     document.body.appendChild(this.dropdown);
     
-    // Bind mark all read
     document.getElementById('mark-all-read-btn')?.addEventListener('click', () => {
       this.markAllRead();
     });
     
-    // Close when clicking outside
     document.addEventListener('click', (e) => {
       if (this.dropdown && 
           this.dropdown.style.display !== 'none' &&
@@ -162,7 +134,6 @@ const MintNotifications = {
       }
     });
     
-    // Reposition on window resize
     window.addEventListener('resize', () => {
       if (this.dropdown && this.dropdown.style.display !== 'none') {
         this.positionDropdown();
@@ -170,26 +141,28 @@ const MintNotifications = {
     });
   },
   
-  async fetchAndRender() {
-    const content = document.getElementById('mint-dropdown-content');
-    if (!content) return;
-    
-    // Check multiple sources for user address
-    // xrpmusic_session stores the session object with address in sessionStorage
+  /**
+   * Helper: get user address from AppState or sessionStorage
+   */
+  getAddress() {
     let address = window.AppState?.user?.address;
-    
     if (!address) {
       try {
-        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
         const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
           const parsed = JSON.parse(session);
           address = parsed.address || parsed.wallet_address || parsed.walletAddress;
         }
-      } catch (e) {
-        console.error('Failed to parse wallet session:', e);
-      }
+      } catch (e) {}
     }
+    return address;
+  },
+  
+  async fetchAndRender() {
+    const content = document.getElementById('mint-dropdown-content');
+    if (!content) return;
+    
+    let address = this.getAddress();
     
     if (!address) {
       content.innerHTML = `
@@ -207,36 +180,30 @@ const MintNotifications = {
     content.innerHTML = `<div class="mint-dropdown-loading"><div class="spinner"></div></div>`;
     
     try {
-      // Fetch both mint jobs and sale notifications in parallel
-      const [mintRes, salesRes] = await Promise.all([
-        fetch(`/api/my-mint-jobs?address=${address}`).catch(e => ({ ok: false, error: e })),
-        fetch(`/api/artist-notifications?address=${address}&limit=20`).catch(e => ({ ok: false, error: e }))
+      // Fetch mint jobs, sale notifications, AND pending gifts in parallel
+      const [mintRes, salesRes, giftsRes] = await Promise.all([
+        fetch(`/api/my-mint-jobs?address=${address}`).catch(e => ({ ok: false })),
+        fetch(`/api/artist-notifications?address=${address}&limit=20`).catch(e => ({ ok: false })),
+        fetch(`/api/gifts?address=${address}&type=pending`).catch(e => ({ ok: false }))
       ]);
       
       let mintData = { success: false, jobs: {} };
       let salesData = { success: false, notifications: [], unreadCount: 0 };
+      let giftsData = { success: false, gifts: [], pendingCount: 0 };
       
-      // Parse mint response
       if (mintRes.ok) {
-        try {
-          mintData = await mintRes.json();
-        } catch (e) {
-          console.error('Failed to parse mint response:', e);
-        }
+        try { mintData = await mintRes.json(); } catch (e) {}
       }
       
-      // Parse sales response
       if (salesRes.ok) {
-        try {
-          salesData = await salesRes.json();
-        } catch (e) {
-          console.error('Failed to parse sales response:', e);
-        }
-      } else {
-        console.log('Artist notifications API not available (this is OK if not deployed yet)');
+        try { salesData = await salesRes.json(); } catch (e) {}
       }
       
-      // Combine and sort all notifications
+      if (giftsRes.ok) {
+        try { giftsData = await giftsRes.json(); } catch (e) {}
+      }
+      
+      // Combine all notifications
       let allItems = [];
       
       // Add mint jobs
@@ -264,11 +231,12 @@ const MintNotifications = {
         });
       }
       
-      // Add sale notifications
+      // Add sale notifications (filter out gift types — we show those separately)
       if (salesData.success && salesData.notifications) {
         salesData.notifications.forEach(notif => {
+          if (notif.type === 'gift') return; // Skip — handled by gifts section
           allItems.push({
-            type: 'sale',
+            type: notif.type === 'gift_accepted' ? 'gift_accepted' : 'sale',
             id: notif.id,
             title: notif.title,
             message: notif.message,
@@ -280,11 +248,29 @@ const MintNotifications = {
         });
       }
       
+      // Add pending gifts (these get special Accept/Decline UI)
+      if (giftsData.success && giftsData.gifts) {
+        giftsData.gifts.forEach(gift => {
+          allItems.push({
+            type: 'gift_pending',
+            id: gift.id,
+            title: `🎁 Gift from ${gift.sender_name || gift.sender_address?.slice(0, 8) + '...'}`,
+            message: `"${gift.track_title || gift.release_title}"`,
+            coverUrl: gift.cover_url,
+            senderAvatar: gift.sender_avatar,
+            senderName: gift.sender_name,
+            releaseId: gift.release_id,
+            createdAt: new Date(gift.created_at),
+            isRead: false
+          });
+        });
+      }
+      
       // Sort by date (newest first)
       allItems.sort((a, b) => b.createdAt - a.createdAt);
       
       // Update badge
-      this.updateBadge(mintData, salesData);
+      this.updateBadge(mintData, salesData, giftsData);
       
       if (allItems.length === 0) {
         content.innerHTML = `
@@ -294,7 +280,7 @@ const MintNotifications = {
               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
             </svg>
             <span>No notifications yet</span>
-            <small>Sales and minting updates will appear here</small>
+            <small>Sales, gifts, and minting updates will appear here</small>
           </div>
         `;
         return;
@@ -311,6 +297,23 @@ const MintNotifications = {
         });
       });
       
+      // Bind Accept/Decline buttons for gift notifications
+      content.querySelectorAll('.gift-accept-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const giftId = btn.dataset.giftId;
+          this.acceptGift(giftId, btn);
+        });
+      });
+      
+      content.querySelectorAll('.gift-decline-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const giftId = btn.dataset.giftId;
+          this.declineGift(giftId, btn);
+        });
+      });
+      
     } catch(e) {
       console.error('Fetch error:', e);
       content.innerHTML = `<div class="mint-dropdown-error">Failed to load notifications</div>`;
@@ -320,6 +323,10 @@ const MintNotifications = {
   renderItem(item) {
     if (item.type === 'mint') {
       return this.renderMintJob(item);
+    } else if (item.type === 'gift_pending') {
+      return this.renderGiftNotification(item);
+    } else if (item.type === 'gift_accepted') {
+      return this.renderGiftAcceptedNotification(item);
     } else if (item.type === 'sale') {
       return this.renderSaleNotification(item);
     }
@@ -392,6 +399,227 @@ const MintNotifications = {
     `;
   },
   
+  renderGiftNotification(gift) {
+    return `
+      <div class="notification-item gift-pending unread" data-type="gift_pending" data-id="${gift.id}">
+        <div class="notification-icon gift">
+          <span style="font-size: 18px;">🎁</span>
+        </div>
+        <div class="notification-content">
+          <div class="notification-title">${gift.title}</div>
+          <div class="notification-message">${gift.message}</div>
+          <div class="gift-notification-actions">
+            <button class="gift-accept-btn" data-gift-id="${gift.id}">Accept</button>
+            <button class="gift-decline-btn" data-gift-id="${gift.id}">Decline</button>
+          </div>
+          <div class="notification-time">${this.formatTime(gift.createdAt)}</div>
+        </div>
+      </div>
+    `;
+  },
+  
+  renderGiftAcceptedNotification(notif) {
+    const unreadClass = notif.isRead ? '' : 'unread';
+    
+    return `
+      <div class="notification-item gift-accepted ${unreadClass}" data-type="sale" data-id="${notif.id}">
+        <div class="notification-icon gift">
+          <span style="font-size: 18px;">🎁</span>
+        </div>
+        <div class="notification-content">
+          <div class="notification-title">${notif.title}</div>
+          ${notif.message ? `<div class="notification-message">${notif.message}</div>` : ''}
+          <div class="notification-time">${this.formatTime(notif.createdAt)}</div>
+        </div>
+        ${!notif.isRead ? '<div class="notification-unread-dot"></div>' : ''}
+      </div>
+    `;
+  },
+  
+  /**
+   * Accept a gift — triggers lazy mint + Xaman signing
+   */
+  async acceptGift(giftId, btnEl) {
+    const address = this.getAddress();
+    if (!address) return;
+    
+    // Disable buttons and show loading
+    const container = btnEl.closest('.gift-notification-actions');
+    if (container) {
+      container.innerHTML = `
+        <div class="gift-processing">
+          <div class="spinner" style="width: 16px; height: 16px;"></div>
+          <span>Minting your NFT...</span>
+        </div>
+      `;
+    }
+    
+    try {
+      // Call accept endpoint — this lazy mints + creates sell offer
+      const response = await fetch('/api/gifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'accept',
+          giftId,
+          recipientAddress: address
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to process gift');
+      }
+      
+      // Now open Xaman to accept the sell offer
+      if (container) {
+        container.innerHTML = `
+          <div class="gift-processing">
+            <div class="spinner" style="width: 16px; height: 16px;"></div>
+            <span>Open Xaman to accept...</span>
+          </div>
+        `;
+      }
+      
+      // Use Xaman SDK to create accept offer payload
+      if (window.xumm) {
+        const payload = await window.xumm.payload.create({
+          TransactionType: 'NFTokenAcceptOffer',
+          NFTokenSellOffer: result.sellOfferIndex,
+        });
+        
+        if (payload?.pushed || payload?.refs?.websocket_status) {
+          // Wait for signing
+          const resolved = await window.xumm.payload.subscribe(payload, (event) => {
+            if (event.data?.signed !== undefined) {
+              return event.data;
+            }
+          });
+          
+          if (resolved?.signed) {
+            // Confirm the gift
+            await fetch('/api/gifts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'confirm',
+                giftId,
+                acceptTxHash: resolved.txid
+              })
+            });
+            
+            if (container) {
+              container.innerHTML = `
+                <div class="gift-success">✅ NFT claimed!</div>
+              `;
+            }
+            
+            // Refresh notifications after a moment
+            setTimeout(() => this.fetchAndRender(), 2000);
+          } else {
+            // User rejected in Xaman
+            if (container) {
+              container.innerHTML = `
+                <div class="gift-notification-actions">
+                  <button class="gift-accept-btn" data-gift-id="${giftId}">Accept</button>
+                  <button class="gift-decline-btn" data-gift-id="${giftId}">Decline</button>
+                </div>
+              `;
+              // Re-bind buttons
+              container.querySelector('.gift-accept-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.acceptGift(giftId, e.target);
+              });
+              container.querySelector('.gift-decline-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.declineGift(giftId, e.target);
+              });
+            }
+          }
+        }
+      } else {
+        throw new Error('Xaman SDK not available');
+      }
+      
+    } catch (error) {
+      console.error('Gift accept failed:', error);
+      if (container) {
+        container.innerHTML = `
+          <div class="gift-error">${error.message}</div>
+          <div class="gift-notification-actions" style="margin-top: 8px;">
+            <button class="gift-accept-btn" data-gift-id="${giftId}">Retry</button>
+            <button class="gift-decline-btn" data-gift-id="${giftId}">Decline</button>
+          </div>
+        `;
+        // Re-bind buttons
+        container.querySelector('.gift-accept-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.acceptGift(giftId, e.target);
+        });
+        container.querySelector('.gift-decline-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.declineGift(giftId, e.target);
+        });
+      }
+    }
+  },
+  
+  /**
+   * Decline a gift
+   */
+  async declineGift(giftId, btnEl) {
+    const address = this.getAddress();
+    if (!address) return;
+    
+    const container = btnEl.closest('.gift-notification-actions') || btnEl.closest('.notification-item');
+    
+    try {
+      const response = await fetch('/api/gifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'decline',
+          giftId,
+          recipientAddress: address
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to decline gift');
+      }
+      
+      // Remove the notification item from the UI
+      const notifItem = btnEl.closest('.notification-item');
+      if (notifItem) {
+        notifItem.style.opacity = '0';
+        notifItem.style.transform = 'translateX(20px)';
+        notifItem.style.transition = 'all 300ms ease';
+        setTimeout(() => {
+          notifItem.remove();
+          // Check if empty
+          const content = document.getElementById('mint-dropdown-content');
+          if (content && content.children.length === 0) {
+            content.innerHTML = `
+              <div class="mint-dropdown-empty">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span>No notifications yet</span>
+              </div>
+            `;
+          }
+        }, 300);
+      }
+      
+    } catch (error) {
+      console.error('Gift decline failed:', error);
+    }
+  },
+  
   formatTime(date) {
     const now = new Date();
     const diff = now - date;
@@ -406,7 +634,7 @@ const MintNotifications = {
     return date.toLocaleDateString();
   },
   
-  updateBadge(mintData, salesData) {
+  updateBadge(mintData, salesData, giftsData) {
     const bell = document.getElementById('mint-notifications-bell');
     const badge = bell?.querySelector('.mint-bell-badge');
     if (!badge) return;
@@ -414,8 +642,13 @@ const MintNotifications = {
     const hasActiveMint = mintData?.hasActive;
     const hasUnreadSales = salesData?.unreadCount > 0;
     const hasUnreadMint = mintData?.hasUnread;
+    const hasPendingGifts = giftsData?.pendingCount > 0;
     
-    if (hasActiveMint) {
+    if (hasPendingGifts) {
+      // Gifts get highest priority — pulsing badge
+      badge.style.display = 'block';
+      badge.className = 'mint-bell-badge gift';
+    } else if (hasActiveMint) {
       badge.style.display = 'block';
       badge.className = 'mint-bell-badge active';
     } else if (hasUnreadSales || hasUnreadMint) {
@@ -426,20 +659,8 @@ const MintNotifications = {
     }
   },
   
-  // FIXED: Use sessionStorage with correct key for mobile
   async markAsRead(notificationId) {
-    let address = window.AppState?.user?.address;
-    
-    if (!address) {
-      try {
-        const session = sessionStorage.getItem('xrpmusic_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
-        }
-      } catch (e) {}
-    }
-    
+    let address = this.getAddress();
     if (!address || !notificationId) return;
     
     try {
@@ -457,20 +678,8 @@ const MintNotifications = {
     }
   },
   
-  // FIXED: Use sessionStorage with correct key for mobile
   async markAllRead() {
-    let address = window.AppState?.user?.address;
-    
-    if (!address) {
-      try {
-        const session = sessionStorage.getItem('xrpmusic_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
-        }
-      } catch (e) {}
-    }
-    
+    let address = this.getAddress();
     if (!address) return;
     
     try {
@@ -483,7 +692,6 @@ const MintNotifications = {
         })
       });
       
-      // Refresh the dropdown
       this.fetchAndRender();
       
     } catch (e) {
@@ -491,36 +699,22 @@ const MintNotifications = {
     }
   },
   
-  // Check for active jobs and unread notifications (called on page load if signed in)
   async checkForActiveJobs() {
-    // Check multiple sources for user address
-    let address = window.AppState?.user?.address;
-    
-    if (!address) {
-      try {
-        // FIXED: Use sessionStorage with correct key (xrpmusic_session)
-        const session = sessionStorage.getItem('xrpmusic_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          address = parsed.address || parsed.wallet_address || parsed.walletAddress;
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
-    }
-    
+    let address = this.getAddress();
     if (!address) return;
     
     try {
-      const [mintRes, salesRes] = await Promise.all([
+      const [mintRes, salesRes, giftsRes] = await Promise.all([
         fetch(`/api/my-mint-jobs?address=${address}`),
-        fetch(`/api/artist-notifications?address=${address}&unreadOnly=true&limit=1`)
+        fetch(`/api/artist-notifications?address=${address}&unreadOnly=true&limit=1`),
+        fetch(`/api/gifts?address=${address}&type=pending`)
       ]);
       
       const mintData = await mintRes.json();
       const salesData = await salesRes.json();
+      const giftsData = await giftsRes.json();
       
-      this.updateBadge(mintData, salesData);
+      this.updateBadge(mintData, salesData, giftsData);
       
       if (mintData.hasActive) {
         this.startPolling();
@@ -530,7 +724,6 @@ const MintNotifications = {
     }
   },
   
-  // Start polling for active jobs
   startPolling() {
     if (this.polling) return;
     this.polling = setInterval(() => {
@@ -676,6 +869,16 @@ mintNotificationStyles.textContent = `
     background: rgba(59, 130, 246, 0.15);
   }
   
+  /* Gift pending notification — special highlight */
+  .notification-item.gift-pending {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+  }
+  
+  .notification-item.gift-pending:hover {
+    background: rgba(139, 92, 246, 0.15);
+  }
+  
   .notification-icon {
     width: 36px;
     height: 36px;
@@ -694,6 +897,10 @@ mintNotificationStyles.textContent = `
   .notification-icon.mint {
     background: rgba(139, 92, 246, 0.2);
     color: #8b5cf6;
+  }
+  
+  .notification-icon.gift {
+    background: rgba(236, 72, 153, 0.2);
   }
   
   .notification-content {
@@ -772,6 +979,70 @@ mintNotificationStyles.textContent = `
     background: var(--accent, #3b82f6);
   }
   
+  /* Gift Accept/Decline buttons */
+  .gift-notification-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  
+  .gift-accept-btn {
+    padding: 5px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms;
+    background: linear-gradient(135deg, #8b5cf6, #a855f7);
+    color: white;
+  }
+  
+  .gift-accept-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+  }
+  
+  .gift-decline-btn {
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #27272a);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms;
+    background: transparent;
+    color: var(--text-muted, #71717a);
+  }
+  
+  .gift-decline-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+  
+  .gift-processing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #8b5cf6;
+  }
+  
+  .gift-success {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #22c55e;
+  }
+  
+  .gift-error {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #ef4444;
+  }
+  
   /* Bell badge styles */
   .mint-bell-badge {
     position: absolute;
@@ -792,6 +1063,11 @@ mintNotificationStyles.textContent = `
     background: #3b82f6;
   }
   
+  .mint-bell-badge.gift {
+    background: #ec4899;
+    animation: mintPulse 1.5s ease-in-out infinite;
+  }
+  
   @keyframes mintPulse {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.3); opacity: 0.8; }
@@ -810,10 +1086,8 @@ document.head.appendChild(mintNotificationStyles);
 
 // Auto-check for notifications on page load (only if signed in)
 document.addEventListener('DOMContentLoaded', () => {
-  // Bind the bell click handler properly to prevent event bubbling issues
   const bell = document.getElementById('mint-notifications-bell');
   if (bell) {
-    // Remove any existing onclick attribute and use proper event listener
     bell.removeAttribute('onclick');
     bell.addEventListener('click', (event) => {
       event.preventDefault();
@@ -826,7 +1100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.AppState?.user?.address) {
       MintNotifications.checkForActiveJobs();
     } else {
-      // Also check sessionStorage session
       try {
         const session = sessionStorage.getItem('xrpmusic_session');
         if (session) {
