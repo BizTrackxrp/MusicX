@@ -266,20 +266,20 @@ async function handleConfirmGift(req, res, sql) {
       WHERE id = ${gift.release_id}
     `;
 
-    // Get current sold_count to calculate edition number
-    // Edition # = sold_count (purchases) + number of accepted gifts for this track
+    // Increment sold_count on the track (gifts count as "claimed" for availability calculation)
+    await sql`
+      UPDATE tracks 
+      SET sold_count = sold_count + 1 
+      WHERE id = ${gift.track_id}
+    `;
+
+    // Get current sold_count for edition number
     const [track] = await sql`
       SELECT sold_count FROM tracks WHERE id = ${gift.track_id}
     `;
 
-    const acceptedGiftsCount = await sql`
-      SELECT COUNT(*) as count FROM gifts 
-      WHERE track_id = ${gift.track_id} AND status = 'accepted'
-    `;
-
-    const editionNumber = (track?.sold_count || 0) + parseInt(acceptedGiftsCount[0]?.count || 0);
-
-    // Do NOT increment sold_count — gifts are not sales
+    // Edition number = the new sold_count (since we just incremented it)
+    const editionNumber = track?.sold_count || 1;
 
     // Insert NFT record with edition number
     const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
