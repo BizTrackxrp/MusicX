@@ -36,7 +36,6 @@ export default async function handler(req, res) {
       return handleConfirmGift(req, res, sql);
     }
 
-    // Default: create a new gift
     return handleCreateGift(req, res, sql);
   }
 
@@ -58,7 +57,6 @@ async function handleCreateGift(req, res, sql) {
   }
 
   try {
-    // Verify sender owns this release
     const [release] = await sql`
       SELECT id, artist_address, title, cover_url, total_editions 
       FROM releases 
@@ -69,7 +67,6 @@ async function handleCreateGift(req, res, sql) {
       return res.status(403).json({ success: false, error: 'You can only gift from your own releases' });
     }
 
-    // Get track info
     const [track] = await sql`
       SELECT id, title, sold_count, metadata_cid FROM tracks 
       WHERE id = ${trackId} AND release_id = ${releaseId}
@@ -79,13 +76,11 @@ async function handleCreateGift(req, res, sql) {
       return res.status(404).json({ success: false, error: 'Track not found' });
     }
 
-    // Get sender profile for notification
     const [senderProfile] = await sql`
       SELECT name FROM profiles WHERE wallet_address = ${senderAddress}
     `;
     const senderName = senderProfile?.name || senderAddress.slice(0, 8) + '...';
 
-    // Create gift record
     const giftId = `gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await sql`
@@ -93,7 +88,6 @@ async function handleCreateGift(req, res, sql) {
       VALUES (${giftId}, ${senderAddress}, ${recipientAddress}, ${releaseId}, ${trackId}, 'pending', NOW())
     `;
 
-    // Create notification for recipient
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const notifTitle = `🎁 ${senderName} sent you a gift!`;
     const notifMessage = `"${track.title || release.title}" — tap to accept your free NFT`;
@@ -133,7 +127,6 @@ async function handleAcceptGift(req, res, sql) {
   }
 
   try {
-    // Get the gift record
     const [gift] = await sql`
       SELECT g.*, r.title as release_title, r.total_editions, r.royalty_percent, r.cover_url,
              t.title as track_title, t.metadata_cid, t.sold_count
@@ -151,14 +144,12 @@ async function handleAcceptGift(req, res, sql) {
       return res.status(400).json({ success: false, error: 'Track missing metadata — cannot mint' });
     }
 
-    // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
 
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
 
     try {
-      // STEP 1: Lazy mint the NFT
       console.log('🎁 Lazy minting gift NFT for:', recipientAddress);
 
       const metadataUri = `ipfs://${gift.metadata_cid}`;
@@ -170,7 +161,7 @@ async function handleAcceptGift(req, res, sql) {
         TransactionType: 'NFTokenMint',
         Account: platformAddress,
         URI: uriHex,
-        Flags: 8, // tfTransferable
+        Flags: 8,
         TransferFee: transferFee,
         NFTokenTaxon: 0,
       });
@@ -182,7 +173,6 @@ async function handleAcceptGift(req, res, sql) {
         throw new Error(`Mint failed: ${mintResult.result.meta.TransactionResult}`);
       }
 
-      // Extract NFT Token ID
       const nftTokenId = extractNFTokenID(mintResult.result.meta);
       if (!nftTokenId) {
         throw new Error('Could not extract NFT Token ID from mint result');
@@ -190,13 +180,12 @@ async function handleAcceptGift(req, res, sql) {
 
       console.log('✅ Gift NFT minted:', nftTokenId);
 
-      // STEP 2: Create sell offer for 1 drop (free) to recipient
       const createOfferTx = await client.autofill({
         TransactionType: 'NFTokenCreateOffer',
         Account: platformAddress,
         NFTokenID: nftTokenId,
-        Amount: '1', // 1 drop — essentially free
-        Flags: 1, // tfSellNFToken
+        Amount: '1',
+        Flags: 1,
         Destination: recipientAddress,
       });
 
@@ -207,7 +196,6 @@ async function handleAcceptGift(req, res, sql) {
         throw new Error(`Sell offer failed: ${offerResult.result.meta.TransactionResult}`);
       }
 
-      // Get offer index
       let offerIndex = null;
       for (const node of offerResult.result.meta.AffectedNodes) {
         if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
@@ -218,7 +206,6 @@ async function handleAcceptGift(req, res, sql) {
 
       console.log('✅ Gift sell offer created:', offerIndex);
 
-      // Update gift record with NFT details
       await sql`
         UPDATE gifts 
         SET nft_token_id = ${nftTokenId}, offer_index = ${offerIndex}, status = 'minted'
@@ -265,21 +252,18 @@ async function handleConfirmGift(req, res, sql) {
       return res.status(404).json({ success: false, error: 'Gift not found or not ready' });
     }
 
-    // Mark gift as accepted
     await sql`
       UPDATE gifts 
       SET status = 'accepted', accepted_at = NOW()
       WHERE id = ${giftId}
     `;
 
-    // Insert NFT record for tracking
     const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await sql`
       INSERT INTO nfts (id, nft_token_id, release_id, track_id, owner_address, status, created_at)
       VALUES (${nftId}, ${gift.nft_token_id}, ${gift.release_id}, ${gift.track_id}, ${gift.recipient_address}, 'sold', NOW())
     `;
 
-    // Notify the sender that their gift was accepted
     const [recipientProfile] = await sql`
       SELECT name FROM profiles WHERE wallet_address = ${gift.recipient_address}
     `;
@@ -323,12 +307,10 @@ async function handleDeclineGift(req, res, sql) {
       return res.status(404).json({ success: false, error: 'Gift not found' });
     }
 
-    // Mark as declined
     await sql`
       UPDATE gifts SET status = 'declined' WHERE id = ${giftId}
     `;
 
-    // Remove the gift notification
     await sql`
       DELETE FROM artist_notifications 
       WHERE artist_address = ${recipientAddress} AND type = 'gift' AND release_id = ${gift.release_id} AND track_id = ${gift.track_id}
@@ -366,8 +348,18 @@ async function handleGetGifts(req, res, sql) {
         WHERE g.sender_address = ${address}
         ORDER BY g.created_at DESC
       `;
-    } else if (type === 'received' || type === 'pending') {
-      const statusFilter = type === 'pending' ? 'pending' : null;
+    } else if (type === 'pending') {
+      gifts = await sql`
+        SELECT g.*, r.title as release_title, r.cover_url, r.artist_name, t.title as track_title,
+               p.name as sender_name, p.avatar_url as sender_avatar
+        FROM gifts g
+        JOIN releases r ON g.release_id = r.id
+        JOIN tracks t ON g.track_id = t.id
+        LEFT JOIN profiles p ON g.sender_address = p.wallet_address
+        WHERE g.recipient_address = ${address} AND g.status = 'pending'
+        ORDER BY g.created_at DESC
+      `;
+    } else if (type === 'received') {
       gifts = await sql`
         SELECT g.*, r.title as release_title, r.cover_url, r.artist_name, t.title as track_title,
                p.name as sender_name, p.avatar_url as sender_avatar
@@ -376,7 +368,6 @@ async function handleGetGifts(req, res, sql) {
         JOIN tracks t ON g.track_id = t.id
         LEFT JOIN profiles p ON g.sender_address = p.wallet_address
         WHERE g.recipient_address = ${address}
-          ${statusFilter ? sql`AND g.status = ${statusFilter}` : sql``}
         ORDER BY g.created_at DESC
       `;
     } else {
@@ -390,7 +381,6 @@ async function handleGetGifts(req, res, sql) {
       `;
     }
 
-    // Count pending gifts for badge
     const pendingCount = await sql`
       SELECT COUNT(*) as count FROM gifts 
       WHERE recipient_address = ${address} AND status = 'pending'
