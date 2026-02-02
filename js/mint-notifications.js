@@ -66,8 +66,6 @@ const MintNotifications = {
           address
         })
       });
-      
-      // Badge update happens in fetchAndRender
     } catch (e) {}
   },
   
@@ -438,12 +436,12 @@ const MintNotifications = {
   
   /**
    * Accept a gift — triggers lazy mint + Xaman signing
+   * Uses XamanWallet.acceptSellOffer() (same as purchase flow)
    */
   async acceptGift(giftId, btnEl) {
     const address = this.getAddress();
     if (!address) return;
     
-    // Disable buttons and show loading
     const container = btnEl.closest('.gift-notification-actions');
     if (container) {
       container.innerHTML = `
@@ -455,7 +453,7 @@ const MintNotifications = {
     }
     
     try {
-      // Call accept endpoint — this lazy mints + creates sell offer
+      // Step 1: Call accept endpoint — lazy mints + creates sell offer
       const response = await fetch('/api/gifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -472,75 +470,40 @@ const MintNotifications = {
         throw new Error(result.error || 'Failed to process gift');
       }
       
-      // Now open Xaman to accept the sell offer
+      // Step 2: Accept the sell offer via Xaman (same as purchase flow)
       if (container) {
         container.innerHTML = `
           <div class="gift-processing">
             <div class="spinner" style="width: 16px; height: 16px;"></div>
-            <span>Open Xaman to accept...</span>
+            <span>Sign in Xaman to claim...</span>
           </div>
         `;
       }
       
-      // Use Xaman SDK to create accept offer payload
-      if (window.xumm) {
-        const payload = await window.xumm.payload.create({
-          TransactionType: 'NFTokenAcceptOffer',
-          NFTokenSellOffer: result.sellOfferIndex,
-        });
-        
-        if (payload?.pushed || payload?.refs?.websocket_status) {
-          // Wait for signing
-          const resolved = await window.xumm.payload.subscribe(payload, (event) => {
-            if (event.data?.signed !== undefined) {
-              return event.data;
-            }
-          });
-          
-          if (resolved?.signed) {
-            // Confirm the gift
-            await fetch('/api/gifts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'confirm',
-                giftId,
-                acceptTxHash: resolved.txid
-              })
-            });
-            
-            if (container) {
-              container.innerHTML = `
-                <div class="gift-success">✅ NFT claimed!</div>
-              `;
-            }
-            
-            // Refresh notifications after a moment
-            setTimeout(() => this.fetchAndRender(), 2000);
-          } else {
-            // User rejected in Xaman
-            if (container) {
-              container.innerHTML = `
-                <div class="gift-notification-actions">
-                  <button class="gift-accept-btn" data-gift-id="${giftId}">Accept</button>
-                  <button class="gift-decline-btn" data-gift-id="${giftId}">Decline</button>
-                </div>
-              `;
-              // Re-bind buttons
-              container.querySelector('.gift-accept-btn')?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.acceptGift(giftId, e.target);
-              });
-              container.querySelector('.gift-decline-btn')?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.declineGift(giftId, e.target);
-              });
-            }
-          }
-        }
-      } else {
-        throw new Error('Xaman SDK not available');
+      const acceptResult = await XamanWallet.acceptSellOffer(result.sellOfferIndex);
+      
+      if (!acceptResult.success) {
+        throw new Error(acceptResult.error || 'Transaction cancelled');
       }
+      
+      // Step 3: Confirm the gift in the database
+      await fetch('/api/gifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'confirm',
+          giftId,
+          acceptTxHash: acceptResult.txHash
+        })
+      });
+      
+      if (container) {
+        container.innerHTML = `
+          <div class="gift-success">✅ NFT claimed!</div>
+        `;
+      }
+      
+      setTimeout(() => this.fetchAndRender(), 2000);
       
     } catch (error) {
       console.error('Gift accept failed:', error);
@@ -552,7 +515,6 @@ const MintNotifications = {
             <button class="gift-decline-btn" data-gift-id="${giftId}">Decline</button>
           </div>
         `;
-        // Re-bind buttons
         container.querySelector('.gift-accept-btn')?.addEventListener('click', (e) => {
           e.stopPropagation();
           this.acceptGift(giftId, e.target);
