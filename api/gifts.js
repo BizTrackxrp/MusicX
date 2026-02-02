@@ -252,34 +252,78 @@ async function handleConfirmGift(req, res, sql) {
       return res.status(404).json({ success: false, error: 'Gift not found or not ready' });
     }
 
+    // Mark gift as accepted
     await sql`
       UPDATE gifts 
       SET status = 'accepted', accepted_at = NOW()
       WHERE id = ${giftId}
     `;
 
-    const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Increment total_editions on the release (gift adds a new copy beyond the sale pool)
     await sql`
-      INSERT INTO nfts (id, nft_token_id, release_id, track_id, owner_address, status, created_at)
-      VALUES (${nftId}, ${gift.nft_token_id}, ${gift.release_id}, ${gift.track_id}, ${gift.recipient_address}, 'sold', NOW())
+      UPDATE releases 
+      SET total_editions = total_editions + 1
+      WHERE id = ${gift.release_id}
     `;
 
+    // Get current sold_count to calculate edition number
+    // Edition # = sold_count (purchases) + number of accepted gifts for this track
+    const [track] = await sql`
+      SELECT sold_count FROM tracks WHERE id = ${gift.track_id}
+    `;
+
+    const acceptedGiftsCount = await sql`
+      SELECT COUNT(*) as count FROM gifts 
+      WHERE track_id = ${gift.track_id} AND status = 'accepted'
+    `;
+
+    const editionNumber = (track?.sold_count || 0) + parseInt(acceptedGiftsCount[0]?.count || 0);
+
+    // Do NOT increment sold_count — gifts are not sales
+
+    // Insert NFT record with edition number
+    const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await sql`
+      INSERT INTO nfts (id, nft_token_id, release_id, track_id, owner_address, edition_number, status, created_at)
+      VALUES (${nftId}, ${gift.nft_token_id}, ${gift.release_id}, ${gift.track_id}, ${gift.recipient_address}, ${editionNumber}, 'sold', NOW())
+    `;
+
+    // Get names for notifications
     const [recipientProfile] = await sql`
       SELECT name FROM profiles WHERE wallet_address = ${gift.recipient_address}
     `;
     const recipientName = recipientProfile?.name || gift.recipient_address.slice(0, 8) + '...';
 
+    const [senderProfile] = await sql`
+      SELECT name FROM profiles WHERE wallet_address = ${gift.sender_address}
+    `;
+    const senderName = senderProfile?.name || gift.sender_address.slice(0, 8) + '...';
+
     const [release] = await sql`
       SELECT title FROM releases WHERE id = ${gift.release_id}
     `;
+    const releaseTitle = release?.title || 'Track';
 
-    const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Notify the SENDER that their gift was accepted
+    const senderNotifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await sql`
       INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, created_at)
-      VALUES (${notifId}, ${gift.sender_address}, 'gift_accepted', ${`🎁 ${recipientName} accepted your gift!`}, ${`"${release?.title || 'Track'}" has been claimed`}, ${gift.release_id}, ${gift.track_id}, NOW())
+      VALUES (${senderNotifId}, ${gift.sender_address}, 'gift_accepted', ${`🎁 ${recipientName} accepted your gift!`}, ${`"${releaseTitle}" has been claimed`}, ${gift.release_id}, ${gift.track_id}, NOW())
     `;
 
-    return res.json({ success: true, message: 'Gift confirmed!' });
+    // Update the RECIPIENT's gift notification to show accepted state
+    await sql`
+      UPDATE artist_notifications 
+      SET type = 'gift_accepted', 
+          title = ${`🎁 You accepted a gift from ${senderName}!`},
+          message = ${`"${releaseTitle}" — Edition #${editionNumber}`}
+      WHERE artist_address = ${gift.recipient_address} 
+        AND type = 'gift' 
+        AND release_id = ${gift.release_id} 
+        AND track_id = ${gift.track_id}
+    `;
+
+    return res.json({ success: true, message: 'Gift confirmed!', editionNumber });
 
   } catch (error) {
     console.error('Gift confirm error:', error);
