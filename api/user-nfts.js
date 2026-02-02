@@ -125,19 +125,36 @@ export default async function handler(req, res) {
       // Match user's NFTs with our database
       const matchedNFTs = [];
       
-      // Get sales info to find edition numbers
+      // Get edition numbers from sales table (purchased NFTs)
       const sales = await sql`
         SELECT nft_token_id, edition_number, release_id, created_at
         FROM sales 
         WHERE buyer_address = ${address}
       `;
       
-      const salesMap = new Map();
+      const editionMap = new Map();
       for (const sale of sales) {
         if (sale.nft_token_id) {
-          salesMap.set(sale.nft_token_id, {
+          editionMap.set(sale.nft_token_id, {
             editionNumber: sale.edition_number,
             purchaseDate: sale.created_at,
+          });
+        }
+      }
+      
+      // Also get edition numbers from nfts table (gifted NFTs)
+      const nftRecords = await sql`
+        SELECT nft_token_id, edition_number, created_at
+        FROM nfts
+        WHERE owner_address = ${address}
+          AND edition_number IS NOT NULL
+      `;
+      
+      for (const record of nftRecords) {
+        if (record.nft_token_id && !editionMap.has(record.nft_token_id)) {
+          editionMap.set(record.nft_token_id, {
+            editionNumber: record.edition_number,
+            purchaseDate: record.created_at,
           });
         }
       }
@@ -152,15 +169,15 @@ export default async function handler(req, res) {
             
             if (cidMap.has(cid)) {
               const info = cidMap.get(cid);
-              const saleInfo = salesMap.get(nft.NFTokenID) || {};
+              const editionInfo = editionMap.get(nft.NFTokenID) || {};
               
               matchedNFTs.push({
                 nftTokenId: nft.NFTokenID,
                 issuer: nft.Issuer,
                 uri: uri,
                 cid: cid,
-                editionNumber: saleInfo.editionNumber || null,
-                purchaseDate: saleInfo.purchaseDate || null,
+                editionNumber: editionInfo.editionNumber || null,
+                purchaseDate: editionInfo.purchaseDate || null,
                 ...info,
               });
             }
