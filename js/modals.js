@@ -2681,10 +2681,121 @@ async processListNFT(nft, price) {
             order: 10;
           }
         }
+        /* "You Own This" Badge */
+        .own-badge-container {
+          position: absolute;
+          top: 16px;
+          left: 16px;
+          z-index: 10;
+        }
+        .own-badge {
+          color: #00ff88;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: underline;
+          cursor: pointer;
+          padding: 5px 12px;
+          border-radius: 8px;
+          background: rgba(0, 255, 136, 0.1);
+          border: 1px solid rgba(0, 255, 136, 0.25);
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          user-select: none;
+          white-space: nowrap;
+        }
+        .own-badge:hover {
+          background: rgba(0, 255, 136, 0.18);
+          border-color: rgba(0, 255, 136, 0.4);
+        }
+        .own-badge-dropdown {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          min-width: 200px;
+          max-width: 260px;
+          background: var(--bg-primary, #1a1a2e);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+          opacity: 0;
+          visibility: hidden;
+          transform: translateY(-4px);
+          transition: all 0.2s ease;
+          overflow: hidden;
+          z-index: 100;
+        }
+        .own-badge-dropdown.show {
+          opacity: 1;
+          visibility: visible;
+          transform: translateY(0);
+        }
+        .own-badge-dropdown-header {
+          padding: 10px 14px 8px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          color: var(--text-muted, rgba(255, 255, 255, 0.4));
+          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+        }
+        .own-badge-dropdown-list {
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .own-badge-copy-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 14px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .own-badge-copy-row:last-child {
+          border-bottom: none;
+        }
+        .own-copy-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary, #fff);
+        }
+        .own-copy-edition {
+          font-size: 12px;
+          color: var(--text-muted, rgba(255, 255, 255, 0.4));
+        }
+        @media (max-width: 600px) {
+          .own-badge-container {
+            top: 12px;
+            left: 12px;
+          }
+          .own-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+          }
+        }
       </style>
     `;
     this.show(html);
     this.bindReleaseModalEvents(release);
+    // "You own this" badge
+    if (AppState.user?.address) {
+      this.fetchOwnedNfts().then(allNfts => {
+        const ownedCopies = allNfts.filter(nft => nft.releaseId === release.id);
+        if (release.tracks && release.tracks.length > 0) {
+          const trackIds = release.tracks.map(t => t.id || t.trackId);
+          allNfts.forEach(nft => {
+            if (nft.trackId && trackIds.includes(nft.trackId)) {
+              if (!ownedCopies.find(c => c.nftTokenId === nft.nftTokenId)) {
+                ownedCopies.push(nft);
+              }
+            }
+          });
+        }
+        if (ownedCopies.length > 0) {
+          this.renderOwnBadge(ownedCopies);
+        }
+      });
+    }
   },
   
   getColorFromImage(url) {
