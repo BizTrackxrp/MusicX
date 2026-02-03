@@ -5,8 +5,82 @@
 
 const Modals = {
   activeModal: null,
+  _ownedNftsCache: null,
+  _ownedNftsCacheTime: 0,
   nowPlayingInterval: null,
   mintingInProgress: false,
+
+  async fetchOwnedNfts(forceRefresh = false) {
+    const walletAddress = AppState.user?.address;
+    if (!walletAddress) return [];
+
+    const now = Date.now();
+    if (!forceRefresh && this._ownedNftsCache && (now - this._ownedNftsCacheTime < 60000)) {
+      return this._ownedNftsCache;
+    }
+
+    try {
+      const resp = await fetch(`/api/user-nfts?address=${walletAddress}`);
+      const data = await resp.json();
+      if (data.nfts) {
+        this._ownedNftsCache = data.nfts;
+        this._ownedNftsCacheTime = now;
+        return data.nfts;
+      }
+    } catch (err) {
+      console.error('Failed to fetch owned NFTs:', err);
+    }
+    return [];
+  },
+
+  renderOwnBadge(ownedCopies) {
+    const modal = document.querySelector('.release-modal');
+    if (!modal) return;
+
+    const badgeEl = document.createElement('div');
+    badgeEl.className = 'own-badge-container';
+    badgeEl.innerHTML = `
+      <span class="own-badge" id="ownBadgeBtn">✓ You own this</span>
+      <div class="own-badge-dropdown" id="ownBadgeDropdown">
+        <div class="own-badge-dropdown-header">Your Copies</div>
+        <div class="own-badge-dropdown-list">
+          ${ownedCopies.map((nft, i) => {
+            const editionText = nft.editionNumber
+              ? `Edition #${nft.editionNumber}`
+              : '';
+            const totalText = nft.totalEditions
+              ? ` of ${nft.totalEditions}`
+              : '';
+            return `
+              <div class="own-badge-copy-row">
+                <span class="own-copy-label">Copy ${i + 1}</span>
+                ${editionText ? `<span class="own-copy-edition">${editionText}${totalText}</span>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    modal.style.position = 'relative';
+    modal.appendChild(badgeEl);
+
+    const btn = document.getElementById('ownBadgeBtn');
+    const dropdown = document.getElementById('ownBadgeDropdown');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('show');
+    });
+
+    const closeHandler = (e) => {
+      if (!badgeEl.contains(e.target)) {
+        dropdown.classList.remove('show');
+        document.removeEventListener('click', closeHandler);
+      }
+    };
+    document.addEventListener('click', closeHandler);
+  },
   
   genres: [
      { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
@@ -2685,6 +2759,25 @@ async processListNFT(nft, price) {
     `;
     this.show(html);
     this.bindReleaseModalEvents(release);
+    // "You own this" badge
+    if (AppState.user?.address) {
+      this.fetchOwnedNfts().then(allNfts => {
+        const ownedCopies = allNfts.filter(nft => nft.releaseId === release.id);
+        if (release.tracks && release.tracks.length > 0) {
+          const trackIds = release.tracks.map(t => t.id || t.trackId);
+          allNfts.forEach(nft => {
+            if (nft.trackId && trackIds.includes(nft.trackId)) {
+              if (!ownedCopies.find(c => c.nftTokenId === nft.nftTokenId)) {
+                ownedCopies.push(nft);
+              }
+            }
+          });
+        }
+        if (ownedCopies.length > 0) {
+          this.renderOwnBadge(ownedCopies);
+        }
+      });
+    }
   },
   
   getColorFromImage(url) {
