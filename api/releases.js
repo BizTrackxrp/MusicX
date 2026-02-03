@@ -6,7 +6,8 @@
  * NFTs mint on-demand at purchase time, not upfront.
  * 
  * Visibility rules:
- * - Public pages: show is_minted = true OR mint_fee_paid = true OR status = 'live'
+ * - Public pages: show is_minted = true OR mint_fee_paid = true OR r.status = 'live'
+ * - Public feeds (Stream/Marketplace): additionally require artist has >= 10 XRP in total sales
  * - Artist's own page: show ALL their releases (including drafts)
  */
 
@@ -112,7 +113,7 @@ async function getReleases(req, res, sql) {
         ORDER BY r.created_at DESC
       `;
     } else {
-      // Public view of artist - show live releases only
+      // Public view of artist - show live releases only (NO sales threshold here)
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -142,8 +143,10 @@ async function getReleases(req, res, sql) {
       `;
     }
   } else {
-    // Get all releases (Stream, Browse, Marketplace)
-    // Show minted OR live (mint fee paid) releases
+    // ============================================================
+    // PUBLIC FEED (Stream / Marketplace)
+    // Only show releases from artists with >= 10 XRP total sales
+    // ============================================================
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -166,7 +169,13 @@ async function getReleases(req, res, sql) {
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
-      WHERE r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live'
+      WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+        AND r.artist_address IN (
+          SELECT seller_address
+          FROM sales
+          GROUP BY seller_address
+          HAVING COALESCE(SUM(price), 0) >= 10
+        )
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
