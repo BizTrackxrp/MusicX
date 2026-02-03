@@ -101,74 +101,129 @@ const UI = {
   },
   
   /**
-   * Initialize search
+   * Initialize search (desktop + mobile)
    */
   initSearch() {
+    // === Desktop search ===
     const searchInput = document.getElementById('search-input');
     const searchClear = document.getElementById('search-clear');
     const searchResults = document.getElementById('search-results');
     
-    if (!searchInput) return;
+    if (searchInput) {
+      let searchTimeout;
+      
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        searchClear?.classList.toggle('hidden', !query);
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+          searchResults?.classList.add('hidden');
+          return;
+        }
+        
+        searchTimeout = setTimeout(async () => {
+          try {
+            const results = await API.search(query);
+            this.showSearchResults(results, query);
+          } catch (error) {
+            console.error('Search failed:', error);
+          }
+        }, 300);
+      });
+      
+      searchInput.addEventListener('focus', () => {
+        if (searchInput.value.trim().length >= 2) {
+          searchResults?.classList.remove('hidden');
+        }
+      });
+      
+      searchClear?.addEventListener('click', () => {
+        searchInput.value = '';
+        searchClear.classList.add('hidden');
+        searchResults?.classList.add('hidden');
+      });
+      
+      document.addEventListener('click', (e) => {
+        const container = document.querySelector('.search-container');
+        if (container && !container.contains(e.target)) {
+          searchResults?.classList.add('hidden');
+        }
+      });
+      
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          searchResults?.classList.add('hidden');
+          searchInput.blur();
+        }
+      });
+    }
     
-    let searchTimeout;
+    // === Mobile search ===
+    const mobileSearchBtn = document.getElementById('mobile-search-btn');
+    const mobileSearchContainer = document.getElementById('mobile-search-container');
+    const mobileSearchInput = document.getElementById('mobile-search-input');
+    const mobileSearchClose = document.getElementById('mobile-search-close');
+    const mobileSearchResults = document.getElementById('mobile-search-results');
     
-    searchInput.addEventListener('input', (e) => {
+    if (!mobileSearchBtn || !mobileSearchContainer) return;
+    
+    let mobileSearchTimeout;
+    
+    // Open mobile search
+    mobileSearchBtn.addEventListener('click', () => {
+      mobileSearchContainer.classList.add('active');
+      mobileSearchInput.focus();
+    });
+    
+    // Close mobile search
+    const closeMobileSearch = () => {
+      mobileSearchContainer.classList.remove('active');
+      mobileSearchInput.value = '';
+      mobileSearchResults?.classList.add('hidden');
+    };
+    
+    mobileSearchClose.addEventListener('click', closeMobileSearch);
+    
+    // Mobile search input
+    mobileSearchInput.addEventListener('input', (e) => {
       const query = e.target.value.trim();
-      
-      // Show/hide clear button
-      searchClear?.classList.toggle('hidden', !query);
-      
-      // Clear previous timeout
-      clearTimeout(searchTimeout);
+      clearTimeout(mobileSearchTimeout);
       
       if (query.length < 2) {
-        searchResults?.classList.add('hidden');
+        mobileSearchResults?.classList.add('hidden');
         return;
       }
       
-      // Debounced search
-      searchTimeout = setTimeout(async () => {
+      mobileSearchTimeout = setTimeout(async () => {
         try {
           const results = await API.search(query);
-          this.showSearchResults(results, query);
+          this.showMobileSearchResults(results, query);
         } catch (error) {
-          console.error('Search failed:', error);
+          console.error('Mobile search failed:', error);
         }
       }, 300);
     });
     
-    searchInput.addEventListener('focus', () => {
-      if (searchInput.value.trim().length >= 2) {
-        searchResults?.classList.remove('hidden');
-      }
-    });
-    
-    // Clear search
-    searchClear?.addEventListener('click', () => {
-      searchInput.value = '';
-      searchClear.classList.add('hidden');
-      searchResults?.classList.add('hidden');
-    });
-    
-    // Close search results on outside click
-    document.addEventListener('click', (e) => {
-      const container = document.querySelector('.search-container');
-      if (container && !container.contains(e.target)) {
-        searchResults?.classList.add('hidden');
-      }
-    });
-    
-    // Keyboard navigation
-    searchInput.addEventListener('keydown', (e) => {
+    mobileSearchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        searchResults?.classList.add('hidden');
-        searchInput.blur();
+        closeMobileSearch();
+      }
+    });
+    
+    // Close mobile results on outside click
+    document.addEventListener('click', (e) => {
+      if (mobileSearchContainer.classList.contains('active') &&
+          !mobileSearchContainer.contains(e.target) &&
+          e.target !== mobileSearchBtn &&
+          !mobileSearchBtn.contains(e.target)) {
+        closeMobileSearch();
       }
     });
   },
   
   /**
-   * Show search results with categories
+   * Show search results with categories (desktop)
    */
   showSearchResults(results, query) {
     const container = document.getElementById('search-results');
@@ -310,6 +365,137 @@ const UI = {
             if (data.release) {
               Modals.showRelease(data.release);
             }
+          } catch (error) {
+            console.error('Failed to load release:', error);
+          }
+        }
+      });
+    });
+    
+    container.classList.remove('hidden');
+  },
+  
+  /**
+   * Show mobile search results (reuses same markup, targets mobile container)
+   */
+  showMobileSearchResults(results, query) {
+    const container = document.getElementById('mobile-search-results');
+    if (!container) return;
+    
+    const { artists = [], tracks = [], albums = [], singles = [] } = results;
+    const hasResults = artists.length > 0 || tracks.length > 0 || albums.length > 0 || singles.length > 0;
+    
+    if (!hasResults) {
+      container.innerHTML = `
+        <div class="search-empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <p>No results for "${query}"</p>
+        </div>
+      `;
+      container.classList.remove('hidden');
+      return;
+    }
+    
+    let html = '';
+    
+    if (artists.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Artists</div>
+          ${artists.map(artist => `
+            <div class="search-result-item" data-type="artist" data-address="${artist.address}">
+              <div class="search-result-cover artist-avatar">
+                ${artist.avatar 
+                  ? `<img src="${IpfsHelper.toProxyUrl(artist.avatar)}" alt="${artist.name}">`
+                  : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>`
+                }
+              </div>
+              <div class="search-result-info">
+                <div class="search-result-title">${artist.name || Helpers.truncateAddress(artist.address)}</div>
+                <div class="search-result-subtitle">Artist • ${artist.releaseCount} release${artist.releaseCount !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    if (albums.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Albums</div>
+          ${albums.map(album => `
+            <div class="search-result-item" data-type="album" data-id="${album.id}">
+              <img class="search-result-cover" src="${IpfsHelper.toProxyUrl(album.coverUrl) || '/placeholder.png'}" alt="${album.title}">
+              <div class="search-result-info">
+                <div class="search-result-title">${album.title}</div>
+                <div class="search-result-subtitle">${album.artistName || Helpers.truncateAddress(album.artistAddress)} • ${album.trackCount} tracks</div>
+              </div>
+              <div class="search-result-price">${album.price} XRP</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    const allSongs = [...singles.map(s => ({ ...s, type: 'single' })), ...tracks.map(t => ({ ...t, type: 'track' }))];
+    const seenSongs = new Set();
+    const uniqueSongs = allSongs.filter(song => {
+      const key = `${song.title}-${song.artistAddress}`;
+      if (seenSongs.has(key)) return false;
+      seenSongs.add(key);
+      return true;
+    });
+    
+    if (uniqueSongs.length > 0) {
+      html += `
+        <div class="search-section">
+          <div class="search-section-title">Songs</div>
+          ${uniqueSongs.map(song => `
+            <div class="search-result-item" data-type="${song.type}" data-id="${song.id}" ${song.releaseId ? `data-release-id="${song.releaseId}"` : ''}>
+              <img class="search-result-cover" src="${IpfsHelper.toProxyUrl(song.coverUrl) || '/placeholder.png'}" alt="${song.title}">
+              <div class="search-result-info">
+                <div class="search-result-title">${song.title}</div>
+                <div class="search-result-subtitle">${song.artistName || Helpers.truncateAddress(song.artistAddress)}</div>
+              </div>
+              <div class="search-result-price">${song.price} XRP</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    container.innerHTML = html;
+    
+    // Bind clicks — close search + navigate
+    container.querySelectorAll('.search-result-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const type = item.dataset.type;
+        
+        // Close mobile search
+        document.getElementById('mobile-search-container')?.classList.remove('active');
+        document.getElementById('mobile-search-input').value = '';
+        container.classList.add('hidden');
+        
+        if (type === 'artist') {
+          Router.navigate('artist', { address: item.dataset.address });
+        } else if (type === 'album' || type === 'single') {
+          try {
+            const data = await API.getRelease(item.dataset.id);
+            if (data.release) Modals.showRelease(data.release);
+          } catch (error) {
+            console.error('Failed to load release:', error);
+          }
+        } else if (type === 'track') {
+          try {
+            const data = await API.getRelease(item.dataset.releaseId);
+            if (data.release) Modals.showRelease(data.release);
           } catch (error) {
             console.error('Failed to load release:', error);
           }
