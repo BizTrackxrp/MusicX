@@ -5,8 +5,82 @@
 
 const Modals = {
   activeModal: null,
+  _ownedNftsCache: null,
+  _ownedNftsCacheTime: 0,
   nowPlayingInterval: null,
   mintingInProgress: false,
+
+  async fetchOwnedNfts(forceRefresh = false) {
+    const walletAddress = AppState.user?.address;
+    if (!walletAddress) return [];
+
+    const now = Date.now();
+    if (!forceRefresh && this._ownedNftsCache && (now - this._ownedNftsCacheTime < 60000)) {
+      return this._ownedNftsCache;
+    }
+
+    try {
+      const resp = await fetch(`/api/user-nfts?address=${walletAddress}`);
+      const data = await resp.json();
+      if (data.nfts) {
+        this._ownedNftsCache = data.nfts;
+        this._ownedNftsCacheTime = now;
+        return data.nfts;
+      }
+    } catch (err) {
+      console.error('Failed to fetch owned NFTs:', err);
+    }
+    return [];
+  },
+
+  renderOwnBadge(ownedCopies) {
+    const modal = document.querySelector('.release-modal');
+    if (!modal) return;
+
+    const badgeEl = document.createElement('div');
+    badgeEl.className = 'own-badge-container';
+    badgeEl.innerHTML = `
+      <span class="own-badge" id="ownBadgeBtn">✓ You own this</span>
+      <div class="own-badge-dropdown" id="ownBadgeDropdown">
+        <div class="own-badge-dropdown-header">Your Copies</div>
+        <div class="own-badge-dropdown-list">
+          ${ownedCopies.map((nft, i) => {
+            const editionText = nft.editionNumber
+              ? `Edition #${nft.editionNumber}`
+              : '';
+            const totalText = nft.totalEditions
+              ? ` of ${nft.totalEditions}`
+              : '';
+            return `
+              <div class="own-badge-copy-row">
+                <span class="own-copy-label">Copy ${i + 1}</span>
+                ${editionText ? `<span class="own-copy-edition">${editionText}${totalText}</span>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    modal.style.position = 'relative';
+    modal.appendChild(badgeEl);
+
+    const btn = document.getElementById('ownBadgeBtn');
+    const dropdown = document.getElementById('ownBadgeDropdown');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('show');
+    });
+
+    const closeHandler = (e) => {
+      if (!badgeEl.contains(e.target)) {
+        dropdown.classList.remove('show');
+        document.removeEventListener('click', closeHandler);
+      }
+    };
+    document.addEventListener('click', closeHandler);
+  },
   
   genres: [
      { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
@@ -2297,13 +2371,14 @@ async processListNFT(nft, price) {
   overflow-y: auto;
 }
        .release-modal {
-          max-width: 800px;
-          width: 100%;
-          max-height: calc(100vh - 80px);
-          overflow-y: auto;
-          border-radius: var(--radius-xl);
-          padding: 0;
-        }
+  max-width: 800px;
+  width: 100%;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  padding: 0;
+  position: relative;
+}
       .release-close-x {
           position: absolute;
           top: 16px;
@@ -2681,10 +2756,124 @@ async processListNFT(nft, price) {
             order: 10;
           }
         }
+        /* === "You Own This" Badge === */
+.own-badge-container {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+}
+.own-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(34, 197, 94, 0.9);
+  backdrop-filter: blur(8px);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 20px;
+  cursor: pointer;
+  border: none;
+  transition: all 150ms;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.own-badge:hover {
+  background: rgba(34, 197, 94, 1);
+  transform: scale(1.05);
+}
+.own-badge svg {
+  width: 14px;
+  height: 14px;
+}
+.own-badge-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 20;
+}
+.own-badge-dropdown.show {
+  display: block;
+}
+.own-badge-dropdown-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+}
+.own-badge-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+.own-badge-dropdown-item:last-child {
+  border-bottom: none;
+}
+.own-badge-dropdown-item .edition-num {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.own-badge-dropdown-item .track-name {
+  flex: 1;
+  margin-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .own-badge-container {
+    top: 12px;
+    left: 12px;
+  }
+  .own-badge {
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+  .own-badge-dropdown {
+    min-width: 180px;
+  }
+}
       </style>
     `;
     this.show(html);
     this.bindReleaseModalEvents(release);
+    // "You own this" badge
+    if (AppState.user?.address) {
+      this.fetchOwnedNfts().then(allNfts => {
+        const ownedCopies = allNfts.filter(nft => nft.releaseId === release.id);
+        if (release.tracks && release.tracks.length > 0) {
+          const trackIds = release.tracks.map(t => t.id || t.trackId);
+          allNfts.forEach(nft => {
+            if (nft.trackId && trackIds.includes(nft.trackId)) {
+              if (!ownedCopies.find(c => c.nftTokenId === nft.nftTokenId)) {
+                ownedCopies.push(nft);
+              }
+            }
+          });
+        }
+        if (ownedCopies.length > 0) {
+          this.renderOwnBadge(ownedCopies);
+        }
+      });
+    }
   },
   
   getColorFromImage(url) {
