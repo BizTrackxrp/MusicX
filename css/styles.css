@@ -2458,7 +2458,7 @@ button.release-close-x:hover {
   background: rgba(239, 68, 68, 0.1);
 }
 /* ============================================
-   LIKE BUTTON STYLES - Add to your styles.css
+   LIKE BUTTON STYLES
    ============================================ */
 
 /* Player bar like button - red when liked */
@@ -2485,4 +2485,92 @@ button.release-close-x:hover {
 /* Track row like button - red when liked */
 .track-action-btn.liked {
   color: #ef4444 !important;
+}
+
+/* ============================================
+   Mobile Search
+   ============================================ */
+
+/* Search toggle button — hidden on desktop, shown on mobile */
+.mobile-search-btn {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .mobile-search-btn {
+    display: flex;
+  }
+}
+
+/* Mobile search bar — hidden by default */
+.mobile-search-container {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  background: var(--bg-primary);
+  z-index: 60;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mobile-search-container.active {
+  display: flex;
+}
+
+.mobile-search-container .search-icon {
+  position: static;
+  transform: none;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.mobile-search-container .search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 8px;
+  font-size: 16px; /* prevents iOS zoom */
+}
+
+.mobile-search-container .search-input:focus {
+  border: none;
+  outline: none;
+}
+
+.mobile-search-close-btn {
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-search-close-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Mobile search results — full width under header */
+.mobile-search-container .search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  max-height: calc(100vh - var(--header-height) - var(--player-height-mobile) - 16px);
+}
+
+/* Light theme support for mobile search */
+.light .mobile-search-container {
+  background: rgba(255, 255, 255, 0.98);
 }
