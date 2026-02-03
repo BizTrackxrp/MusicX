@@ -8,11 +8,18 @@
  * UPDATED: Fixed banner image scaling on desktop vs mobile
  * UPDATED: Fixed bio text overflow for long bios
  * UPDATED: Fixed mobile player positioning
+ * UPDATED: Collection overhaul — dedup, filters, multi-copy popups, send NFT
  */
 
 const ProfilePage = {
   releases: [],
   activeTab: 'posted',
+  
+  // Collection state (for filter switching)
+  _collectionGrouped: [],
+  _collectionArtists: [],
+  _collectionRawNfts: [],
+  _activeCollectionFilter: 'all',
   
   // Genre definitions (must match modals.js)
   genres: [
@@ -657,12 +664,393 @@ const ProfilePage = {
           font-size: 12px;
           font-weight: 600;
         }
+        
+        /* ============================================
+           Collection Filter Bar (NEW)
+           ============================================ */
+        .collection-filter-bar {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 20px;
+          padding: 4px;
+          background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+          border-radius: var(--radius-lg, 12px);
+          width: fit-content;
+        }
+        
+        .collection-filter-btn {
+          padding: 8px 18px;
+          border: none;
+          border-radius: var(--radius, 8px);
+          background: transparent;
+          color: var(--text-muted, rgba(255, 255, 255, 0.5));
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .collection-filter-btn:hover {
+          color: var(--text-secondary, rgba(255, 255, 255, 0.8));
+          background: rgba(255, 255, 255, 0.04);
+        }
+        
+        .collection-filter-btn.active {
+          color: var(--text-primary, #fff);
+          background: rgba(255, 255, 255, 0.1);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Multi-copy badge on card cover (NEW) */
+        .collection-multi-badge {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          right: 8px;
+          padding: 6px 10px;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border-radius: 8px;
+          color: #00ff88;
+          font-size: 11px;
+          font-weight: 600;
+          text-align: center;
+          cursor: pointer;
+          transition: background 0.2s;
+          z-index: 2;
+        }
+        
+        .collection-multi-badge:hover {
+          background: rgba(0, 0, 0, 0.88);
+        }
+        
+        /* Artist count badge on artist cards (NEW) */
+        .collection-artist-count {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          padding: 4px 10px;
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 6px;
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 11px;
+          font-weight: 600;
+        }
+        
+        .collection-artist-card {
+          cursor: pointer;
+        }
+        
+        /* ⋯ button on single-copy cards (NEW) */
+        .nft-actions-btn {
+          padding: 4px 10px !important;
+          font-size: 16px !important;
+          min-width: unset !important;
+          letter-spacing: 2px;
+        }
+        
+        /* ============================================
+           Copies & Artist Songs Popup (NEW)
+           ============================================ */
+        .copies-popup-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          animation: copiesFadeIn 0.15s ease;
+        }
+        
+        @keyframes copiesFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        
+        .copies-popup {
+          background: var(--bg-primary, #16162a);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: var(--radius-xl, 16px);
+          width: 90%;
+          max-width: 400px;
+          max-height: 80vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          animation: copiesSlideUp 0.2s ease;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        @keyframes copiesSlideUp {
+          from { transform: translateY(12px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .copies-popup-header {
+          padding: 18px 20px 14px;
+          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+          position: relative;
+        }
+        
+        .copies-popup-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--text-primary, #fff);
+          padding-right: 30px;
+        }
+        
+        .copies-popup-subtitle {
+          font-size: 13px;
+          color: var(--text-muted, rgba(255, 255, 255, 0.4));
+          margin-top: 2px;
+        }
+        
+        .copies-popup-close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          width: 28px;
+          height: 28px;
+          border: none;
+          border-radius: 50%;
+          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+          color: var(--text-muted, rgba(255, 255, 255, 0.5));
+          font-size: 14px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+        
+        .copies-popup-close:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: var(--text-primary, #fff);
+        }
+        
+        .copies-popup-list {
+          overflow-y: auto;
+          flex: 1;
+        }
+        
+        .copies-popup-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+          transition: background 0.15s;
+        }
+        
+        .copies-popup-row:hover {
+          background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .copies-popup-row:last-child {
+          border-bottom: none;
+        }
+        
+        .copies-popup-row-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        
+        .copies-popup-row-label {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary, #fff);
+        }
+        
+        .copies-popup-row-edition {
+          font-size: 12px;
+          color: var(--text-muted, rgba(255, 255, 255, 0.35));
+        }
+        
+        .copies-popup-row-actions {
+          width: 32px;
+          height: 32px;
+          border: none;
+          border-radius: 8px;
+          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+          color: var(--text-muted, rgba(255, 255, 255, 0.6));
+          font-size: 16px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s;
+        }
+        
+        .copies-popup-row-actions:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: var(--text-primary, #fff);
+        }
+        
+        /* Artist songs playlist rows (NEW) */
+        .artist-song-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+          transition: background 0.15s;
+          cursor: pointer;
+        }
+        
+        .artist-song-row:hover {
+          background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .artist-song-row:last-child {
+          border-bottom: none;
+        }
+        
+        .artist-song-row-cover {
+          width: 40px;
+          height: 40px;
+          border-radius: 6px;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        
+        .artist-song-row-info {
+          flex: 1;
+          min-width: 0;
+        }
+        
+        .artist-song-row-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary, #fff);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
+        .artist-song-row-copies {
+          font-size: 12px;
+          color: var(--text-muted, rgba(255, 255, 255, 0.35));
+          margin-top: 1px;
+        }
+        
+        .artist-song-row-expand {
+          flex-shrink: 0;
+          padding: 6px 12px;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-muted, rgba(255, 255, 255, 0.6));
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.15s;
+          white-space: nowrap;
+        }
+        
+        .artist-song-row-expand:hover {
+          border-color: rgba(255, 255, 255, 0.2);
+          color: var(--text-primary, #fff);
+        }
+        
+        /* ============================================
+           Actions Dropdown (⋯ → sell / send) (NEW)
+           ============================================ */
+        .collection-actions-dropdown {
+          position: fixed;
+          min-width: 200px;
+          background: var(--bg-primary, #1a1a2e);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          border-radius: 12px;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+          overflow: hidden;
+          z-index: 10001;
+          animation: copiesFadeIn 0.12s ease;
+        }
+        
+        .collection-actions-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 12px 16px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary, rgba(255, 255, 255, 0.85));
+          font-size: 14px;
+          cursor: pointer;
+          transition: background 0.15s;
+          text-align: left;
+        }
+        
+        .collection-actions-item:hover {
+          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+        }
+        
+        .collection-actions-item:first-child {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        
+        .collection-actions-item svg {
+          flex-shrink: 0;
+          opacity: 0.6;
+        }
+        
+        /* ============================================
+           Send NFT Popup (NEW)
+           ============================================ */
+        .send-label {
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-muted, rgba(255, 255, 255, 0.6));
+          margin-bottom: 8px;
+        }
+        
+        .send-input {
+          width: 100%;
+          padding: 12px 14px;
+          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: var(--radius, 10px);
+          color: var(--text-primary, #fff);
+          font-size: 15px;
+          outline: none;
+          transition: border-color 0.2s;
+          box-sizing: border-box;
+        }
+        
+        .send-input:focus {
+          border-color: var(--accent, rgba(255, 255, 255, 0.25));
+        }
+        
+        .send-input::placeholder {
+          color: var(--text-muted, rgba(255, 255, 255, 0.25));
+        }
+        
+        .send-warning {
+          margin-top: 12px;
+          padding: 10px 12px;
+          background: rgba(255, 200, 0, 0.06);
+          border: 1px solid rgba(255, 200, 0, 0.15);
+          border-radius: 8px;
+          color: rgba(255, 200, 0, 0.8);
+          font-size: 12px;
+          line-height: 1.4;
+        }
       </style>
     `;
     
     UI.renderPage(html);
     this.bindEvents();
   },
+  
+  // ============================================
+  // POSTED TAB (unchanged)
+  // ============================================
   
   renderPostedTab() {
     if (this.releases.length === 0) {
@@ -681,7 +1069,6 @@ const ProfilePage = {
     }
     
     // Count unlisted releases - now uses isForSale() helper
-    // A release is "unlisted" if it's NOT for sale AND has editions available
     const unlistedCount = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
     
     return `
@@ -739,6 +1126,10 @@ const ProfilePage = {
       </div>
     `;
   },
+  
+  // ============================================
+  // COLLECTED TAB (OVERHAULED)
+  // ============================================
   
   renderCollectedTab() {
     // Show loading initially
@@ -805,37 +1196,50 @@ const ProfilePage = {
         return;
       }
       
+      // Process and deduplicate
+      const grouped = this.processCollectionData(data.nfts);
+      const artists = this.getUniqueArtists(grouped);
+      
+      // Store for filter switching
+      this._collectionGrouped = grouped;
+      this._collectionArtists = artists;
+      this._collectionRawNfts = data.nfts;
+      this._activeCollectionFilter = 'all';
+      
       container.innerHTML = `
-        <div class="collected-grid">
-          ${data.nfts.map(nft => this.renderCollectedNFT(nft)).join('')}
+        <div class="collection-filter-bar">
+          <button class="collection-filter-btn active" data-filter="all">All</button>
+          <button class="collection-filter-btn" data-filter="by-artist">By Artist</button>
+          <button class="collection-filter-btn" data-filter="by-songs">By Songs</button>
         </div>
+        <div class="collected-grid" id="collectionGrid"></div>
       `;
       
-      // Bind play buttons
-      container.querySelectorAll('.nft-play-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const nftData = JSON.parse(btn.dataset.nft);
-          if (nftData.audioUrl) {
-            Player.play({
-              id: nftData.trackId || nftData.releaseId,
-              title: nftData.trackTitle || nftData.releaseTitle,
-              artist: nftData.artistName,
-              coverUrl: this.getImageUrl(nftData.coverUrl),
-              audioUrl: nftData.audioUrl,
-            });
+      // Bind filter buttons
+      container.querySelectorAll('.collection-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          container.querySelectorAll('.collection-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this._activeCollectionFilter = btn.dataset.filter;
+          const grid = document.getElementById('collectionGrid');
+          if (!grid) return;
+          
+          switch (btn.dataset.filter) {
+            case 'all':
+              this.renderAllCards(this._collectionGrouped, grid);
+              break;
+            case 'by-artist':
+              this.renderArtistCards(this._collectionArtists, grid);
+              break;
+            case 'by-songs':
+              this.renderSongCards(this._collectionGrouped, grid);
+              break;
           }
         });
       });
       
-      // Bind list for sale buttons
-      container.querySelectorAll('.nft-list-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const nftData = JSON.parse(btn.dataset.nft);
-          Modals.showListNFTForSale(nftData);
-        });
-      });
+      // Initial render
+      this.renderAllCards(grouped, document.getElementById('collectionGrid'));
       
     } catch (error) {
       console.error('Failed to load NFTs:', error);
@@ -853,6 +1257,539 @@ const ProfilePage = {
       `;
     }
   },
+  
+  // ============================================
+  // COLLECTION DATA PROCESSING (NEW)
+  // ============================================
+  
+  processCollectionData(nfts) {
+    const grouped = {};
+    
+    nfts.forEach(nft => {
+      // Group by releaseId (same song = same card)
+      // Fall back to trackId, then nftTokenId for ungroupable items
+      const groupKey = nft.releaseId || nft.trackId || nft.nftTokenId;
+      
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          releaseId: nft.releaseId,
+          trackId: nft.trackId,
+          title: nft.trackTitle || nft.releaseTitle || 'Unknown Track',
+          artist: nft.artistName || 'Unknown Artist',
+          artistAddress: nft.artistAddress || '',
+          coverUrl: nft.coverUrl || '',
+          audioUrl: nft.audioUrl || '',
+          duration: nft.duration || null,
+          price: nft.price || null,
+          totalEditions: nft.totalEditions || null,
+          releaseType: nft.releaseType || 'single',
+          copies: []
+        };
+      }
+      
+      grouped[groupKey].copies.push({
+        nftTokenId: nft.nftTokenId,
+        editionNumber: nft.editionNumber || null,
+        purchaseDate: nft.purchaseDate || null,
+        issuer: nft.issuer || null,
+        // Keep full nft data for actions (list for sale, send)
+        _raw: nft
+      });
+    });
+    
+    return Object.values(grouped);
+  },
+  
+  getUniqueArtists(groupedCollection) {
+    const artistMap = {};
+    
+    groupedCollection.forEach(item => {
+      const key = item.artistAddress || item.artist;
+      if (!artistMap[key]) {
+        artistMap[key] = {
+          name: item.artist,
+          address: item.artistAddress,
+          coverUrl: item.coverUrl,
+          songCount: 0,
+          songs: []
+        };
+      }
+      artistMap[key].songCount++;
+      artistMap[key].songs.push(item);
+    });
+    
+    return Object.values(artistMap);
+  },
+  
+  // ============================================
+  // COLLECTION CARD RENDERERS (NEW)
+  // ============================================
+  
+  renderAllCards(grouped, grid) {
+    if (!grid) return;
+    
+    grid.innerHTML = grouped.map((item, idx) => {
+      const coverUrl = this.getImageUrl(item.coverUrl);
+      const hasMultiple = item.copies.length > 1;
+      const isOneOfOne = item.totalEditions === 1;
+      
+      // Edition display for single copy
+      let editionText = '';
+      let editionClass = '';
+      let editionIcon = '';
+      if (!hasMultiple && item.copies[0]) {
+        const copy = item.copies[0];
+        if (isOneOfOne) {
+          editionText = '1/1';
+          editionClass = 'edition-one-of-one';
+          editionIcon = '💎';
+        } else if (copy.editionNumber === 1) {
+          editionText = `#1 of ${item.totalEditions}`;
+          editionClass = 'edition-first';
+          editionIcon = '🥇';
+        } else if (copy.editionNumber && copy.editionNumber <= 10) {
+          editionText = `#${copy.editionNumber} of ${item.totalEditions}`;
+          editionClass = 'edition-early';
+          editionIcon = '⭐';
+        } else if (copy.editionNumber) {
+          editionText = `#${copy.editionNumber} of ${item.totalEditions}`;
+        }
+      }
+      
+      return `
+        <div class="collected-nft-card" data-group-idx="${idx}">
+          <div class="collected-nft-cover">
+            ${item.coverUrl
+              ? `<img src="${coverUrl}" alt="${item.title}" onerror="this.src='/placeholder.png'">`
+              : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+            }
+            <div class="collected-nft-overlay">
+              <button class="nft-play-btn" data-group-idx="${idx}">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </button>
+            </div>
+            <div class="collected-nft-badge">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              Owned
+            </div>
+            ${hasMultiple ? `
+              <div class="collection-multi-badge" data-group-idx="${idx}">
+                Multiple copies (${item.copies.length})
+              </div>
+            ` : editionText ? `
+              <div class="edition-badge ${editionClass}">${editionIcon} ${editionText}</div>
+            ` : ''}
+          </div>
+          <div class="collected-nft-info">
+            <div class="collected-nft-title">${item.title}</div>
+            <div class="collected-nft-artist">${item.artist}</div>
+            <div class="collected-nft-actions">
+              ${hasMultiple ? `
+                <button class="btn btn-sm btn-secondary collection-multi-btn" data-group-idx="${idx}">
+                  ${item.copies.length} copies ▾
+                </button>
+              ` : `
+                <button class="btn btn-sm btn-secondary nft-actions-btn" data-group-idx="${idx}" data-copy-idx="0">
+                  ⋯
+                </button>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    this.bindCollectionCardEvents(grouped, grid);
+  },
+  
+  renderSongCards(grouped, grid) {
+    const sorted = [...grouped].sort((a, b) => a.title.localeCompare(b.title));
+    this.renderAllCards(sorted, grid);
+  },
+  
+  renderArtistCards(artists, grid) {
+    if (!grid) return;
+    
+    grid.innerHTML = artists.map((artist, idx) => {
+      const coverUrl = this.getImageUrl(artist.coverUrl);
+      return `
+        <div class="collected-nft-card collection-artist-card" data-artist-idx="${idx}">
+          <div class="collected-nft-cover">
+            ${artist.coverUrl
+              ? `<img src="${coverUrl}" alt="${artist.name}" onerror="this.src='/placeholder.png'">`
+              : `<div class="cover-placeholder" style="font-size:40px;">🎤</div>`
+            }
+            <div class="collection-artist-count">
+              ${artist.songCount} song${artist.songCount > 1 ? 's' : ''}
+            </div>
+          </div>
+          <div class="collected-nft-info">
+            <div class="collected-nft-title">${artist.name}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Click artist → show their songs popup
+    grid.querySelectorAll('.collection-artist-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const idx = parseInt(card.dataset.artistIdx);
+        const artist = artists[idx];
+        if (artist) this.showArtistSongsPopup(artist);
+      });
+    });
+  },
+  
+  bindCollectionCardEvents(grouped, grid) {
+    // Play buttons
+    grid.querySelectorAll('.nft-play-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.groupIdx);
+        const item = grouped[idx];
+        if (item && item.audioUrl) {
+          Player.play({
+            id: item.trackId || item.releaseId,
+            title: item.title,
+            artist: item.artist,
+            coverUrl: this.getImageUrl(item.coverUrl),
+            audioUrl: item.audioUrl,
+          });
+        }
+      });
+    });
+    
+    // Multi-copy badge click → copies popup
+    grid.querySelectorAll('.collection-multi-badge').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(badge.dataset.groupIdx);
+        const item = grouped[idx];
+        if (item) this.showCopiesPopup(item);
+      });
+    });
+    
+    // Multi-copy button below card → copies popup
+    grid.querySelectorAll('.collection-multi-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.groupIdx);
+        const item = grouped[idx];
+        if (item) this.showCopiesPopup(item);
+      });
+    });
+    
+    // Single-copy ⋯ button → actions dropdown
+    grid.querySelectorAll('.nft-actions-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const groupIdx = parseInt(btn.dataset.groupIdx);
+        const copyIdx = parseInt(btn.dataset.copyIdx);
+        const item = grouped[groupIdx];
+        if (item && item.copies[copyIdx]) {
+          this.showNftActionsDropdown(btn, item, item.copies[copyIdx]);
+        }
+      });
+    });
+  },
+  
+  // ============================================
+  // COLLECTION POPUPS (NEW)
+  // ============================================
+  
+  showCopiesPopup(item) {
+    // Remove existing
+    document.querySelector('.copies-popup-overlay')?.remove();
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'copies-popup-overlay';
+    overlay.innerHTML = `
+      <div class="copies-popup">
+        <div class="copies-popup-header">
+          <div class="copies-popup-title">${item.title}</div>
+          <div class="copies-popup-subtitle">${item.artist} — ${item.copies.length} copies</div>
+          <button class="copies-popup-close">✕</button>
+        </div>
+        <div class="copies-popup-list">
+          ${item.copies.map((copy, i) => `
+            <div class="copies-popup-row">
+              <div class="copies-popup-row-info">
+                <span class="copies-popup-row-label">Copy ${i + 1}</span>
+                <span class="copies-popup-row-edition">
+                  ${copy.editionNumber ? `Edition #${copy.editionNumber}` : ''}
+                  ${item.totalEditions ? ` of ${item.totalEditions}` : ''}
+                </span>
+              </div>
+              <button class="copies-popup-row-actions" data-copy-idx="${i}">⋯</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    
+    // Action buttons per copy
+    overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const copyIdx = parseInt(btn.dataset.copyIdx);
+        this.showNftActionsDropdown(btn, item, item.copies[copyIdx]);
+      });
+    });
+  },
+  
+  showArtistSongsPopup(artist) {
+    document.querySelector('.copies-popup-overlay')?.remove();
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'copies-popup-overlay';
+    overlay.innerHTML = `
+      <div class="copies-popup">
+        <div class="copies-popup-header">
+          <div class="copies-popup-title">${artist.name}</div>
+          <div class="copies-popup-subtitle">${artist.songCount} song${artist.songCount > 1 ? 's' : ''} in your collection</div>
+          <button class="copies-popup-close">✕</button>
+        </div>
+        <div class="copies-popup-list">
+          ${artist.songs.map((song, idx) => {
+            const coverUrl = this.getImageUrl(song.coverUrl);
+            return `
+              <div class="artist-song-row" data-song-idx="${idx}">
+                <img class="artist-song-row-cover" src="${coverUrl}" alt="" 
+                     onerror="this.src='/placeholder.png'" />
+                <div class="artist-song-row-info">
+                  <div class="artist-song-row-title">${song.title}</div>
+                  <div class="artist-song-row-copies">
+                    ${song.copies.length > 1
+                      ? `${song.copies.length} copies`
+                      : song.copies[0]?.editionNumber
+                        ? `Edition #${song.copies[0].editionNumber}`
+                        : ''
+                    }
+                  </div>
+                </div>
+                ${song.copies.length > 1 ? `
+                  <button class="artist-song-row-expand" data-song-idx="${idx}">
+                    ${song.copies.length} copies ▾
+                  </button>
+                ` : `
+                  <button class="copies-popup-row-actions" data-song-idx="${idx}" data-copy-idx="0">⋯</button>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    
+    // Expand multi-copy songs → copies popup
+    overlay.querySelectorAll('.artist-song-row-expand').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const songIdx = parseInt(btn.dataset.songIdx);
+        const song = artist.songs[songIdx];
+        if (song) {
+          overlay.remove();
+          this.showCopiesPopup(song);
+        }
+      });
+    });
+    
+    // Single-copy actions
+    overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const songIdx = parseInt(btn.dataset.songIdx);
+        const copyIdx = parseInt(btn.dataset.copyIdx);
+        const song = artist.songs[songIdx];
+        if (song && song.copies[copyIdx]) {
+          this.showNftActionsDropdown(btn, song, song.copies[copyIdx]);
+        }
+      });
+    });
+    
+    // Play on row click (not on buttons)
+    overlay.querySelectorAll('.artist-song-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const songIdx = parseInt(row.dataset.songIdx);
+        const song = artist.songs[songIdx];
+        if (song && song.audioUrl) {
+          Player.play({
+            id: song.trackId || song.releaseId,
+            title: song.title,
+            artist: song.artist,
+            coverUrl: this.getImageUrl(song.coverUrl),
+            audioUrl: song.audioUrl,
+          });
+        }
+      });
+    });
+  },
+  
+  // ============================================
+  // ACTIONS DROPDOWN & SEND NFT (NEW)
+  // ============================================
+  
+  showNftActionsDropdown(anchorEl, item, copy) {
+    // Remove existing
+    document.querySelector('.collection-actions-dropdown')?.remove();
+    
+    const dropdown = document.createElement('div');
+    dropdown.className = 'collection-actions-dropdown';
+    dropdown.innerHTML = `
+      <button class="collection-actions-item" data-action="sell">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="1" x2="12" y2="23"></line>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+        Put up for sale
+      </button>
+      <button class="collection-actions-item" data-action="send">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+        Send NFT to someone
+      </button>
+    `;
+    
+    // Position near anchor
+    const rect = anchorEl.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = `${rect.bottom + 4}px`;
+    dropdown.style.right = `${window.innerWidth - rect.right}px`;
+    
+    document.body.appendChild(dropdown);
+    
+    // Sell → reuse existing Modals.showListNFTForSale
+    dropdown.querySelector('[data-action="sell"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.remove();
+      Modals.showListNFTForSale(copy._raw);
+    });
+    
+    // Send
+    dropdown.querySelector('[data-action="send"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.remove();
+      this.handleSendNft(item, copy);
+    });
+    
+    // Close on outside click
+    setTimeout(() => {
+      const closeHandler = (e) => {
+        if (!dropdown.contains(e.target)) {
+          dropdown.remove();
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      document.addEventListener('click', closeHandler);
+    }, 10);
+  },
+  
+  handleSendNft(item, copy) {
+    // Remove any existing send overlay
+    document.querySelector('.copies-popup-overlay.send-overlay')?.remove();
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'copies-popup-overlay send-overlay';
+    overlay.innerHTML = `
+      <div class="copies-popup" style="max-width:380px;">
+        <div class="copies-popup-header">
+          <div class="copies-popup-title">Send NFT</div>
+          <div class="copies-popup-subtitle">
+            ${item.title}${copy.editionNumber ? ` — Edition #${copy.editionNumber}` : ''}
+          </div>
+          <button class="copies-popup-close">✕</button>
+        </div>
+        <div style="padding:20px;">
+          <label class="send-label">Recipient's XRP address</label>
+          <input type="text" class="send-input" id="sendAddressInput" 
+                 placeholder="rXXXXXXXXX..." autocomplete="off" />
+          <div class="send-warning">
+            ⚠️ This will transfer the NFT permanently. Double-check the address.
+          </div>
+          <button class="btn btn-primary" id="sendSubmitBtn" style="width:100%;margin-top:16px;">
+            Send NFT
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    
+    // Focus input
+    document.getElementById('sendAddressInput')?.focus();
+    
+    document.getElementById('sendSubmitBtn').addEventListener('click', async () => {
+      const recipient = document.getElementById('sendAddressInput').value.trim();
+      
+      if (!recipient || !recipient.startsWith('r') || recipient.length < 25) {
+        alert('Please enter a valid XRP address');
+        return;
+      }
+      
+      if (recipient === AppState.user.address) {
+        alert('You cannot send an NFT to yourself');
+        return;
+      }
+      
+      const btn = document.getElementById('sendSubmitBtn');
+      btn.textContent = 'Creating transfer...';
+      btn.disabled = true;
+      
+      try {
+        // Create a 0-XRP sell offer with a specific destination = direct transfer
+        const result = await XamanWallet.createSellOffer(
+          copy.nftTokenId,
+          0,           // price = 0 for transfer
+          recipient    // destination = specific recipient
+        );
+        
+        if (result.success) {
+          alert(`NFT sent to ${Helpers.truncateAddress(recipient)}!`);
+          overlay.remove();
+          // Refresh collection
+          this.loadCollectedNFTs();
+        } else {
+          throw new Error(result.error || 'Transfer failed');
+        }
+      } catch (err) {
+        console.error('Send NFT error:', err);
+        alert('Failed to send NFT: ' + err.message);
+        btn.textContent = 'Send NFT';
+        btn.disabled = false;
+      }
+    });
+  },
+  
+  // ============================================
+  // FOR SALE TAB (unchanged)
+  // ============================================
   
   renderForSaleTab() {
     // Show loading initially
@@ -1142,69 +2079,10 @@ const ProfilePage = {
       }
     });
   },
-
-  renderCollectedNFT(nft) {
-    const isOneOfOne = nft.totalEditions === 1;
-    const editionText = isOneOfOne 
-      ? '1/1' 
-      : nft.editionNumber 
-        ? `#${nft.editionNumber} of ${nft.totalEditions}` 
-        : `of ${nft.totalEditions}`;
-    
-    // Special styling for 1/1s and early editions
-    let editionClass = '';
-    let editionIcon = '';
-    if (isOneOfOne) {
-      editionClass = 'edition-one-of-one';
-      editionIcon = '💎';
-    } else if (nft.editionNumber === 1) {
-      editionClass = 'edition-first';
-      editionIcon = '🥇';
-    } else if (nft.editionNumber && nft.editionNumber <= 10) {
-      editionClass = 'edition-early';
-      editionIcon = '⭐';
-    }
-    
-    const coverUrl = this.getImageUrl(nft.coverUrl);
-    
-    return `
-      <div class="collected-nft-card" data-nft-id="${nft.nftTokenId}">
-        <div class="collected-nft-cover">
-          ${nft.coverUrl 
-            ? `<img src="${coverUrl}" alt="${nft.trackTitle || nft.releaseTitle}" onerror="this.src='/placeholder.png'">`
-            : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
-          }
-          <div class="collected-nft-overlay">
-            <button class="nft-play-btn" data-nft='${JSON.stringify(nft).replace(/'/g, "\\'")}'>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-            </button>
-          </div>
-          <div class="collected-nft-badge">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
-            Owned
-          </div>
-          ${editionText ? `<div class="edition-badge ${editionClass}">${editionIcon} ${editionText}</div>` : ''}
-        </div>
-        <div class="collected-nft-info">
-          <div class="collected-nft-title">${nft.trackTitle || nft.releaseTitle}</div>
-          <div class="collected-nft-artist">${nft.artistName || 'Unknown Artist'}</div>
-          <div class="collected-nft-actions">
-            <button class="btn btn-sm btn-secondary nft-list-btn" data-nft='${JSON.stringify(nft).replace(/'/g, "\\'")}'>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="1" x2="12" y2="23"></line>
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-              List for Sale
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  },
+  
+  // ============================================
+  // RELEASE CARD (unchanged)
+  // ============================================
   
   renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
@@ -1273,6 +2151,10 @@ const ProfilePage = {
       </div>
     `;
   },
+  
+  // ============================================
+  // ERROR & EVENTS (unchanged)
+  // ============================================
   
   renderError() {
     const html = `
