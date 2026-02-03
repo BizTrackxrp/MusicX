@@ -174,7 +174,7 @@ async function getReleases(req, res, sql) {
           SELECT seller_address
           FROM sales
           GROUP BY seller_address
-          HAVING COALESCE(SUM(price), 0) >= 10
+          HAVING COALESCE(SUM(price), 0) >= 20
         )
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
