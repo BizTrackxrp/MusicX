@@ -44,10 +44,19 @@ const API = {
   // ============================================
   
   /**
-   * Get all releases (only minted releases shown publicly)
+   * Get all live releases (unfiltered - for artists list, stats, etc.)
    */
   async getReleases() {
     const data = await this.fetch('/api/releases');
+    return data.releases || [];
+  },
+  
+  /**
+   * Get feed-filtered releases (only artists with >= 20 XRP sales)
+   * Used for Stream cards, Marketplace cards, Top Played display
+   */
+  async getReleasesFeed() {
+    const data = await this.fetch('/api/releases?feed=true');
     return data.releases || [];
   },
   
