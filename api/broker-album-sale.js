@@ -21,7 +21,7 @@ const PLATFORM_FEE_PERCENT = 2;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // 🤖 Buy bot animated gif - host this on your server and update the URL
-const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.app/buybot.gif';
+const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
 
 /**
  * Send artist notification for a sale
@@ -50,6 +50,7 @@ async function createArtistSaleNotification(sql, sale) {
 
 /**
  * Send a purchase notification to Discord (compact version)
+ * Includes direct link to album on XRP Music
  */
 async function sendDiscordBuyAlert(purchase) {
   if (!DISCORD_WEBHOOK_URL) {
@@ -68,6 +69,7 @@ async function sendDiscordBuyAlert(purchase) {
     txHash,
     isAlbumPurchase,
     trackCount,
+    releaseId,
   } = purchase;
 
   // Build compact description
@@ -79,6 +81,8 @@ async function sendDiscordBuyAlert(purchase) {
     `by ${artistName || 'Unknown Artist'}`,
     ``,
     `💰 **${price} XRP** • Edition #${editionNumber}/${totalEditions}`,
+    ``,
+    `🎧 [Listen on XRP Music](https://xrpmusic.io/release/${releaseId})${txHash ? ` • [View Tx](https://livenet.xrpl.org/transactions/${txHash})` : ''}`,
   ].join('\n');
 
   const embed = {
@@ -91,9 +95,8 @@ async function sendDiscordBuyAlert(purchase) {
           url: BUYBOT_GIF_URL,
         },
         image: {
-          url: coverUrl || 'https://xrpmusic.app/placeholder.png',
+          url: coverUrl || 'https://xrpmusic.io/placeholder.png',
         },
-        url: txHash ? `https://livenet.xrpl.org/transactions/${txHash}` : undefined,
       },
     ],
   };
@@ -851,7 +854,7 @@ async function handleFinalize(req, res, sql) {
       });
     }
     
-    // 🎉 DISCORD NOTIFICATION - Send album buy alert
+    // 🎉 DISCORD NOTIFICATION - Send album buy alert with song link
     if (release && buyerAddress) {
       await sendDiscordBuyAlert({
         trackTitle: null,
@@ -866,6 +869,7 @@ async function handleFinalize(req, res, sql) {
         txHash: paymentTxHash,
         isAlbumPurchase: true,
         trackCount: trackCount,
+        releaseId: releaseId,
       });
       
       // Check for milestones
