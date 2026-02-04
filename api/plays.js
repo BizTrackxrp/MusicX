@@ -1,6 +1,8 @@
 /**
  * XRP Music - Plays/Streams API
  * Records play events and returns aggregated play counts
+ * 
+ * Top tracks are filtered to only include artists with >= 20 XRP total sales
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -103,6 +105,7 @@ async function getPlays(req, res, sql) {
 
 /**
  * Get top played tracks for a given period
+ * Filtered: only includes tracks from artists with >= 20 XRP total sales
  */
 async function getTopTracks(req, res, sql, period = '7d', limit = 10) {
   const interval = getIntervalFromPeriod(period);
@@ -127,6 +130,12 @@ async function getTopTracks(req, res, sql, period = '7d', limit = 10) {
     JOIN tracks t ON p.track_id = t.id
     JOIN releases r ON t.release_id = r.id
     WHERE p.played_at > NOW() - ${interval}::interval
+      AND r.artist_address IN (
+        SELECT seller_address
+        FROM sales
+        GROUP BY seller_address
+        HAVING COALESCE(SUM(price), 0) >= 20
+      )
     GROUP BY p.track_id, p.release_id, t.id, t.title, t.audio_cid, t.duration,
              r.id, r.title, r.artist_name, r.artist_address, r.cover_url, 
              r.song_price, r.total_editions, r.type
