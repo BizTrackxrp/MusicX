@@ -53,6 +53,7 @@ async function createArtistSaleNotification(sql, sale) {
 
 /**
  * Send a purchase notification to Discord (compact version)
+ * Includes direct link to song on XRP Music
  */
 async function sendDiscordBuyAlert(purchase) {
   if (!DISCORD_WEBHOOK_URL) {
@@ -69,6 +70,7 @@ async function sendDiscordBuyAlert(purchase) {
     totalEditions,
     coverUrl,
     txHash,
+    releaseId,
   } = purchase;
 
   // Build the description with all info in a compact format
@@ -77,6 +79,8 @@ async function sendDiscordBuyAlert(purchase) {
     `by ${artistName || 'Unknown Artist'}`,
     ``,
     `💰 **${price} XRP** • Edition #${editionNumber}/${totalEditions}`,
+    ``,
+    `🎧 [Listen on XRP Music](https://xrpmusic.app/release/${releaseId})${txHash ? ` • [View Tx](https://livenet.xrpl.org/transactions/${txHash})` : ''}`,
   ].join('\n');
 
   const embed = {
@@ -91,7 +95,6 @@ async function sendDiscordBuyAlert(purchase) {
         image: {
           url: coverUrl || 'https://xrpmusic.app/placeholder.png',
         },
-        url: txHash ? `https://livenet.xrpl.org/transactions/${txHash}` : undefined,
       },
     ],
   };
@@ -486,7 +489,7 @@ async function handleConfirmSale(req, res, sql) {
       });
     }
     
-    // 🎉 DISCORD NOTIFICATION - Send buy alert
+    // 🎉 DISCORD NOTIFICATION - Send buy alert with song link
     if (release) {
       await sendDiscordBuyAlert({
         trackTitle: release.track_title || release.title,
@@ -499,6 +502,7 @@ async function handleConfirmSale(req, res, sql) {
         coverUrl: release.cover_url,
         releaseType: release.type,
         txHash: acceptTxHash,
+        releaseId: releaseId,
       });
       
       // Check for milestones
