@@ -7,8 +7,9 @@
  * 
  * Visibility rules:
  * - Public pages: show is_minted = true OR mint_fee_paid = true OR r.status = 'live'
- * - Public feeds (Stream/Marketplace): additionally require artist has >= 10 XRP in total sales
+ * - Public feeds (Stream/Marketplace): when ?feed=true, additionally require artist has >= 20 XRP in total sales
  * - Artist's own page: show ALL their releases (including drafts)
+ * - Single release by ID: always visible (for purchase flow, direct links)
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
 }
 
 async function getReleases(req, res, sql) {
-  const { artist, id, includeUnminted } = req.query;
+  const { artist, id, includeUnminted, feed } = req.query;
   
   let releases;
   
@@ -142,10 +143,10 @@ async function getReleases(req, res, sql) {
         ORDER BY r.created_at DESC
       `;
     }
-  } else {
+  } else if (feed === 'true') {
     // ============================================================
-    // PUBLIC FEED (Stream / Marketplace)
-    // Only show releases from artists with >= 10 XRP total sales
+    // FILTERED FEED (Stream cards / Marketplace cards)
+    // Only show releases from artists with >= 20 XRP total sales
     // ============================================================
     releases = await sql`
       SELECT r.*, 
@@ -176,6 +177,36 @@ async function getReleases(req, res, sql) {
           GROUP BY seller_address
           HAVING COALESCE(SUM(price), 0) >= 20
         )
+      GROUP BY r.id, p.avatar_url
+      ORDER BY r.created_at DESC
+    `;
+  } else {
+    // ============================================================
+    // UNFILTERED - All live releases (for artists list, stats, etc.)
+    // ============================================================
+    releases = await sql`
+      SELECT r.*, 
+        p.avatar_url as artist_avatar,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', t.id,
+              'title', t.title,
+              'trackNumber', t.track_order,
+              'duration', t.duration,
+              'audioCid', t.audio_cid,
+              'audioUrl', t.audio_url,
+              'metadataCid', t.metadata_cid,
+              'soldCount', COALESCE(t.sold_count, 0),
+              'mintedEditions', COALESCE(t.minted_editions, 0)
+            ) ORDER BY t.track_order
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as tracks
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+      WHERE r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live'
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
