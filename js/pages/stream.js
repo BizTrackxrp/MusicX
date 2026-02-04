@@ -6,6 +6,7 @@
  * UPDATED: Uses IpfsHelper for proxied IPFS images
  * UPDATED: View All navigates to Analytics page
  * UPDATED: Cleaned up - removed sort buttons, defaults to Artists tab
+ * UPDATED: Uses unfiltered releases for artists/stats; plays API handles feed filtering
  */
 
 const StreamPage = {
@@ -32,11 +33,12 @@ const StreamPage = {
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
+      // Fetch ALL live releases (unfiltered) for artists list, tracks list, and stats
       this.releases = await Promise.race([API.getReleases(), timeout]);
       setReleases(this.releases);
       this.extractArtists();
       
-      // Load top played tracks
+      // Load top played tracks (plays API already filters by 20 XRP threshold)
       await this.loadTopTracks();
       
       if (this.releases.length === 0) {
@@ -53,10 +55,11 @@ const StreamPage = {
   
   /**
    * Load top played tracks for current period from the API
+   * The /api/plays endpoint already filters out artists with < 20 XRP sales
    */
   async loadTopTracks() {
     try {
-      // Fetch real play data from /api/plays endpoint
+      // Fetch real play data from /api/plays endpoint (already filtered)
       if (typeof API.getTopTracks === 'function') {
         const topTracks = await API.getTopTracks(this.currentTopPeriod, 10);
         
@@ -91,17 +94,39 @@ const StreamPage = {
     }
     
     // Fallback: If no play data exists yet, show tracks sorted by sales
-    // This handles the case where the plays table is empty (fresh deployment)
+    // Only include tracks from artists that pass the feed filter
     console.log('📊 No play data yet, showing tracks by sales as fallback');
-    const allTracks = this.getAllTracks();
     
-    this.topTracks = allTracks
-      .map(track => ({
-        ...track,
-        plays: track.release.soldEditions || 0, // Use sales as proxy until we have play data
-      }))
-      .sort((a, b) => b.plays - a.plays)
-      .slice(0, 10);
+    try {
+      // Use feed-filtered releases for the fallback so spam artists don't appear
+      const feedReleases = await API.getReleasesFeed();
+      const feedTracks = feedReleases.flatMap(release =>
+        (release.tracks || []).map((track, idx) => ({
+          ...track,
+          release,
+          trackIndex: idx,
+          displayTitle: release.type === 'single' ? release.title : track.title,
+        }))
+      );
+      
+      this.topTracks = feedTracks
+        .map(track => ({
+          ...track,
+          plays: track.release.soldEditions || 0,
+        }))
+        .sort((a, b) => b.plays - a.plays)
+        .slice(0, 10);
+    } catch (e) {
+      // If feed call also fails, use unfiltered as last resort
+      const allTracks = this.getAllTracks();
+      this.topTracks = allTracks
+        .map(track => ({
+          ...track,
+          plays: track.release.soldEditions || 0,
+        }))
+        .sort((a, b) => b.plays - a.plays)
+        .slice(0, 10);
+    }
   },
   
   extractArtists() {
