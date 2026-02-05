@@ -3796,13 +3796,7 @@ showTrackPurchase(release, track, trackIdx) {
                   <div class="track-list-upload" id="track-list-upload"></div>
                 </div>
                 
-                <!-- Default price input - shown before tracks uploaded -->
-                <div class="form-group" id="default-price-group">
-                  <label class="form-label">Price per Track (XRP) *</label>
-                  <input type="number" class="form-input" name="price" id="release-price" placeholder="5" step="0.01" min="0" value="5" required style="max-width: 150px;">
-                  <p class="form-hint">Set the price for your track(s). You can customize individual prices after uploading.</p>
-                </div>
-                
+               
                 <div class="mint-fee-preview">
                   <span>Mint Fee:</span>
                   <span id="mint-fee-amount">Upload tracks to calculate</span>
