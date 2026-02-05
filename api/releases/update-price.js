@@ -1,6 +1,6 @@
 /**
  * API Route: /api/releases/update-price
- * Allows artists to update the price of their releases
+ * Allows artists to update the price of their releases (per-track + album)
  */
 import { neon } from '@neondatabase/serverless';
 
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
   try {
-    const { releaseId, artistAddress, newPrice } = req.body;
+    const { releaseId, artistAddress, songPrice, albumPrice, trackPrices } = req.body;
     
     if (!releaseId) {
       return res.status(400).json({ success: false, error: 'Release ID is required' });
@@ -22,12 +22,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Artist address is required' });
     }
     
-    if (!newPrice || newPrice <= 0) {
-      return res.status(400).json({ success: false, error: 'Valid price is required' });
-    }
-    
+    // Verify ownership
     const release = await sql`
-      SELECT id, artist_address, title, type, song_price
+      SELECT id, artist_address, title, type, song_price, album_price
       FROM releases 
       WHERE id = ${releaseId}
     `;
@@ -40,36 +37,40 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, error: 'You can only edit your own releases' });
     }
     
-    const oldPrice = release[0].song_price;
+    // Update release prices
+    if (songPrice !== undefined || albumPrice !== undefined) {
+      await sql`
+        UPDATE releases 
+        SET 
+          song_price = COALESCE(${songPrice}, song_price),
+          album_price = COALESCE(${albumPrice}, album_price)
+        WHERE id = ${releaseId}
+      `;
+    }
     
-    const tracks = await sql`
-      SELECT COUNT(*) as count FROM tracks WHERE release_id = ${releaseId}
-    `;
-    const trackCount = parseInt(tracks[0]?.count) || 1;
+    // Update per-track prices
+    if (trackPrices && trackPrices.length > 0) {
+      for (const tp of trackPrices) {
+        await sql`
+          UPDATE tracks 
+          SET price = ${tp.price}
+          WHERE id = ${tp.trackId} AND release_id = ${releaseId}
+        `;
+      }
+    }
     
-    const newAlbumPrice = release[0].type !== 'single' ? newPrice * trackCount : null;
-    
-    await sql`
-      UPDATE releases 
-      SET song_price = ${newPrice}, album_price = ${newAlbumPrice}
-      WHERE id = ${releaseId}
-    `;
-    
-    console.log(`✅ Price updated for release ${releaseId}: ${oldPrice} → ${newPrice} XRP`);
+    console.log(`✅ Prices updated for release ${releaseId}`);
     
     return res.status(200).json({
       success: true,
-      message: 'Price updated successfully',
-      oldPrice: oldPrice,
-      newPrice: newPrice,
-      newAlbumPrice: newAlbumPrice
+      message: 'Prices updated successfully',
     });
     
   } catch (error) {
-    console.error('Failed to update price:', error);
+    console.error('Failed to update prices:', error);
     return res.status(500).json({ 
       success: false, 
-      error: error.message || 'Failed to update price' 
+      error: error.message || 'Failed to update prices' 
     });
   }
 }
