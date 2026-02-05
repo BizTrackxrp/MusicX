@@ -1,6 +1,6 @@
 /**
  * Edit Price Modal
- * Allows artists to update the price of their releases
+ * Allows artists to update the price of their releases (per-track + album)
  */
 
 const EditPriceModal = {
@@ -10,15 +10,18 @@ const EditPriceModal = {
     this.currentRelease = release;
     
     const trackCount = release.tracks?.length || 1;
-    const currentTrackPrice = parseFloat(release.songPrice) || 0;
-    const currentAlbumPrice = currentTrackPrice * trackCount;
+    const defaultTrackPrice = parseFloat(release.songPrice) || 0;
+    const currentAlbumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackCount);
     const isAlbum = release.type !== 'single' && trackCount > 1;
+    
+    // Calculate individual total from per-track prices
+    const individualTotal = release.tracks?.reduce((sum, t) => sum + (parseFloat(t.price) || defaultTrackPrice), 0) || defaultTrackPrice;
     
     const html = `
       <div class="modal-overlay edit-price-modal-overlay">
         <div class="modal edit-price-modal">
           <div class="modal-header">
-            <div class="modal-title">Edit Price</div>
+            <div class="modal-title">Edit Pricing</div>
             <button class="modal-close" onclick="EditPriceModal.close()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -38,35 +41,75 @@ const EditPriceModal = {
               </div>
               <div class="edit-price-info">
                 <div class="edit-price-title">${release.title}</div>
-                <div class="edit-price-meta">${release.type} • ${trackCount} track${trackCount > 1 ? 's' : ''}</div>
+                <div class="edit-price-meta">${isAlbum ? 'Album' : 'Single'} • ${trackCount} track${trackCount > 1 ? 's' : ''}</div>
               </div>
-            </div>
-            
-            <!-- Current Price Display -->
-            <div class="current-price-box">
-              <div class="current-price-label">Current Price</div>
-              <div class="current-price-values">
-                <span class="current-track-price">${currentTrackPrice} XRP per track</span>
-                ${isAlbum ? `<span class="current-album-price">${currentAlbumPrice} XRP total for album</span>` : ''}
-              </div>
-            </div>
-            
-            <!-- New Price Input -->
-            <div class="form-group">
-              <label class="form-label">New Price per Track (XRP)</label>
-              <input type="number" class="form-input" id="new-track-price" 
-                     value="${currentTrackPrice}" step="0.01" min="0.01" 
-                     placeholder="Enter price per track">
-              <p class="form-hint">This is the price buyers pay for each individual track NFT</p>
             </div>
             
             ${isAlbum ? `
-              <div class="new-album-price-display">
-                <span>New album total:</span>
-                <span id="new-album-total">${currentAlbumPrice} XRP</span>
-                <span class="album-calc">(${trackCount} tracks × <span id="calc-track-price">${currentTrackPrice}</span> XRP)</span>
+              <!-- Per-Track Pricing Section -->
+              <div class="track-pricing-section">
+                <div class="section-label">Track Prices</div>
+                <p class="section-hint">Set individual prices for each track</p>
+                
+                <div class="track-price-list" id="track-price-list">
+                  ${release.tracks.map((track, idx) => {
+                    const trackPrice = parseFloat(track.price) || defaultTrackPrice;
+                    return `
+                      <div class="track-price-row" data-track-idx="${idx}">
+                        <span class="track-price-num">${idx + 1}</span>
+                        <span class="track-price-name">${track.title}</span>
+                        <div class="track-price-input-wrap">
+                          <input type="number" class="track-price-input" 
+                                 data-track-id="${track.id}" 
+                                 data-track-idx="${idx}"
+                                 value="${trackPrice}" 
+                                 step="0.01" min="0.01">
+                          <span class="track-price-currency">XRP</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+                
+                <div class="tracks-total-row">
+                  <span>Individual tracks total:</span>
+                  <span id="tracks-total">${individualTotal.toFixed(2)} XRP</span>
+                </div>
               </div>
-            ` : ''}
+              
+              <!-- Album Bundle Price -->
+              <div class="album-pricing-section">
+                <div class="section-label">Album Bundle Price</div>
+                <p class="section-hint">Discounted price when fans buy all tracks together</p>
+                
+                <div class="album-price-input-row">
+                  <input type="number" class="form-input album-price-input" 
+                         id="album-price-input" 
+                         value="${currentAlbumPrice}" 
+                         step="0.01" min="0.01">
+                  <span class="album-price-currency">XRP</span>
+                </div>
+                
+                <div class="album-savings-display" id="album-savings-display">
+                  ${currentAlbumPrice < individualTotal 
+                    ? `<span class="savings-active">Fans save ${(individualTotal - currentAlbumPrice).toFixed(2)} XRP (${Math.round((1 - currentAlbumPrice / individualTotal) * 100)}% off)</span>`
+                    : `<span class="savings-none">Set lower than ${individualTotal.toFixed(2)} XRP for a discount</span>`
+                  }
+                </div>
+              </div>
+            ` : `
+              <!-- Single Track Pricing -->
+              <div class="single-pricing-section">
+                <div class="section-label">Track Price</div>
+                <div class="single-price-input-row">
+                  <input type="number" class="form-input" 
+                         id="single-price-input" 
+                         value="${defaultTrackPrice}" 
+                         step="0.01" min="0.01">
+                  <span class="single-price-currency">XRP</span>
+                </div>
+              </div>
+            `}
             
             <!-- Warning -->
             <div class="edit-price-warning">
@@ -93,7 +136,7 @@ const EditPriceModal = {
                   <polyline points="17 21 17 13 7 13 7 21"></polyline>
                   <polyline points="7 3 7 8 15 8"></polyline>
                 </svg>
-                Save Price
+                Save Prices
               </button>
             </div>
           </div>
@@ -101,7 +144,7 @@ const EditPriceModal = {
       </div>
       
       <style>
-        .edit-price-modal { max-width: 420px; }
+        .edit-price-modal { max-width: 480px; }
         .edit-price-preview {
           display: flex;
           gap: 16px;
@@ -143,58 +186,160 @@ const EditPriceModal = {
           color: var(--text-muted);
           text-transform: capitalize;
         }
-        .current-price-box {
-          padding: 16px;
+        
+        .section-label {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .section-hint {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin: 0 0 12px 0;
+        }
+        
+        /* Track pricing list */
+        .track-pricing-section {
+          margin-bottom: 20px;
+        }
+        .track-price-list {
           background: var(--bg-card);
           border: 1px solid var(--border-color);
           border-radius: var(--radius-lg);
-          margin-bottom: 20px;
+          overflow: hidden;
         }
-        .current-price-label {
+        .track-price-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .track-price-row:last-child {
+          border-bottom: none;
+        }
+        .track-price-num {
+          width: 24px;
+          height: 24px;
+          background: var(--accent);
+          border-radius: 50%;
+          color: white;
           font-size: 12px;
           font-weight: 600;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-        .current-price-values {
           display: flex;
-          flex-direction: column;
-          gap: 4px;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
-        .current-track-price {
-          font-size: 18px;
-          font-weight: 700;
+        .track-price-name {
+          flex: 1;
+          font-size: 14px;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .track-price-input-wrap {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+        }
+        .track-price-input {
+          width: 80px;
+          padding: 8px 10px;
+          background: var(--bg-hover);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 600;
+          text-align: right;
+          outline: none;
+        }
+        .track-price-input:focus {
+          border-color: var(--accent);
+        }
+        .track-price-currency {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        
+        .tracks-total-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 12px 16px;
+          background: var(--bg-hover);
+          border-radius: var(--radius-md);
+          margin-top: 12px;
+          font-size: 14px;
+        }
+        .tracks-total-row span:first-child {
+          color: var(--text-secondary);
+        }
+        #tracks-total {
+          font-weight: 600;
           color: var(--text-primary);
         }
-        .current-album-price {
-          font-size: 14px;
-          color: var(--accent);
+        
+        /* Album pricing */
+        .album-pricing-section {
+          margin-bottom: 20px;
+          padding: 16px;
+          background: rgba(139, 92, 246, 0.08);
+          border: 1px solid rgba(139, 92, 246, 0.2);
+          border-radius: var(--radius-lg);
         }
-        .new-album-price-display {
+        .album-price-input-row {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 12px 16px;
-          background: rgba(59, 130, 246, 0.1);
-          border: 1px solid rgba(59, 130, 246, 0.2);
-          border-radius: var(--radius-md);
-          margin-bottom: 20px;
-          font-size: 14px;
         }
-        .new-album-price-display span:first-child {
+        .album-price-input {
+          width: 120px !important;
+          font-size: 18px !important;
+          font-weight: 700 !important;
+          text-align: center;
+        }
+        .album-price-currency {
+          font-size: 16px;
+          font-weight: 600;
           color: var(--text-secondary);
         }
-        #new-album-total {
-          font-weight: 700;
-          color: var(--accent);
-          font-size: 16px;
+        .album-savings-display {
+          margin-top: 12px;
+          font-size: 13px;
         }
-        .album-calc {
-          font-size: 12px;
+        .savings-active {
+          color: #22c55e;
+          font-weight: 600;
+        }
+        .savings-none {
           color: var(--text-muted);
         }
+        
+        /* Single track pricing */
+        .single-pricing-section {
+          margin-bottom: 20px;
+        }
+        .single-price-input-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .single-price-input-row .form-input {
+          width: 120px;
+          font-size: 18px;
+          font-weight: 700;
+          text-align: center;
+        }
+        .single-price-currency {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-secondary);
+        }
+        
         .edit-price-warning {
           display: flex;
           align-items: flex-start;
@@ -243,15 +388,9 @@ const EditPriceModal = {
       });
     }
     
-    // Bind price input to update album total
-    const priceInput = document.getElementById('new-track-price');
-    if (priceInput && isAlbum) {
-      priceInput.addEventListener('input', () => {
-        const newPrice = parseFloat(priceInput.value) || 0;
-        const newTotal = (newPrice * trackCount).toFixed(2);
-        document.getElementById('new-album-total').textContent = `${newTotal} XRP`;
-        document.getElementById('calc-track-price').textContent = newPrice;
-      });
+    // Bind events for album pricing
+    if (isAlbum) {
+      this.bindAlbumPricingEvents(release);
     }
     
     // Close on backdrop click
@@ -263,6 +402,40 @@ const EditPriceModal = {
     
     // Close on escape
     document.addEventListener('keydown', this.handleEsc);
+  },
+  
+  bindAlbumPricingEvents(release) {
+    const trackInputs = document.querySelectorAll('.track-price-input');
+    const albumInput = document.getElementById('album-price-input');
+    const tracksTotal = document.getElementById('tracks-total');
+    const savingsDisplay = document.getElementById('album-savings-display');
+    
+    const updateTotals = () => {
+      // Calculate tracks total
+      let total = 0;
+      trackInputs.forEach(input => {
+        total += parseFloat(input.value) || 0;
+      });
+      tracksTotal.textContent = `${total.toFixed(2)} XRP`;
+      
+      // Update savings display
+      const albumPrice = parseFloat(albumInput.value) || 0;
+      if (albumPrice < total && albumPrice > 0) {
+        const saved = (total - albumPrice).toFixed(2);
+        const pct = Math.round((1 - albumPrice / total) * 100);
+        savingsDisplay.innerHTML = `<span class="savings-active">Fans save ${saved} XRP (${pct}% off)</span>`;
+      } else {
+        savingsDisplay.innerHTML = `<span class="savings-none">Set lower than ${total.toFixed(2)} XRP for a discount</span>`;
+      }
+    };
+    
+    // Bind track price inputs
+    trackInputs.forEach(input => {
+      input.addEventListener('input', updateTotals);
+    });
+    
+    // Bind album price input
+    albumInput.addEventListener('input', updateTotals);
   },
   
   handleEsc(e) {
@@ -290,36 +463,69 @@ const EditPriceModal = {
   },
   
   async save() {
-    const newPrice = parseFloat(document.getElementById('new-track-price').value);
-    
-    if (!newPrice || newPrice <= 0) {
-      alert('Please enter a valid price');
-      return;
-    }
+    const release = this.currentRelease;
+    const isAlbum = release.type !== 'single' && (release.tracks?.length || 1) > 1;
     
     const statusEl = document.getElementById('edit-price-status');
     const actionsEl = document.getElementById('edit-price-actions');
+    
+    // Gather pricing data
+    let trackPrices = [];
+    let albumPrice = null;
+    let songPrice = null;
+    
+    if (isAlbum) {
+      // Get per-track prices
+      document.querySelectorAll('.track-price-input').forEach(input => {
+        const trackId = input.dataset.trackId;
+        const price = parseFloat(input.value);
+        if (trackId && price > 0) {
+          trackPrices.push({ trackId, price });
+        }
+      });
+      
+      // Get album price
+      albumPrice = parseFloat(document.getElementById('album-price-input').value);
+      
+      // Use first track price as songPrice fallback
+      songPrice = trackPrices[0]?.price || albumPrice / release.tracks.length;
+      
+      if (!albumPrice || albumPrice <= 0) {
+        alert('Please enter a valid album price');
+        return;
+      }
+    } else {
+      // Single track
+      songPrice = parseFloat(document.getElementById('single-price-input').value);
+      
+      if (!songPrice || songPrice <= 0) {
+        alert('Please enter a valid price');
+        return;
+      }
+    }
     
     // Show loading
     statusEl.style.display = 'flex';
     actionsEl.style.display = 'none';
     
     try {
-      // Call API to update price
+      // Call API to update prices
       const response = await fetch('/api/releases/update-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          releaseId: this.currentRelease.id,
+          releaseId: release.id,
           artistAddress: AppState.user.address,
-          newPrice: newPrice,
+          songPrice: songPrice,
+          albumPrice: albumPrice,
+          trackPrices: trackPrices,
         }),
       });
       
       const result = await response.json();
       
       if (!result.success) {
-        throw new Error(result.error || 'Failed to update price');
+        throw new Error(result.error || 'Failed to update prices');
       }
       
       // Success!
@@ -330,23 +536,27 @@ const EditPriceModal = {
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
         </div>
-        <span style="color: var(--success); font-weight: 600;">Price Updated!</span>
+        <span style="color: var(--success); font-weight: 600;">Prices Updated!</span>
       `;
       
       // Update the release in memory
-      this.currentRelease.songPrice = newPrice;
-      if (this.currentRelease.type !== 'single') {
-        this.currentRelease.albumPrice = newPrice * (this.currentRelease.tracks?.length || 1);
+      this.currentRelease.songPrice = songPrice;
+      if (albumPrice) {
+        this.currentRelease.albumPrice = albumPrice;
+      }
+      if (trackPrices.length > 0 && this.currentRelease.tracks) {
+        trackPrices.forEach(tp => {
+          const track = this.currentRelease.tracks.find(t => t.id === tp.trackId);
+          if (track) track.price = tp.price;
+        });
       }
       
       // Refresh releases in AppState
       if (typeof AppState !== 'undefined' && AppState.releases) {
-        const idx = AppState.releases.findIndex(r => r.id === this.currentRelease.id);
+        const idx = AppState.releases.findIndex(r => r.id === release.id);
         if (idx !== -1) {
-          AppState.releases[idx].songPrice = newPrice;
-          if (AppState.releases[idx].type !== 'single') {
-            AppState.releases[idx].albumPrice = newPrice * (AppState.releases[idx].tracks?.length || 1);
-          }
+          AppState.releases[idx].songPrice = songPrice;
+          if (albumPrice) AppState.releases[idx].albumPrice = albumPrice;
         }
       }
       
@@ -362,7 +572,7 @@ const EditPriceModal = {
       }, 1500);
       
     } catch (error) {
-      console.error('Failed to update price:', error);
+      console.error('Failed to update prices:', error);
       
       statusEl.innerHTML = `
         <div style="color: var(--error);">
@@ -375,6 +585,7 @@ const EditPriceModal = {
         <span style="color: var(--error);">${error.message}</span>
       `;
       
+      statusEl.style.display = 'flex';
       actionsEl.style.display = 'flex';
     }
   }
