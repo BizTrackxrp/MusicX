@@ -233,7 +233,8 @@ async function handleAvailabilityCheck(req, res, sql) {
               'id', t.id,
               'title', t.title,
               'metadata_cid', t.metadata_cid,
-              'sold_count', COALESCE(t.sold_count, 0)
+              'sold_count', COALESCE(t.sold_count, 0),
+              'price', t.price
             )
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -357,7 +358,7 @@ async function handleInitPurchase(req, res, sql) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Get release with tracks
+    // Get release with tracks (including per-track prices)
     const releases = await sql`
       SELECT r.*, 
         COALESCE(
@@ -367,7 +368,8 @@ async function handleInitPurchase(req, res, sql) {
               'title', t.title,
               'metadata_cid', t.metadata_cid,
               'sold_count', COALESCE(t.sold_count, 0),
-              'minted_editions', COALESCE(t.minted_editions, 0)
+              'minted_editions', COALESCE(t.minted_editions, 0),
+              'price', t.price
             )
             ORDER BY t.track_number, t.id
           ) FILTER (WHERE t.id IS NOT NULL),
@@ -393,13 +395,19 @@ async function handleInitPurchase(req, res, sql) {
       return res.status(400).json({ error: 'No tracks in release' });
     }
     
-    const trackPrice = parseFloat(release.song_price) || 0;
-    const totalPrice = trackPrice * tracks.length;
+    // Calculate prices - use per-track prices with fallback to song_price
+    const defaultPrice = parseFloat(release.song_price) || 0;
+    const trackPrices = tracks.map(t => parseFloat(t.price) || defaultPrice);
+    const individualTotal = trackPrices.reduce((sum, p) => sum + p, 0);
+    
+    // Use artist-set album price if available, otherwise sum of individual track prices
+    const albumPrice = release.album_price ? parseFloat(release.album_price) : individualTotal;
+    const totalPrice = albumPrice;
     
     // Create a purchase session to track progress
     const sessionId = `album_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    console.log('🎵 Album purchase initialized:', sessionId, 'Tracks:', tracks.length);
+    console.log('🎵 Album purchase initialized:', sessionId, 'Tracks:', tracks.length, 'Album price:', totalPrice, 'Individual total:', individualTotal);
     
     return res.json({
       success: true,
@@ -411,12 +419,13 @@ async function handleInitPurchase(req, res, sql) {
       coverUrl: release.cover_url,
       totalEditions: release.total_editions,
       trackCount: tracks.length,
-      trackPrice,
       totalPrice,
+      individualTotal,
       tracks: tracks.map((t, i) => ({
         index: i,
         id: t.id,
         title: t.title,
+        price: trackPrices[i],
       })),
       useLazyMint: isLazyMintRelease(release),
     });
@@ -446,7 +455,7 @@ async function handleMintSingle(req, res, sql) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
     
-    // Get release and track
+    // Get release and track (including per-track price)
     const releases = await sql`
       SELECT r.*, 
         COALESCE(
@@ -456,7 +465,8 @@ async function handleMintSingle(req, res, sql) {
               'title', t.title,
               'metadata_cid', t.metadata_cid,
               'sold_count', COALESCE(t.sold_count, 0),
-              'minted_editions', COALESCE(t.minted_editions, 0)
+              'minted_editions', COALESCE(t.minted_editions, 0),
+              'price', t.price
             )
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -478,7 +488,9 @@ async function handleMintSingle(req, res, sql) {
     }
     
     const useLazyMint = isLazyMintRelease(release);
-    const trackPrice = parseFloat(release.song_price) || 0;
+    
+    // Use per-track price, fall back to release song_price
+    const trackPrice = parseFloat(track.price) || parseFloat(release.song_price) || 0;
     
     // Check availability
     if (useLazyMint) {
@@ -652,7 +664,7 @@ async function handleMintSingle(req, res, sql) {
       
       const platformFee = trackPrice * (PLATFORM_FEE_PERCENT / 100);
       
-      console.log('✅ Offer created for track:', track.title, 'Offer:', offerIndex);
+      console.log('✅ Offer created for track:', track.title, 'Price:', trackPrice, 'Offer:', offerIndex);
       
       return res.json({
         success: true,
