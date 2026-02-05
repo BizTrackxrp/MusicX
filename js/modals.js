@@ -3699,7 +3699,7 @@ showTrackPurchase(release, track, trackIdx) {
     }
   },
   
-  showCreate() {
+ showCreate() {
     if (!AppState.user?.address) { this.showAuth(); return; }
     this.activeModal = 'create';
     
@@ -3737,13 +3737,14 @@ showTrackPurchase(release, track, trackIdx) {
                 
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label">Price (XRP) *</label>
+                    <label class="form-label">Price per Track (XRP) *</label>
                     <input type="number" class="form-input" name="price" id="release-price" placeholder="0.5" step="0.01" min="0" required>
+                    <p class="form-hint">Default price for each track. You can customize individual track prices after uploading.</p>
                   </div>
                   <div class="form-group">
                     <label class="form-label">Editions *</label>
                     <input type="number" class="form-input" name="editions" id="release-editions" placeholder="10,000" min="1" max="10,000" value="10,000" required>
-<p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 10,000 nfts total per mint (If an album, all tracks combined cannot have more than 10k nfts) (server limit)</p>
+                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 10,000 nfts total per mint (If an album, all tracks combined cannot have more than 10k nfts) (server limit)</p>
                   </div>
                 </div>
                 
@@ -3761,6 +3762,233 @@ showTrackPurchase(release, track, trackIdx) {
                 <button type="button" class="btn btn-primary btn-full" id="create-next-1">Next: Upload Files</button>
               </div>
               
+              <!-- Step 2: Upload Files -->
+              <div class="create-step hidden" id="create-step-2">
+                <h3 class="create-step-title">Upload Files</h3>
+                
+                <div class="form-group">
+                  <label class="form-label">Cover Art *</label>
+                  <div class="upload-zone" id="cover-upload-zone">
+                    <input type="file" id="cover-input" accept="image/*" hidden>
+                    <div class="upload-placeholder" id="cover-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      <span>Click to upload cover art</span>
+                      <span class="upload-hint">3000×3000px recommended • JPG, PNG, GIF (max 10MB)</span>
+                    </div>
+                    <div class="upload-preview hidden" id="cover-preview">
+                      <img id="cover-preview-img" src="" alt="Cover preview">
+                      <button type="button" class="upload-remove" id="cover-remove">×</button>
+                    </div>
+                  </div>
+                  <input type="hidden" name="coverCid" id="cover-cid">
+                  <input type="hidden" name="coverUrl" id="cover-url">
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Audio File(s) *</label>
+                  <p class="form-hint" style="margin-bottom: 8px;">Upload 1 song for a single, or multiple for an album</p>
+                  <div class="upload-zone audio-zone" id="audio-upload-zone">
+                    <input type="file" id="audio-input" accept="audio/*" multiple hidden>
+                    <div class="upload-placeholder" id="audio-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                      </svg>
+                      <span>Click to upload audio</span>
+                      <span class="upload-hint"><strong>MP3 recommended</strong> • Smaller files upload faster</span>
+                      <span class="upload-hint" style="font-size: 11px; color: var(--warning);">⚠️ Large WAV files may fail — convert to MP3 (max 20MB)</span>
+                    </div>
+                  </div>
+                  <div class="track-list-upload" id="track-list-upload"></div>
+                </div>
+                
+                <div class="create-nav">
+                  <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
+                  <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
+                </div>
+              </div>
+              
+              <!-- Step 3: Review & Mint -->
+              <div class="create-step hidden" id="create-step-3">
+                <h3 class="create-step-title">Review & Mint</h3>
+                
+                <div class="review-card">
+                  <div class="review-cover" id="review-cover"></div>
+                  <div class="review-info">
+                    <div class="review-title" id="review-title"></div>
+                    <div class="review-artist">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</div>
+                    <div class="review-meta">
+                      <span id="review-type"></span>
+                      <span id="review-tracks"></span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="review-details">
+                  <div class="review-row">
+                    <span>Price</span>
+                    <span id="review-price"></span>
+                  </div>
+                  <div class="review-row">
+                    <span>Editions</span>
+                    <span id="review-editions"></span>
+                  </div>
+                  <div class="review-row">
+                    <span>Resale Royalty</span>
+                    <span id="review-royalty"></span>
+                  </div>
+                  <div class="review-row mint-fee-row">
+                    <span>Mint Fee (one-time)</span>
+                    <span id="review-mint-fee"></span>
+                  </div>
+                </div>
+                
+                <div class="mint-status hidden" id="mint-status">
+                  <div class="mint-status-icon">
+                    <div class="spinner"></div>
+                  </div>
+                  <div class="mint-status-text" id="mint-status-text">Preparing...</div>
+                </div>
+                
+                <div class="create-nav" id="create-nav-3">
+                  <button type="button" class="btn btn-secondary" id="create-back-3">Back</button>
+                  <button type="submit" class="btn btn-primary btn-mint">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                      <path d="M2 17l10 5 10-5"></path>
+                      <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    Mint NFT
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .create-modal { max-width: 540px; }
+        .create-step-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; }
+        .create-step.hidden { display: none; }
+        .release-type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; }
+        .release-type-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; background: var(--bg-hover); border: 2px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
+        .release-type-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+        .release-type-btn.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+        .release-type-btn span { font-size: 13px; font-weight: 500; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+        .mint-fee-preview { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--bg-hover); border-radius: var(--radius-md); margin-top: 16px; font-size: 14px; }
+        .mint-fee-preview span:first-child { color: var(--text-secondary); }
+        .mint-fee-preview span:last-child { color: var(--text-primary); font-weight: 500; }
+        .mint-fee-row { border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 12px !important; }
+        .upload-zone { border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 24px; text-align: center; cursor: pointer; transition: all 150ms; }
+        .upload-zone:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
+        .upload-zone.dragover { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+        .upload-zone.has-file { border-style: solid; border-color: var(--success); }
+        .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
+        .upload-placeholder svg { opacity: 0.5; }
+        .upload-hint { font-size: 12px; }
+        .upload-preview { position: relative; }
+        .upload-preview img { width: 100%; max-width: 200px; border-radius: var(--radius-md); }
+        .upload-preview.hidden { display: none; }
+        .upload-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
+        .track-list-upload { margin-top: 12px; }
+        .track-upload-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-hover); border-radius: var(--radius-md); margin-bottom: 8px; }
+        .track-upload-item .track-num { width: 24px; height: 24px; background: var(--accent); border-radius: 50%; color: white; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .track-upload-item .track-name { flex: 1; font-size: 14px; }
+        .track-upload-item .track-name-input { flex: 1; font-size: 14px; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; color: var(--text-primary); outline: none; min-width: 0; }
+        .track-upload-item .track-name-input:hover { border-color: var(--border); }
+        .track-upload-item .track-name-input:focus { border-color: var(--accent); background: var(--bg-card); }
+        .track-upload-item .track-duration { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+        .track-upload-item .track-status { font-size: 12px; flex-shrink: 0; }
+        .track-upload-item .track-status.uploading { color: var(--warning); }
+        .track-upload-item .track-status.done { color: var(--success); }
+        .track-upload-item .track-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; }
+        .track-upload-item .track-remove:hover { color: var(--error); }
+        
+        /* Per-track price inputs */
+        .track-price-input-wrap { display: flex; align-items: center; gap: 4px; min-width: 90px; flex-shrink: 0; }
+        .track-price-input { width: 70px; padding: 4px 6px; background: var(--bg-card); border: 1px solid transparent; border-radius: 4px; color: var(--text-primary); font-size: 13px; text-align: right; outline: none; -moz-appearance: textfield; }
+        .track-price-input::-webkit-outer-spin-button, .track-price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .track-price-input:hover { border-color: var(--border); }
+        .track-price-input:focus { border-color: var(--accent); background: var(--bg-card); }
+        .track-price-label { font-size: 11px; color: var(--text-muted); }
+        
+        /* Album price section */
+        .album-price-section { margin-top: 16px; }
+        .album-price-box { padding: 16px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: var(--radius-lg); }
+        .album-price-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; }
+        .album-price-header svg { color: #8b5cf6; }
+        .album-price-row { display: flex; align-items: flex-start; gap: 16px; }
+        .album-price-input-wrap { display: flex; align-items: center; gap: 8px; }
+        .album-price-input { width: 120px !important; font-size: 16px !important; font-weight: 600; }
+        .album-price-currency { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+        .album-price-comparison { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+        .individual-total { font-size: 13px; color: var(--text-muted); text-decoration: line-through; }
+        .album-savings { font-size: 13px; font-weight: 600; }
+        .album-savings.discount-active { color: #22c55e; }
+        .album-savings.no-discount { color: var(--text-muted); font-weight: 400; font-size: 12px; }
+        
+        .create-nav { display: flex; gap: 12px; margin-top: 24px; }
+        .create-nav .btn { flex: 1; }
+        .btn-full { width: 100%; margin-top: 24px; }
+        .review-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 20px; }
+        .review-cover { width: 100px; height: 100px; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); }
+        .review-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .review-info { flex: 1; }
+        .review-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .review-artist { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .review-meta { font-size: 13px; color: var(--text-muted); }
+        .review-meta span { margin-right: 12px; }
+        .review-details { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
+        .review-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+        .review-row span:first-child { color: var(--text-secondary); }
+        .review-row span:last-child { color: var(--text-primary); font-weight: 500; }
+        .mint-status { text-align: center; padding: 24px; margin-bottom: 20px; }
+        .mint-status.hidden { display: none; }
+        .mint-status-icon { margin-bottom: 12px; }
+        .mint-status-icon .spinner { width: 40px; height: 40px; margin: 0 auto; }
+        .mint-status-text { font-size: 14px; color: var(--text-secondary); }
+        .btn-mint { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .edition-info-badge { cursor: help; margin-left: 4px; }
+        .edition-limit-hint { color: var(--accent); margin-top: 8px; font-size: 12px; }
+        .mint-progress-container { margin: 20px 0; padding: 20px; background: var(--bg-hover); border-radius: var(--radius-lg); }
+        .mint-progress-bar { height: 12px; background: var(--bg-card); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+        .mint-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a855f7); border-radius: 6px; transition: width 300ms ease; }
+        .mint-progress-stats { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); }
+        .mint-progress-percent { font-weight: 600; color: var(--accent); }
+        .mint-progress-time { color: var(--text-muted); }
+        .mint-status-centered { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1001; background: var(--bg-card); padding: 40px; border-radius: var(--radius-xl); box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; min-width: 350px; max-width: 450px; }
+        .mint-warning { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; padding: 10px 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); font-size: 12px; color: #f59e0b; }
+        .mint-success { text-align: center; }
+        .mint-success-cover { width: 120px; height: 120px; margin: 0 auto 16px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); position: relative; }
+        .mint-success-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .mint-success-icon { position: absolute; bottom: -8px; right: calc(50% - 76px); width: 32px; height: 32px; background: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+        .mint-success-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+        .mint-success-stats { font-size: 14px; color: var(--accent); margin-bottom: 8px; }
+        .mint-success-msg { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+        .mint-success-actions { display: flex; gap: 12px; justify-content: center; }
+        .mint-success-actions .btn { min-width: 120px; }
+        
+        @media (max-width: 480px) {
+          .album-price-row { flex-direction: column; gap: 8px; }
+          .track-price-input-wrap { min-width: 70px; }
+          .track-price-input { width: 55px; }
+          .track-upload-item { gap: 8px; padding: 10px; }
+          .track-upload-item .track-name-input { font-size: 13px; }
+        }
+      </style>
+    `;
+    
+    this.show(html);
+    this.bindCreateEvents();
+  },
               <!-- Step 2: Upload Files -->
               <div class="create-step hidden" id="create-step-2">
                 <h3 class="create-step-title">Upload Files</h3>
@@ -4050,6 +4278,18 @@ function calculateMintFee(editions, trackCount = 1) {
     
     // Editions input - update mint fee
     document.getElementById('release-editions')?.addEventListener('input', updateMintFee);
+
+    // Sync default price to tracks that haven't been customized
+    document.getElementById('release-price')?.addEventListener('input', (e) => {
+      const newDefault = parseFloat(e.target.value) || 0;
+      tracks.forEach(track => {
+        // Only update tracks still at the old default (user hasn't customized)
+        if (!track.priceCustomized) {
+          track.price = newDefault;
+        }
+      });
+      updateTrackList();
+    });
     
     // Initialize mint fee
     updateMintFee();
@@ -4090,12 +4330,28 @@ if (editions > 10000) {
       const releaseType = tracks.length === 1 ? 'single' : 'album';
       document.getElementById('release-type').value = releaseType;
       
-      // Update review
+     // Update review
       document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
       document.getElementById('review-type').textContent = releaseType.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
-      document.getElementById('review-price').textContent = `${document.getElementById('release-price').value} XRP per track`;
+      
+      // Price review - show per-track or album discount
+      const reviewPriceEl = document.getElementById('review-price');
+      if (tracks.length === 1) {
+        reviewPriceEl.textContent = `${tracks[0].price} XRP`;
+      } else {
+        const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+        const albumPriceVal = parseFloat(document.getElementById('album-discount-price')?.value) || individualTotal;
+        const savings = individualTotal - albumPriceVal;
+        
+        let priceText = `Album: ${albumPriceVal} XRP`;
+        if (savings > 0) {
+          priceText += ` (save ${savings.toFixed(2)} XRP vs individual)`;
+        }
+        reviewPriceEl.textContent = priceText;
+      }
+      
       document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
       document.getElementById('review-royalty').textContent = `${royalty}%`;
       document.getElementById('review-mint-fee').textContent = `${mintFee} XRP`;
@@ -4103,7 +4359,6 @@ if (editions > 10000) {
       document.getElementById('create-step-2').classList.add('hidden');
       document.getElementById('create-step-3').classList.remove('hidden');
     });
-    
     document.getElementById('create-back-3')?.addEventListener('click', () => {
       document.getElementById('create-step-3').classList.add('hidden');
       document.getElementById('create-step-2').classList.remove('hidden');
@@ -4199,15 +4454,144 @@ if (editions > 10000) {
     
     function updateTrackList() {
       const container = document.getElementById('track-list-upload');
-      container.innerHTML = tracks.map((track, idx) => `
+      const defaultPrice = document.getElementById('release-price').value || '0';
+      
+      container.innerHTML = tracks.map((track, idx) => {
+        // Initialize track price from default if not set
+        if (track.price === undefined || track.price === null) {
+          track.price = parseFloat(defaultPrice) || 0;
+        }
+        return `
         <div class="track-upload-item" data-idx="${idx}">
           <div class="track-num">${idx + 1}</div>
           <input type="text" class="track-name-input" value="${track.title.replace(/"/g, '&quot;')}" data-idx="${idx}" placeholder="Click to edit song title" title="Click to edit">
+          <div class="track-price-input-wrap">
+            <input type="number" class="track-price-input" value="${track.price}" data-idx="${idx}" step="0.01" min="0" placeholder="0.00" title="Track price in XRP">
+            <span class="track-price-label">XRP</span>
+          </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
           <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
-      `).join('');
+      `}).join('');
+      
+      // Show album price section when multiple tracks
+      let albumPriceSection = document.getElementById('album-price-section');
+      if (tracks.length > 1) {
+        if (!albumPriceSection) {
+          albumPriceSection = document.createElement('div');
+          albumPriceSection.id = 'album-price-section';
+          albumPriceSection.className = 'album-price-section';
+          container.after(albumPriceSection);
+        }
+        const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+        const currentAlbumPrice = document.getElementById('album-discount-price')?.value || individualTotal.toFixed(2);
+        
+        albumPriceSection.innerHTML = `
+          <div class="album-price-box">
+            <div class="album-price-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+              </svg>
+              <span>Album Price</span>
+            </div>
+            <div class="album-price-row">
+              <div class="album-price-input-wrap">
+                <input type="number" class="form-input album-price-input" id="album-discount-price" value="${currentAlbumPrice}" step="0.01" min="0" placeholder="Album price">
+                <span class="album-price-currency">XRP</span>
+              </div>
+              <div class="album-price-comparison">
+                <span class="individual-total">Tracks individually: ${individualTotal.toFixed(2)} XRP</span>
+                <span class="album-savings" id="album-savings"></span>
+              </div>
+            </div>
+          </div>
+        `;
+        updateAlbumSavings();
+      } else if (albumPriceSection) {
+        albumPriceSection.remove();
+      }
+      
+      // Track name editing
+      container.querySelectorAll('.track-name-input').forEach(input => {
+        input.addEventListener('input', () => {
+          const idx = parseInt(input.dataset.idx);
+          tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
+        });
+      });
+      
+     // Track price editing
+      container.querySelectorAll('.track-price-input').forEach(input => {
+        input.addEventListener('input', () => {
+          const idx = parseInt(input.dataset.idx);
+          tracks[idx].price = parseFloat(input.value) || 0;
+          tracks[idx].priceCustomized = true;  // Mark as customized
+          updateAlbumSavings();
+          updateMintFee();
+        });
+      });
+      
+      // Album price editing
+      document.getElementById('album-discount-price')?.addEventListener('input', updateAlbumSavings);
+      
+      container.querySelectorAll('.track-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          tracks.splice(parseInt(btn.dataset.idx), 1);
+          updateTrackList();
+        });
+      });
+      
+      if (tracks.length > 0) {
+        audioZone.classList.add('has-file');
+      } else {
+        audioZone.classList.remove('has-file');
+      }
+      
+      updateMintFee();
+      
+      // Update title label based on track count
+      const titleLabel = document.getElementById('title-label');
+      const titleHint = document.getElementById('title-hint');
+      const titleInput = document.getElementById('release-title');
+      
+      if (tracks.length > 1) {
+        if (titleLabel) titleLabel.textContent = 'Album/EP Title *';
+        if (titleInput) titleInput.placeholder = 'Album or EP name';
+        if (titleHint) titleHint.innerHTML = `Don't include your artist name — it's added automatically.<br><span style="color: var(--accent); margin-top: 4px; display: inline-block;">👆 Click track names below to edit song titles</span>`;
+      } else {
+        if (titleLabel) titleLabel.textContent = 'Song Title *';
+        if (titleInput) titleInput.placeholder = 'Song title';
+        if (titleHint) titleHint.textContent = "Don't include your artist name — it's added automatically";
+      }
+    }
+    
+    // Calculate and display album savings
+    function updateAlbumSavings() {
+      const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+      const albumPrice = parseFloat(document.getElementById('album-discount-price')?.value) || 0;
+      const savingsEl = document.getElementById('album-savings');
+      const totalEl = document.querySelector('.individual-total');
+      
+      if (totalEl) {
+        totalEl.textContent = `Tracks individually: ${individualTotal.toFixed(2)} XRP`;
+      }
+      
+      if (savingsEl) {
+        if (albumPrice < individualTotal && albumPrice > 0) {
+          const saved = (individualTotal - albumPrice).toFixed(2);
+          const pct = Math.round((1 - albumPrice / individualTotal) * 100);
+          savingsEl.textContent = `Fans save ${saved} XRP (${pct}% off)`;
+          savingsEl.className = 'album-savings discount-active';
+        } else if (albumPrice >= individualTotal) {
+          savingsEl.textContent = 'Set lower than individual total for a discount';
+          savingsEl.className = 'album-savings no-discount';
+        } else {
+          savingsEl.textContent = '';
+          savingsEl.className = 'album-savings';
+        }
+      }
+    }
       
       // Track name editing - save on every keystroke
       container.querySelectorAll('.track-name-input').forEach(input => {
@@ -4382,13 +4766,16 @@ const preReleaseData = {
   coverCid: coverResult.cid,
   metadataCid: albumMetadataResult.cid,
   songPrice: parseFloat(document.getElementById('release-price').value),
-  albumPrice: releaseType !== 'single' ? parseFloat(document.getElementById('release-price').value) * uploadedTracks.length : null,
+albumPrice: releaseType !== 'single' 
+  ? (parseFloat(document.getElementById('album-discount-price')?.value) || parseFloat(document.getElementById('release-price').value) * uploadedTracks.length)
+  : null,
   totalEditions: editions,
   editionsPerTrack: editions,
   nftTokenIds: [],
   txHash: null,
   tracks: uploadedTracks.map((t, i) => ({
     ...t,
+    price: tracks[i]?.price || parseFloat(document.getElementById('release-price').value) || 0,
     soldEditions: 0,
     availableEditions: editions,
   })),
