@@ -119,7 +119,7 @@ const Modals = {
     container.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
      if (e.target.classList.contains('modal-overlay') && !this.mintingInProgress && this.activeModal !== 'create') this.close();
     });
-    container.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
+    document.querySelectorAll('.modal-close, .close-modal-btn').forEach(btn => {
       btn.addEventListener('click', () => this.close());
     });
     document.addEventListener('keydown', this.handleEsc);
@@ -4265,7 +4265,7 @@ if (editions > 10000) {
       }
       
       // Track name editing
-      container.querySelectorAll('.track-name-input').forEach(input => {
+      document.querySelectorAll('.track-name-input').forEach(input => {
         input.addEventListener('input', () => {
           const idx = parseInt(input.dataset.idx);
           tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
@@ -4273,7 +4273,7 @@ if (editions > 10000) {
       });
       
      // Track price editing
-      container.querySelectorAll('.track-price-input').forEach(input => {
+      document.querySelectorAll('.track-price-input').forEach(input => {
         input.addEventListener('input', () => {
           const idx = parseInt(input.dataset.idx);
           tracks[idx].price = parseFloat(input.value) || 0;
@@ -4286,7 +4286,7 @@ if (editions > 10000) {
       // Album price editing
       document.getElementById('album-discount-price')?.addEventListener('input', updateAlbumSavings);
       
-      container.querySelectorAll('.track-remove').forEach(btn => {
+      document.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           tracks.splice(parseInt(btn.dataset.idx), 1);
           updateTrackList();
