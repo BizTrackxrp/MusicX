@@ -2168,9 +2168,9 @@ async processListNFT(nft, price) {
   showRelease(release) {
     this.activeModal = 'release';
     const available = release.totalEditions - release.soldEditions;
-    const trackPrice = parseFloat(release.songPrice) || 0;
-    const trackCount = release.tracks?.length || 1;
-    const albumPrice = trackPrice * trackCount;
+    const defaultTrackPrice = parseFloat(release.songPrice) || 0;
+const trackCount = release.tracks?.length || 1;
+const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackCount);
     const isAlbum = release.type !== 'single' && trackCount > 1;
     
     // Check if full album is available (all tracks have stock)
@@ -2276,7 +2276,7 @@ async processListNFT(nft, price) {
                   <circle cx="20" cy="21" r="1"></circle>
                   <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                 </svg>
-                Buy NFT • ${trackPrice} XRP
+                Buy NFT • ${defaultTrackPrice} XRP
               </button>
             ` : ''}
           </div>
@@ -2349,7 +2349,7 @@ async processListNFT(nft, price) {
                           <circle cx="20" cy="21" r="1"></circle>
                           <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                         </svg>
-                        ${trackPrice} XRP
+                        ${track.price || defaultTrackPrice} XRP
                       </button>
                     ` : `<span class="sold-out-label">Sold Out</span>`}
                   </span>
