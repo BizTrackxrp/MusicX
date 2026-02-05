@@ -3725,9 +3725,9 @@ showTrackPurchase(release, track, trackIdx) {
                 <input type="hidden" name="type" id="release-type" value="release">
                 
                 <div class="form-group">
-                  <label class="form-label" id="title-label">Song Title *</label>
-                  <input type="text" class="form-input" name="title" id="release-title" placeholder="Song title" required>
-                  <p class="form-hint" id="title-hint">Don't include your artist name — it's added automatically</p>
+                  <label class="form-label" id="title-label">Title *</label>
+                  <input type="text" class="form-input" name="title" id="release-title" placeholder="Song or album title" required>
+                  <p class="form-hint" id="title-hint">This will be your song title, or album title if uploading multiple tracks</p>
                 </div>
                 
                 <div class="form-group">
@@ -3737,34 +3737,23 @@ showTrackPurchase(release, track, trackIdx) {
                 
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label">Price per Track (XRP) *</label>
-                    <input type="number" class="form-input" name="price" id="release-price" placeholder="0.5" step="0.01" min="0" required>
-                    <p class="form-hint">Default price for each track. You can customize individual track prices after uploading.</p>
+                    <label class="form-label">Editions *</label>
+                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="100" min="1" max="10000" value="100" required>
+                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">How many copies of each track can be sold</p>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Editions *</label>
-                    <input type="number" class="form-input" name="editions" id="release-editions" placeholder="10,000" min="1" max="10,000" value="10,000" required>
-                    <p class="form-hint edition-limit-hint" id="edition-limit-hint">Max 10,000 nfts total per mint (If an album, all tracks combined cannot have more than 10k nfts) (server limit)</p>
+                    <label class="form-label">Resale Royalty %</label>
+                    <input type="number" class="form-input" id="release-royalty" name="royalty" value="5" min="0" max="50" step="0.5">
+                    <p class="form-hint">You earn this % on secondary sales</p>
                   </div>
-                </div>
-                
-                <div class="form-group">
-                  <label class="form-label">Resale Royalty %</label>
-                  <p class="form-hint" style="margin-bottom: 8px;">You'll earn this % on every secondary sale of your NFT</p>
-                  <input type="number" class="form-input" id="release-royalty" name="royalty" value="5" min="0" max="50" step="0.5" style="max-width: 120px;">
-                </div>
-                
-                <div class="mint-fee-preview">
-                  <span>Mint Fee:</span>
-                  <span id="mint-fee-amount">Calculated after upload</span>
                 </div>
                 
                 <button type="button" class="btn btn-primary btn-full" id="create-next-1">Next: Upload Files</button>
               </div>
               
-              <!-- Step 2: Upload Files -->
+              <!-- Step 2: Upload Files & Pricing -->
               <div class="create-step hidden" id="create-step-2">
-                <h3 class="create-step-title">Upload Files</h3>
+                <h3 class="create-step-title">Upload & Price</h3>
                 
                 <div class="form-group">
                   <label class="form-label">Cover Art *</label>
@@ -3790,7 +3779,7 @@ showTrackPurchase(release, track, trackIdx) {
                 
                 <div class="form-group">
                   <label class="form-label">Audio File(s) *</label>
-                  <p class="form-hint" style="margin-bottom: 8px;">Upload 1 song for a single, or multiple for an album</p>
+                  <p class="form-hint" style="margin-bottom: 8px;">Upload 1 file for a single, or multiple for an album</p>
                   <div class="upload-zone audio-zone" id="audio-upload-zone">
                     <input type="file" id="audio-input" accept="audio/*" multiple hidden>
                     <div class="upload-placeholder" id="audio-placeholder">
@@ -3805,6 +3794,18 @@ showTrackPurchase(release, track, trackIdx) {
                     </div>
                   </div>
                   <div class="track-list-upload" id="track-list-upload"></div>
+                </div>
+                
+                <!-- Default price input - shown before tracks uploaded -->
+                <div class="form-group" id="default-price-group">
+                  <label class="form-label">Price per Track (XRP) *</label>
+                  <input type="number" class="form-input" name="price" id="release-price" placeholder="5" step="0.01" min="0" value="5" required style="max-width: 150px;">
+                  <p class="form-hint">Set the price for your track(s). You can customize individual prices after uploading.</p>
+                </div>
+                
+                <div class="mint-fee-preview">
+                  <span>Mint Fee:</span>
+                  <span id="mint-fee-amount">Upload tracks to calculate</span>
                 </div>
                 
                 <div class="create-nav">
@@ -3985,7 +3986,8 @@ showTrackPurchase(release, track, trackIdx) {
         }
       </style>
     `;
-this.show(html);
+    
+    this.show(html);
     this.bindCreateEvents();
   },
   
@@ -4047,10 +4049,8 @@ function calculateMintFee(editions, trackCount = 1) {
     
     // Step navigation
     document.getElementById('create-next-1')?.addEventListener('click', () => {
-      const title = document.getElementById('release-title').value.trim();
-      const price = document.getElementById('release-price').value;
-      if (!title) { alert('Please enter a title'); return; }
-      if (!price || price <= 0) { alert('Please enter a valid price'); return; }
+  const title = document.getElementById('release-title').value.trim();
+  if (!title) { alert('Please enter a title'); return; }
       document.getElementById('create-step-1').classList.add('hidden');
       document.getElementById('create-step-2').classList.remove('hidden');
     });
