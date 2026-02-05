@@ -4345,14 +4345,14 @@ if (editions > 10000) {
     }
       
       // Track name editing - save on every keystroke
-      container.querySelectorAll('.track-name-input').forEach(input => {
+      document.querySelectorAll('.track-name-input').forEach(input => {
         input.addEventListener('input', () => {
           const idx = parseInt(input.dataset.idx);
           tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
         });
       });
       
-      container.querySelectorAll('.track-remove').forEach(btn => {
+      document.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           tracks.splice(parseInt(btn.dataset.idx), 1);
           updateTrackList();
