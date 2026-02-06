@@ -5,7 +5,7 @@
 
 const EditGenresModal = {
   currentRelease: null,
-  trackGenres: {}, // { trackId: [genre1, genre2] }
+  trackGenres: {}, // { trackId: [genre1, genre2, genre3] }
   
   /**
    * Show the edit genres modal for a release
@@ -25,6 +25,7 @@ const EditGenresModal = {
           const genres = [];
           if (track.genre) genres.push(track.genre);
           if (track.genreSecondary) genres.push(track.genreSecondary);
+          if (track.genreTertiary) genres.push(track.genreTertiary);
           this.trackGenres[track.id] = genres;
         });
       }
@@ -36,6 +37,7 @@ const EditGenresModal = {
           const genres = [];
           if (track.genre) genres.push(track.genre);
           if (track.genreSecondary) genres.push(track.genreSecondary);
+          if (track.genreTertiary) genres.push(track.genreTertiary);
           this.trackGenres[track.id] = genres;
         });
       }
@@ -322,7 +324,7 @@ const EditGenresModal = {
             ${this.renderExpandedGenres(track.id, selectedGenres)}
           </div>
           
-          <div class="edit-genres-hint">Select up to 2 genres</div>
+          <div class="edit-genres-hint">Select up to 3 genres</div>
         </div>
       `;
     }).join('');
@@ -417,10 +419,10 @@ const EditGenresModal = {
       // Remove genre
       this.trackGenres[trackId] = currentGenres.filter(g => g !== genreId);
     } else {
-      // Add genre (max 2)
-      if (currentGenres.length >= 2) {
+      // Add genre (max 3)
+      if (currentGenres.length >= 3) {
         // Remove oldest, add new
-        this.trackGenres[trackId] = [currentGenres[1], genreId];
+        this.trackGenres[trackId] = [currentGenres[1], currentGenres[2], genreId];
       } else {
         this.trackGenres[trackId] = [...currentGenres, genreId];
       }
@@ -438,7 +440,7 @@ const EditGenresModal = {
         }
       });
       
-      // Also update other chips if we removed one due to max 2 limit
+      // Also update other chips if we removed one due to max 3 limit
       trackContainer.querySelectorAll('.edit-genre-chip').forEach(c => {
         const gId = c.dataset.genre;
         if (this.trackGenres[trackId].includes(gId)) {
@@ -473,8 +475,9 @@ const EditGenresModal = {
       // Prepare the data
       const updates = Object.entries(this.trackGenres).map(([trackId, genres]) => ({
         trackId: trackId,
-        genre: genres[0] || null, // Primary genre goes in track.genre
-        genreSecondary: genres[1] || null // Secondary (if we add this column later)
+        genre: genres[0] || null,
+        genreSecondary: genres[1] || null,
+        genreTertiary: genres[2] || null
       }));
       
       // Call API to update
