@@ -2165,7 +2165,7 @@ async processListNFT(nft, price) {
     });
   },
   
-  showRelease(release) {
+ showRelease(release) {
     this.activeModal = 'release';
     const available = release.totalEditions - release.soldEditions;
     const defaultTrackPrice = parseFloat(release.songPrice) || 0;
@@ -2353,6 +2353,7 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
                       </button>
                     ` : `<span class="sold-out-label">Sold Out</span>`}
                   </span>
+                  <button class="track-share-mobile share-track-btn" data-track-idx="${idx}" data-track-id="${track.id}" title="Share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
                 </div>
               `;
             }).join('') || ''}
@@ -2710,7 +2711,7 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
             padding: 0 16px 24px;
           }
         .track-row { 
-  grid-template-columns: 32px 1fr auto; 
+  grid-template-columns: 32px 1fr 32px auto; 
   padding: 10px 12px;
   gap: 8px;
 }
@@ -5648,4 +5649,303 @@ async loadArtistCollectors(artistAddress) {
       if (actionsEl) actionsEl.style.display = 'flex';
     }
   },
+   showExpandedNowPlaying() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    const coverUrl = track.cover || '/placeholder.png';
+    const title = track.title || 'Unknown Track';
+    const artist = track.artist || 'Unknown Artist';
+    const releaseId = track.releaseId;
+    const trackId = track.trackId || track.id;
+    const isPlaying = AppState.player.isPlaying;
+    
+    // Get current audio state
+    const audio = Player.audio;
+    const duration = audio ? (audio.duration || 0) : 0;
+    const currentTime = audio ? (audio.currentTime || 0) : 0;
+    
+    // Get price from track data if available
+    const price = track.price || track.songPrice || null;
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'now-playing-overlay';
+    overlay.id = 'now-playing-overlay';
+    overlay.style.setProperty('--np-cover-url', `url(${coverUrl})`);
+    
+    overlay.innerHTML = `
+      <div class="np-background"></div>
+      
+      <div class="np-header">
+        <button class="np-close-btn" id="np-close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="np-header-title">Now Playing</div>
+        <div class="np-header-spacer"></div>
+      </div>
+      
+      <div class="np-content">
+        <div class="np-cover">
+          <img src="${coverUrl}" alt="${title}" id="np-cover-img">
+        </div>
+        
+        <div class="np-info">
+          <div class="np-title" id="np-title">${title}</div>
+          <div class="np-artist" id="np-artist" data-release-id="${releaseId}">${artist}</div>
+        </div>
+        
+        <div class="np-progress">
+          <div class="np-progress-bar" id="np-progress-bar">
+            <div class="np-progress-fill" id="np-progress-fill" style="width: ${duration ? (currentTime / duration * 100) : 0}%"></div>
+          </div>
+          <div class="np-times">
+            <span id="np-time-current">${typeof Helpers !== 'undefined' ? Helpers.formatDuration(currentTime) : '0:00'}</span>
+            <span id="np-time-total">${typeof Helpers !== 'undefined' ? Helpers.formatDuration(duration) : '0:00'}</span>
+          </div>
+        </div>
+        
+        <div class="np-controls">
+          <button class="np-ctrl-btn" id="np-prev">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+            </svg>
+          </button>
+          <button class="np-ctrl-btn np-play-btn" id="np-play">
+            ${isPlaying ? `
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+            ` : `
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            `}
+          </button>
+          <button class="np-ctrl-btn" id="np-next">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="np-actions">
+          <button class="np-buy-btn" id="np-buy" data-release-id="${releaseId}" data-track-id="${trackId}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+            </svg>
+            ${price ? price + ' XRP' : 'Buy'}
+          </button>
+          <button class="np-share-btn" id="np-share" title="Share">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="np-bottom-safe"></div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // --- Bind events ---
+    
+    const closeNP = () => {
+      overlay.classList.add('closing');
+      setTimeout(() => overlay.remove(), 250);
+      if (this._npProgressInterval) {
+        clearInterval(this._npProgressInterval);
+        this._npProgressInterval = null;
+      }
+    };
+    
+    document.getElementById('np-close')?.addEventListener('click', closeNP);
+    
+    // Play/Pause
+    document.getElementById('np-play')?.addEventListener('click', () => {
+      Player.togglePlay();
+      const playBtn = document.getElementById('np-play');
+      if (playBtn) {
+        const nowPlaying = !Player.audio.paused;
+        playBtn.innerHTML = nowPlaying ? `
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        ` : `
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        `;
+      }
+    });
+    
+    // Previous / Next
+    document.getElementById('np-prev')?.addEventListener('click', () => {
+      Player.previous();
+      setTimeout(() => this._updateNPDisplay(), 300);
+    });
+    
+    document.getElementById('np-next')?.addEventListener('click', () => {
+      Player.next();
+      setTimeout(() => this._updateNPDisplay(), 300);
+    });
+    
+    // Progress bar seeking
+    document.getElementById('np-progress-bar')?.addEventListener('click', (e) => {
+      const bar = e.currentTarget;
+      const rect = bar.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const seekTime = pct * (Player.audio.duration || 0);
+      if (Player.audio) {
+        Player.audio.currentTime = seekTime;
+      }
+    });
+    
+    // Buy button -> close NP, open release modal for purchase
+    document.getElementById('np-buy')?.addEventListener('click', () => {
+      const rid = releaseId;
+      closeNP();
+      if (rid) {
+        API.getRelease(rid).then(data => {
+          const release = data?.release || data;
+          if (release) this.showRelease(release);
+        }).catch(err => console.error('Failed to load release:', err));
+      }
+    });
+    
+    // Share button -> copy link
+    document.getElementById('np-share')?.addEventListener('click', () => {
+      const url = trackId 
+        ? `${window.location.origin}/release/${releaseId}?track=${trackId}`
+        : `${window.location.origin}/release/${releaseId}`;
+      
+      navigator.clipboard.writeText(url).then(() => {
+        const toast = document.createElement('div');
+        toast.className = 'np-toast';
+        toast.textContent = 'Link copied!';
+        overlay.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+      }).catch(() => {
+        this.showToast('Failed to copy link');
+      });
+    });
+    
+    // Artist name -> navigate to artist profile
+    document.getElementById('np-artist')?.addEventListener('click', () => {
+      closeNP();
+      const currentTrack = AppState.player.currentTrack;
+      if (currentTrack?.artistAddress) {
+        if (typeof Router !== 'undefined') {
+          Router.navigate('artist', { address: currentTrack.artistAddress });
+        }
+      } else if (releaseId) {
+        API.getRelease(releaseId).then(data => {
+          const release = data?.release || data;
+          if (release?.artistAddress && typeof Router !== 'undefined') {
+            Router.navigate('artist', { address: release.artistAddress });
+          }
+        }).catch(() => {});
+      }
+    });
+    
+    // --- Progress updater (syncs with Player.audio) ---
+    this._npProgressInterval = setInterval(() => {
+      if (!document.getElementById('now-playing-overlay')) {
+        clearInterval(this._npProgressInterval);
+        this._npProgressInterval = null;
+        return;
+      }
+      
+      const audio = Player.audio;
+      if (!audio) return;
+      
+      const ct = audio.currentTime || 0;
+      const dur = audio.duration || 0;
+      const pct = dur > 0 ? (ct / dur * 100) : 0;
+      
+      const fill = document.getElementById('np-progress-fill');
+      if (fill) fill.style.width = `${pct}%`;
+      
+      const timeEl = document.getElementById('np-time-current');
+      if (timeEl && typeof Helpers !== 'undefined') timeEl.textContent = Helpers.formatDuration(ct);
+      
+      const totalEl = document.getElementById('np-time-total');
+      if (totalEl && dur && typeof Helpers !== 'undefined') totalEl.textContent = Helpers.formatDuration(dur);
+      
+      // Sync play/pause icon with actual audio state
+      const playBtn = document.getElementById('np-play');
+      if (playBtn) {
+        const shouldShowPause = !audio.paused;
+        const currentlyShowsPause = playBtn.innerHTML.includes('rect');
+        if (shouldShowPause !== currentlyShowsPause) {
+          playBtn.innerHTML = shouldShowPause ? `
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          ` : `
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          `;
+        }
+      }
+    }, 250);
+    
+    // Listen for track changes to auto-update display
+    this._npTrackChangeHandler = () => this._updateNPDisplay();
+    document.addEventListener('player:trackchange', this._npTrackChangeHandler);
+    
+    // Clean up listener when overlay is removed
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById('now-playing-overlay')) {
+        document.removeEventListener('player:trackchange', this._npTrackChangeHandler);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true });
+  },
+
+  _updateNPDisplay() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    const overlay = document.getElementById('now-playing-overlay');
+    if (!overlay) return;
+    
+    const coverUrl = track.cover || '/placeholder.png';
+    
+    const coverImg = document.getElementById('np-cover-img');
+    if (coverImg) coverImg.src = coverUrl;
+    
+    overlay.style.setProperty('--np-cover-url', `url(${coverUrl})`);
+    
+    const titleEl = document.getElementById('np-title');
+    if (titleEl) titleEl.textContent = track.title || 'Unknown Track';
+    
+    const artistEl = document.getElementById('np-artist');
+    if (artistEl) {
+      artistEl.textContent = track.artist || 'Unknown Artist';
+      if (track.releaseId) artistEl.dataset.releaseId = track.releaseId;
+    }
+    
+    // Update buy button
+    const buyBtn = document.getElementById('np-buy');
+    if (buyBtn) {
+      if (track.releaseId) buyBtn.dataset.releaseId = track.releaseId;
+      buyBtn.dataset.trackId = track.trackId || track.id || '';
+      const price = track.price || track.songPrice || null;
+      const svgHtml = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>`;
+      buyBtn.innerHTML = svgHtml + ' ' + (price ? price + ' XRP' : 'Buy');
+    }
+  },
+
 };
