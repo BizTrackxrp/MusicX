@@ -2856,6 +2856,37 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
     `;
     this.show(html);
     this.bindReleaseModalEvents(release);
+    // --- Scroll to shared track if ?track= is in URL ---
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sharedTrackId = urlParams.get('track');
+      if (sharedTrackId && release.tracks) {
+        const trackIdx = release.tracks.findIndex(t => t.id === sharedTrackId);
+        if (trackIdx >= 0) {
+          // Small delay to let modal render
+          setTimeout(() => {
+            const trackRow = document.querySelector(`.track-row[data-track-idx="${trackIdx}"]`);
+            if (trackRow) {
+              // Scroll into view
+              trackRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              
+              // Highlight flash effect
+              trackRow.style.transition = 'background 300ms ease';
+              trackRow.style.background = 'rgba(59, 130, 246, 0.2)';
+              setTimeout(() => {
+                trackRow.style.background = 'rgba(59, 130, 246, 0.08)';
+                setTimeout(() => {
+                  trackRow.style.background = '';
+                }, 2000);
+              }, 1500);
+            }
+          }, 300);
+        }
+      }
+    } catch (e) {
+      // Silently fail - this is a nice-to-have
+    }
+
     // "You own this" badge
     if (AppState.user?.address) {
       this.fetchOwnedNfts().then(allNfts => {
