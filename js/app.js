@@ -229,14 +229,17 @@ const Router = {
   
   /**
    * Open release modal from direct URL
-   * FIXED: Now properly separates releaseId from track param
-   * and sets clean URL so scroll-to-track works
+   * FIXED: Prevents double-open, properly separates releaseId from track param
    */
   async openReleaseFromUrl(releaseId, trackId) {
     if (!releaseId) {
       StreamPage.render();
       return;
     }
+    
+    // Prevent double-open (redirect + route can both trigger this)
+    if (this._openingRelease === releaseId) return;
+    this._openingRelease = releaseId;
     
     try {
       // Fetch the release data first
@@ -245,6 +248,7 @@ const Router = {
       if (!data?.release) {
         console.error('Release not found:', releaseId);
         Modals.showToast('Release not found');
+        this._openingRelease = null;
         StreamPage.render();
         return;
       }
@@ -261,9 +265,11 @@ const Router = {
       // Small delay to ensure DOM is ready, then show modal
       setTimeout(() => {
         Modals.showRelease(data.release);
+        this._openingRelease = null;
       }, 50);
       
     } catch (error) {
+      this._openingRelease = null;
       console.error('Failed to load release:', error);
       Modals.showToast('Failed to load release');
       StreamPage.render();
@@ -741,9 +747,6 @@ const Router = {
         </div>
         
         <style>
-          /* ============================================
-             Artist Page Styles
-             ============================================ */
           .artist-page {
             padding-bottom: 120px;
           }
@@ -754,9 +757,6 @@ const Router = {
             }
           }
           
-          /* ============================================
-             Artist Banner - Responsive height
-             ============================================ */
           .artist-banner {
             width: 100%;
             height: 180px;
@@ -791,9 +791,6 @@ const Router = {
             }
           }
           
-          /* ============================================
-             Artist Profile Card
-             ============================================ */
           .artist-profile-card {
             display: flex;
             align-items: flex-start;
@@ -860,9 +857,6 @@ const Router = {
             margin-bottom: 12px;
           }
           
-          /* ============================================
-             Artist Bio - Truncated with "more" button
-             ============================================ */
           .artist-bio-container {
             margin-bottom: 12px;
             max-width: 700px;
@@ -914,7 +908,6 @@ const Router = {
             }
           }
           
-          /* Bio Modal */
           .bio-modal-overlay {
             position: fixed;
             top: 0;
@@ -991,9 +984,6 @@ const Router = {
             text-decoration: underline;
           }
           
-          /* ============================================
-             Artist Actions
-             ============================================ */
           .artist-actions {
             padding-top: 60px;
             flex-shrink: 0;
@@ -1008,9 +998,6 @@ const Router = {
             }
           }
           
-          /* ============================================
-             Artist Releases Section
-             ============================================ */
           .artist-releases {
             padding: 0 24px;
           }
@@ -1037,7 +1024,6 @@ const Router = {
       const bioText = document.getElementById('artist-bio-text');
       const bioMoreBtn = document.getElementById('artist-bio-more-btn');
       if (bioText && bioMoreBtn) {
-        // Check if text is truncated (scrollHeight > clientHeight)
         if (bioText.scrollHeight > bioText.clientHeight) {
           bioMoreBtn.style.display = 'block';
           bioMoreBtn.addEventListener('click', () => {
