@@ -89,9 +89,20 @@ const Router = {
     }
     
     // Release page (direct link to release modal)
+    // Handles both /release/rel_xxx and /release/rel_xxx?track=trk_xxx
     if (path.startsWith('/release/')) {
-      const id = path.replace('/release/', '');
-      return { page: 'release', params: { id } };
+      let releasePath = path.replace('/release/', '');
+      // Handle ?track= param that may be embedded in the path (from OG redirects)
+      let trackId = null;
+      if (releasePath.includes('?')) {
+        const parts = releasePath.split('?');
+        releasePath = parts[0];
+        const relParams = new URLSearchParams(parts[1]);
+        trackId = relParams.get('track');
+      }
+      // Also check actual URL search params
+      if (!trackId) trackId = searchParams.get('track');
+      return { page: 'release', params: { id: releasePath, track: trackId } };
     }
     
     // Genre page (single genre)
@@ -179,7 +190,7 @@ const Router = {
         break;
       case 'release':
         // Direct link to release - show stream page then open modal
-        this.openReleaseFromUrl(this.params.id);
+        this.openReleaseFromUrl(this.params.id, this.params.track);
         break;
       case 'artist':
         this.renderArtistPage(this.params.address);
@@ -218,9 +229,10 @@ const Router = {
   
   /**
    * Open release modal from direct URL
-   * FIXED: Now properly awaits StreamPage.render() before opening modal
+   * FIXED: Now properly separates releaseId from track param
+   * and sets clean URL so scroll-to-track works
    */
-  async openReleaseFromUrl(releaseId) {
+  async openReleaseFromUrl(releaseId, trackId) {
     if (!releaseId) {
       StreamPage.render();
       return;
@@ -239,6 +251,12 @@ const Router = {
       
       // Now render the stream page as background and wait for it
       await StreamPage.render();
+      
+      // Update URL with clean release path (and track if present)
+      const cleanUrl = trackId 
+        ? `/release/${releaseId}?track=${trackId}` 
+        : `/release/${releaseId}`;
+      history.replaceState({ page: 'release', params: { id: releaseId, track: trackId } }, '', cleanUrl);
       
       // Small delay to ensure DOM is ready, then show modal
       setTimeout(() => {
