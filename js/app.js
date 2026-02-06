@@ -190,7 +190,6 @@ const Router = {
         break;
       case 'release':
         // Direct link to release - show stream page then open modal
-        console.trace('RELEASE RENDER TRIGGERED');
         this.openReleaseFromUrl(this.params.id, this.params.track);
         break;
       case 'artist':
