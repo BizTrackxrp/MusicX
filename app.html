@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" href="/xrpmusic-logo.png">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/genres.css">
+  <link rel="stylesheet" href="/css/queue.css">
   <meta name="description" content="Stream, collect, and trade music NFTs on the XRP Ledger.">
   <meta name="theme-color" content="#000000">
 </head>
@@ -121,6 +122,34 @@
             </div>
             <span>Create Playlist</span>
           </button>
+
+          <!-- Queue Section -->
+          <div class="queue-section">
+            <button class="queue-header" id="queue-toggle">
+              <div class="queue-header-left">
+                <div class="queue-header-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                  </svg>
+                </div>
+                <div>
+                  <div class="queue-header-title">Queue</div>
+                  <div id="queue-count" style="font-size: 11px; color: var(--text-muted);"></div>
+                </div>
+              </div>
+              <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div id="queue-content" class="queue-content">
+              <div id="queue-tracks-list"></div>
+            </div>
+          </div>
 
           <!-- User playlists will be inserted here -->
           <div id="user-playlists"></div>
@@ -333,6 +362,22 @@
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
+        <button class="queue-action-btn" id="player-play-next-btn" title="Play Next" onclick="QueueManager.playNext(AppState.player.currentTrack)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 3l14 9-14 9V3z" fill="none"></path>
+            <line x1="19" y1="3" x2="19" y2="21" stroke-width="2.5"></line>
+          </svg>
+        </button>
+        <button class="queue-action-btn" id="player-add-queue-btn" title="Add to Queue" onclick="if(AppState.player.currentTrack) QueueManager.addToQueue(AppState.player.currentTrack)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+        </button>
         <button class="control-btn" id="repeat-btn" title="Repeat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="17 1 21 5 17 9"></polyline>
@@ -485,6 +530,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/xaman.js"></script>
   <script src="/js/player.js"></script>
+  <script src="/js/queue.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/pages/stream.js"></script>
   <script src="/js/pages/marketplace.js"></script>
