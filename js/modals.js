@@ -3621,7 +3621,8 @@ showTrackPurchase(release, track, trackIdx) {
     const actionsEl = document.getElementById('album-purchase-actions');
     const trackPrice = parseFloat(release.songPrice) || 0;
     const trackCount = release.tracks?.length || 1;
-    const totalPrice = trackPrice * trackCount;
+   const albumPrice = parseFloat(release.albumPrice) || (trackPrice * trackCount);
+const totalPrice = albumPrice;
     
     if (statusEl) statusEl.style.display = 'block';
     if (actionsEl) actionsEl.style.display = 'none';
