@@ -7,12 +7,16 @@
  * - Uses session ID for deduplication (same track won't count twice in 5 min)
  * - Tracks are sent to /api/plays endpoint
  * 
+ * QUEUE SYSTEM (via QueueManager):
+ * - User Queue: Manually added tracks (Play Next / Add to Queue) — highest priority
+ * - Context Queue: Sequential album/playlist tracks — plays in order
+ * - Auto Queue: Random tracks from library — infinite, lazy-loaded
+ * - When a song ends, next() checks: User Queue → Context Queue → Auto Queue
+ * 
  * SHUFFLE BEHAVIOR:
- * - Shuffle is ALWAYS ON by default (no toggle)
- * - When a song ends, a random song from the queue plays next
- * - Skip/Next button plays a random song
- * - Repeat overrides shuffle (replays current track)
- * - Playlists will have their own queue logic (future feature)
+ * - Shuffle is ALWAYS ON by default for auto queue (no toggle)
+ * - Albums/playlists play in sequential order via context queue
+ * - Repeat overrides everything (replays current track)
  * 
  * IPFS PROXY:
  * - All IPFS content (audio + images) routes through /api/ipfs/[cid]
@@ -584,7 +588,7 @@ const Player = {
   /**
    * Play a track
    * @param {Object} track - Track to play
-   * @param {Array} queue - Optional queue (if null, uses global shuffle)
+   * @param {Array} queue - Optional queue (if null, uses global shuffle) — LEGACY, prefer QueueManager
    * @param {Number} queueIndex - Index in queue
    */
   async playTrack(track, queue = null, queueIndex = 0) {
@@ -598,7 +602,7 @@ const Player = {
     // Update state
     setCurrentTrack(track);
     
-    // If queue provided, set it up
+    // If queue provided (legacy calls), set it up
     if (queue && queue.length > 0) {
       // Shuffle the queue, keeping current track at position 0
       const currentTrack = queue[queueIndex];
@@ -650,6 +654,11 @@ const Player = {
     
     // Dispatch track change event for external listeners (e.g., Now Playing view)
     document.dispatchEvent(new CustomEvent('player:trackchange', { detail: { track } }));
+    
+    // Notify QueueManager to update sidebar
+    if (typeof QueueManager !== 'undefined') {
+      QueueManager.renderSidebar();
+    }
   },
   
   /**
@@ -699,16 +708,33 @@ const Player = {
   },
   
   /**
-   * Play next track - ALWAYS RANDOM from global library
-   * (unless in a playlist - future feature)
+   * Play next track — uses QueueManager priority system
+   * Priority: User Queue → Context Queue (album/playlist in order) → Auto Queue → Random
    */
   next() {
-    const { queue, queueIndex } = AppState.player;
     const currentTrack = AppState.player.currentTrack;
+    console.log('⏭️ Next track requested');
     
-    console.log('⏭️ Next track requested. Queue length:', queue.length);
+    // Push current track to QueueManager history
+    if (currentTrack && typeof QueueManager !== 'undefined') {
+      QueueManager.history.unshift(currentTrack);
+      if (QueueManager.history.length > QueueManager.MAX_HISTORY) {
+        QueueManager.history = QueueManager.history.slice(0, QueueManager.MAX_HISTORY);
+      }
+    }
     
-    // If we have a queue with more than just current track
+    // Use QueueManager if available
+    if (typeof QueueManager !== 'undefined') {
+      const nextTrack = QueueManager.getNext();
+      if (nextTrack) {
+        this.playTrack(nextTrack);
+        return;
+      }
+    }
+    
+    // Fallback to old behavior if QueueManager not loaded
+    const { queue, queueIndex } = AppState.player;
+    
     if (queue.length > 1) {
       // Pick a random track from queue that's not current
       let nextIndex;
@@ -719,7 +745,7 @@ const Player = {
       } while (nextIndex === queueIndex && attempts < 10);
       
       const nextTrack = queue[nextIndex];
-      console.log('🎵 Playing random from queue:', nextTrack?.title);
+      console.log('🎵 Playing random from queue (fallback):', nextTrack?.title);
       updatePlayer({ queueIndex: nextIndex });
       this.playTrack(nextTrack);
     } else {
@@ -728,7 +754,7 @@ const Player = {
       const randomTrack = this.getRandomTrack(currentId);
       
       if (randomTrack) {
-        console.log('🎵 Playing random from library:', randomTrack.title);
+        console.log('🎵 Playing random from library (fallback):', randomTrack.title);
         this.playTrack(randomTrack);
       } else {
         console.log('⚠️ No tracks available to play');
@@ -739,18 +765,27 @@ const Player = {
   /**
    * Play previous track
    * - If > 3 seconds into song, restart it
-   * - Otherwise go to previous in history (or random)
+   * - Otherwise, check QueueManager history, then fallback
    */
   previous() {
-    const { queue, queueIndex } = AppState.player;
-    
     // If more than 3 seconds in, restart current track
     if (this.audio.currentTime > 3) {
       this.audio.currentTime = 0;
       return;
     }
     
-    // If we have a queue, go to previous index
+    // Check QueueManager history first
+    if (typeof QueueManager !== 'undefined') {
+      const prevTrack = QueueManager.getPrevious();
+      if (prevTrack) {
+        this.playTrack(prevTrack);
+        return;
+      }
+    }
+    
+    // Fallback to old behavior
+    const { queue, queueIndex } = AppState.player;
+    
     if (queue.length > 1) {
       const prevIndex = queueIndex === 0 ? queue.length - 1 : queueIndex - 1;
       const prevTrack = queue[prevIndex];
@@ -1014,7 +1049,7 @@ const Player = {
       this.audio.currentTime = 0;
       this.play();
     } else {
-      // Repeat is OFF - play random next track
+      // Repeat is OFF - play next from queue system
       this.next();
     }
   },
@@ -1174,5 +1209,11 @@ const Player = {
   refreshTrackCache() {
     this.buildGlobalQueue();
     console.log('🔄 Track cache refreshed:', this.allTracksCache.length, 'tracks');
+    
+    // Initialize QueueManager auto queue when tracks are available
+    if (typeof QueueManager !== 'undefined') {
+      QueueManager.loadAutoQueue();
+      QueueManager.renderSidebar();
+    }
   },
 };
