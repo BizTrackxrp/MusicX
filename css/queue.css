@@ -1,0 +1,466 @@
+/* =====================================================
+   QUEUE SIDEBAR STYLES
+   Lives inside the left sidebar under Your Library
+   ===================================================== */
+
+/* Queue Section in Sidebar */
+.queue-section {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 4px;
+}
+
+.queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+
+.queue-header:hover {
+  opacity: 0.8;
+}
+
+.queue-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.queue-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.queue-header-icon svg {
+  color: white;
+}
+
+.queue-header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+#queue-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.queue-header .chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.queue-header.collapsed .chevron {
+  transform: rotate(-90deg);
+}
+
+/* Queue Content */
+.queue-content {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.queue-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.queue-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.queue-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+/* Section Labels */
+.queue-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 12px 16px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.queue-clear-btn {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.queue-clear-btn:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+/* Queue Items */
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 16px;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.queue-item:hover {
+  background: var(--bg-hover);
+}
+
+.queue-item.now-playing {
+  background: var(--bg-hover);
+}
+
+.queue-item.now-playing .queue-item-title {
+  color: var(--accent);
+}
+
+/* Drag Handle */
+.queue-drag-handle {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: grab;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.queue-item.draggable:hover .queue-drag-handle {
+  opacity: 0.6;
+}
+
+.queue-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--text-primary);
+}
+
+.queue-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Queue Item Cover */
+.queue-item-cover {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.queue-item-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Now Playing Animation Bars */
+.queue-now-playing-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.queue-now-playing-indicator span {
+  width: 3px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: queueBounce 1.2s ease-in-out infinite;
+}
+
+.queue-now-playing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+  height: 6px;
+}
+
+.queue-now-playing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+  height: 10px;
+}
+
+.queue-now-playing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+  height: 4px;
+}
+
+@keyframes queueBounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* Queue Item Info */
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.queue-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.queue-item-artist {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* Remove Button */
+.queue-item-remove {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.queue-item:hover .queue-item-remove {
+  opacity: 0.6;
+}
+
+.queue-item-remove:hover {
+  opacity: 1 !important;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Drag States */
+.queue-item.dragging {
+  opacity: 0.4;
+  background: var(--bg-hover);
+}
+
+.queue-item.drag-over {
+  border-top: 2px solid var(--accent);
+  padding-top: 4px;
+}
+
+/* More Indicator */
+.queue-more-indicator {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Empty State */
+.queue-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.queue-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.queue-empty-sub {
+  font-size: 11px !important;
+  margin-top: 4px !important;
+  opacity: 0.6;
+}
+
+/* =====================================================
+   QUEUE BUTTONS (Play Next / Add to Queue)
+   Used in player bar, track rows, modals
+   ===================================================== */
+
+/* Queue Action Buttons (in player bar right section) */
+.queue-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.queue-action-btn:hover {
+  color: var(--text-primary);
+}
+
+.queue-action-btn:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid var(--border-color);
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* Queue buttons in horizontal track rows */
+.track-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.track-row:hover .track-queue-actions,
+.track-item:hover .track-queue-actions {
+  opacity: 1;
+}
+
+.track-queue-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.track-queue-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.track-queue-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Queue context menu (appears on right-click or long press) */
+.queue-context-menu {
+  position: fixed;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  min-width: 180px;
+  animation: menuFadeIn 0.12s ease;
+}
+
+.queue-context-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  width: 100%;
+  text-align: left;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.queue-context-item:hover {
+  background: var(--bg-hover);
+}
+
+.queue-context-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================================
+   MOBILE ADJUSTMENTS
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .queue-content {
+    max-height: 300px;
+  }
+  
+  .queue-drag-handle {
+    /* Always show on mobile since no hover */
+    opacity: 0.4;
+  }
+  
+  .queue-item-remove {
+    opacity: 0.5;
+  }
+  
+  .track-queue-actions {
+    opacity: 1;
+  }
+}
