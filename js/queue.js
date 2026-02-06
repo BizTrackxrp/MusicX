@@ -395,51 +395,44 @@ const QueueManager = {
     const container = document.getElementById('queue-tracks-list');
     if (!container) return;
     
-    const currentTrack = AppState.player.currentTrack;
     const hasUserQueue = this.userQueue.length > 0;
     const hasContextQueue = this.contextQueue.length > 0;
     const hasAutoQueue = this.autoQueue.length > 0;
     
-    let html = '';
-    
-    // Now Playing
-    if (currentTrack) {
-      html += `
-        <div class="queue-section-label">Now Playing</div>
-        <div class="queue-item now-playing">
-          <div class="queue-item-cover">
-            <img src="${getProxiedIpfsUrl(currentTrack.cover || currentTrack.coverUrl) || '/placeholder.png'}" alt="" onerror="this.src='/placeholder.png'">
-            <div class="queue-now-playing-indicator">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-          <div class="queue-item-info">
-            <div class="queue-item-title">${currentTrack.title || 'Unknown'}</div>
-            <div class="queue-item-artist">${currentTrack.artist || 'Unknown'}</div>
-          </div>
-        </div>
-      `;
+    // Figure out the NEXT track that will play (for the preview)
+    let nextTrack = null;
+    if (hasUserQueue) {
+      nextTrack = this.userQueue[0];
+    } else if (hasContextQueue) {
+      nextTrack = this.contextQueue[0];
+    } else if (hasAutoQueue) {
+      nextTrack = this.autoQueue[0];
     }
+    
+    // Update the "Next Up" preview (always visible, outside the collapsible area)
+    this._renderNextUpPreview(nextTrack);
+    
+    // Build the expandable queue list
+    let html = '';
     
     // User Queue (Slot 2 — highest priority)
     if (hasUserQueue) {
       html += `
         <div class="queue-section-label">
-          Next Up
-          <button class="queue-clear-btn" onclick="QueueManager.clearUserQueue()" title="Clear queue">Clear</button>
+          Your Queue
+          <button class="queue-clear-btn" onclick="QueueManager.clearUserQueue()" title="Clear">Clear</button>
         </div>
       `;
-      
       this.userQueue.forEach((track, index) => {
         html += this._renderQueueItem(track, index, 'user');
       });
     }
     
-    // Context Queue (album/playlist — sequential, plays after user queue)
+    // Context Queue (album/playlist — sequential)
     if (hasContextQueue) {
       const contextLabel = this.context.name 
-        ? `Next from ${this.context.name}`
-        : `Next from ${this.context.type}`;
+        ? `From ${this.context.name}`
+        : `From ${this.context.type}`;
       
       html += `<div class="queue-section-label">${contextLabel}</div>`;
       
@@ -449,38 +442,34 @@ const QueueManager = {
       }
       
       if (this.contextQueue.length > 15) {
-        html += `<div class="queue-more-indicator">+${this.contextQueue.length - 15} more tracks</div>`;
+        html += `<div class="queue-more-indicator">+${this.contextQueue.length - 15} more</div>`;
       }
     }
     
-    // Auto Queue (Slot 3) — show up to 15
+    // Auto Queue (Slot 3)
     if (hasAutoQueue) {
-      const autoLabel = (!hasContextQueue && this.context.type !== 'library')
-        ? `Playing from ${this.context.name || this.context.type}`
-        : 'Auto Playing';
+      html += `<div class="queue-section-label">Up Next</div>`;
       
-      html += `<div class="queue-section-label">${autoLabel}</div>`;
-      
-      const displayCount = Math.min(this.autoQueue.length, 15);
+      const displayCount = Math.min(this.autoQueue.length, 20);
       for (let i = 0; i < displayCount; i++) {
         html += this._renderQueueItem(this.autoQueue[i], i, 'auto');
       }
       
-      if (this.autoQueue.length > 15) {
-        html += `<div class="queue-more-indicator">+${this.autoQueue.length - 15} more tracks</div>`;
+      if (this.autoQueue.length > 20) {
+        html += `<div class="queue-more-indicator">+${this.autoQueue.length - 20} more</div>`;
       }
     }
     
     // Empty state
-    if (!currentTrack && !hasUserQueue && !hasContextQueue && !hasAutoQueue) {
+    if (!hasUserQueue && !hasContextQueue && !hasAutoQueue) {
       html = `
         <div class="queue-empty">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.4;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.3;">
             <path d="M9 18V5l12-2v13"></path>
             <circle cx="6" cy="18" r="3"></circle>
             <circle cx="18" cy="16" r="3"></circle>
           </svg>
-          <p>Your queue is empty</p>
+          <p>Queue is empty</p>
           <p class="queue-empty-sub">Play a song to get started</p>
         </div>
       `;
@@ -493,10 +482,46 @@ const QueueManager = {
     
     // Update queue count badge
     const countEl = document.getElementById('queue-count');
-    const totalQueued = this.userQueue.length + this.contextQueue.length;
+    const totalQueued = this.userQueue.length + this.contextQueue.length + this.autoQueue.length;
     if (countEl) {
-      countEl.textContent = totalQueued > 0 ? `${totalQueued} queued` : '';
+      countEl.textContent = totalQueued > 0 ? `${totalQueued} songs` : '';
     }
+  },
+  
+  /**
+   * Render the "Next Up" preview beneath queue header (always visible)
+   */
+  _renderNextUpPreview(nextTrack) {
+    // Remove existing preview if any
+    const existing = document.querySelector('.queue-next-preview-label');
+    const existingPreview = document.querySelector('.queue-next-preview');
+    if (existing) existing.remove();
+    if (existingPreview) existingPreview.remove();
+    
+    const header = document.getElementById('queue-toggle');
+    if (!header || !nextTrack) return;
+    
+    const coverUrl = getProxiedIpfsUrl(nextTrack.cover || nextTrack.coverUrl) || '/placeholder.png';
+    
+    const label = document.createElement('div');
+    label.className = 'queue-next-preview-label';
+    label.textContent = 'Next up';
+    
+    const preview = document.createElement('div');
+    preview.className = 'queue-next-preview';
+    preview.innerHTML = `
+      <div class="queue-next-preview-cover">
+        <img src="${coverUrl}" alt="" onerror="this.src='/placeholder.png'">
+      </div>
+      <div class="queue-next-preview-info">
+        <div class="queue-next-preview-title">${nextTrack.title || 'Unknown'}</div>
+        <div class="queue-next-preview-artist">${nextTrack.artist || 'Unknown'}</div>
+      </div>
+    `;
+    
+    // Insert after queue header
+    header.parentNode.insertBefore(label, header.nextSibling);
+    label.parentNode.insertBefore(preview, label.nextSibling);
   },
   
   /**
@@ -725,11 +750,17 @@ const QueueManager = {
   bindSidebarEvents() {
     // Toggle queue visibility
     const toggleBtn = document.getElementById('queue-toggle');
-    if (toggleBtn) {
+    const content = document.getElementById('queue-content');
+    
+    if (toggleBtn && content) {
+      // Start collapsed by default
+      this.isQueueVisible = false;
+      toggleBtn.classList.add('collapsed');
+      content.classList.add('collapsed');
+      
       toggleBtn.addEventListener('click', () => {
         this.isQueueVisible = !this.isQueueVisible;
-        const content = document.getElementById('queue-content');
-        if (content) content.classList.toggle('hidden', !this.isQueueVisible);
+        content.classList.toggle('collapsed', !this.isQueueVisible);
         toggleBtn.classList.toggle('collapsed', !this.isQueueVisible);
       });
     }
