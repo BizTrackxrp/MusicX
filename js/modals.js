@@ -4327,7 +4327,7 @@ if (editions > 10000) {
       
       updateMintFee();
       
-    
+    }
     
     // Calculate and display album savings
     function updateAlbumSavings() {
