@@ -4532,6 +4532,11 @@ const royaltyPercent = parseFloat(document.getElementById('release-royalty').val
 const transferFee = Math.round(royaltyPercent * 100);
 const totalNFTs = uploadedTracks.length * editions;
 
+// Calculate prices from tracks array
+const defaultTrackPrice = tracks[0]?.price || 5;
+const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+const albumPriceValue = parseFloat(document.getElementById('album-discount-price')?.value) || individualTotal;
+
 // Pre-create release to get IDs
 const preReleaseData = {
   artistAddress: AppState.user.address,
@@ -4542,17 +4547,15 @@ const preReleaseData = {
   coverUrl: coverResult.url,
   coverCid: coverResult.cid,
   metadataCid: albumMetadataResult.cid,
-  songPrice: parseFloat(document.getElementById('release-price').value),
-albumPrice: releaseType !== 'single' 
-  ? (parseFloat(document.getElementById('album-discount-price')?.value) || parseFloat(document.getElementById('release-price').value) * uploadedTracks.length)
-  : null,
+  songPrice: defaultTrackPrice,
+  albumPrice: releaseType !== 'single' ? albumPriceValue : null,
   totalEditions: editions,
   editionsPerTrack: editions,
   nftTokenIds: [],
   txHash: null,
   tracks: uploadedTracks.map((t, i) => ({
     ...t,
-    price: tracks[i]?.price || parseFloat(document.getElementById('release-price').value) || 0,
+    price: tracks[i]?.price || defaultTrackPrice,
     soldEditions: 0,
     availableEditions: editions,
   })),
