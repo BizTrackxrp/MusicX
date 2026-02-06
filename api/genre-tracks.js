@@ -1,10 +1,7 @@
 // /api/genre-tracks.js
 // API endpoint for fetching tracks by genre
-
 import { neon } from '@neondatabase/serverless';
-
 const sql = neon(process.env.DATABASE_URL);
-
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,7 +21,7 @@ export default async function handler(req, res) {
     
     // Get counts for all genres
     if (allCounts === 'true') {
-      // Use UNION to count both primary and secondary genres
+      // Use UNION to count primary, secondary, and tertiary genres
       const result = await sql`
         SELECT genre, SUM(count) as count FROM (
           SELECT 
@@ -45,6 +42,17 @@ export default async function handler(req, res) {
           WHERE t.genre_secondary IS NOT NULL
             AND (r.status = 'live' OR r.mint_fee_paid = true)
           GROUP BY t.genre_secondary
+          
+          UNION ALL
+          
+          SELECT 
+            t.genre_tertiary as genre,
+            COUNT(DISTINCT t.id) as count
+          FROM tracks t
+          JOIN releases r ON t.release_id = r.id
+          WHERE t.genre_tertiary IS NOT NULL
+            AND (r.status = 'live' OR r.mint_fee_paid = true)
+          GROUP BY t.genre_tertiary
         ) combined
         WHERE genre IS NOT NULL
         GROUP BY genre
@@ -66,7 +74,7 @@ export default async function handler(req, res) {
         SELECT COUNT(DISTINCT t.id) as count
         FROM tracks t
         JOIN releases r ON t.release_id = r.id
-        WHERE (t.genre = ${genre} OR t.genre_secondary = ${genre} OR (t.genre IS NULL AND r.genre_primary = ${genre}))
+        WHERE (t.genre = ${genre} OR t.genre_secondary = ${genre} OR t.genre_tertiary = ${genre} OR (t.genre IS NULL AND r.genre_primary = ${genre}))
           AND (r.status = 'live' OR r.mint_fee_paid = true)
       `;
       
@@ -92,6 +100,7 @@ export default async function handler(req, res) {
         t.audio_cid as "audioCid",
         t.genre,
         t.genre_secondary as "genreSecondary",
+        t.genre_tertiary as "genreTertiary",
         t.release_id as "releaseId",
         r.title as "releaseTitle",
         r.cover_url as "coverUrl",
@@ -100,7 +109,7 @@ export default async function handler(req, res) {
         r.song_price as "price"
       FROM tracks t
       JOIN releases r ON t.release_id = r.id
-      WHERE (t.genre = ${genre} OR t.genre_secondary = ${genre} OR (t.genre IS NULL AND r.genre_primary = ${genre}))
+      WHERE (t.genre = ${genre} OR t.genre_secondary = ${genre} OR t.genre_tertiary = ${genre} OR (t.genre IS NULL AND r.genre_primary = ${genre}))
         AND (r.status = 'live' OR r.mint_fee_paid = true)
       ORDER BY r.created_at DESC, t.track_number ASC
       LIMIT ${limitNum}
