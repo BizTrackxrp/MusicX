@@ -8,6 +8,9 @@
  * 
  * ALBUM FIX: Sequential mint-and-transfer (no timeout issues)
  * Each track is minted and transferred one at a time
+ * 
+ * PRICE FIX: Uses albumPrice for album purchases (artist-set discount)
+ * Falls back to trackPrice * trackCount only if albumPrice not set
  */
 
 const PurchasePage = {
@@ -98,14 +101,26 @@ const PurchasePage = {
     }
   },
   
+  /**
+   * Calculate album total price using artist-set albumPrice with fallback
+   */
+  getAlbumPrice() {
+    const release = this.release;
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    const individualTotal = trackPrice * trackCount;
+    const albumPrice = parseFloat(release.albumPrice) || individualTotal;
+    return { trackPrice, trackCount, individualTotal, albumPrice };
+  },
+  
   render() {
     const release = this.release;
     const track = this.track;
     const isAlbum = this.isAlbum;
     
-    const trackPrice = parseFloat(release.songPrice) || 0;
-    const trackCount = release.tracks?.length || 1;
-    const totalPrice = isAlbum ? (trackPrice * trackCount) : trackPrice;
+    const { trackPrice, trackCount, individualTotal, albumPrice } = this.getAlbumPrice();
+    const totalPrice = isAlbum ? albumPrice : trackPrice;
+    const hasDiscount = isAlbum && albumPrice < individualTotal;
     const totalSignatures = isAlbum ? (1 + trackCount) : 2; // 1 payment + N accepts
     
     const itemTitle = isAlbum ? release.title : (track?.title || release.title);
@@ -155,10 +170,21 @@ const PurchasePage = {
               <!-- Price Summary -->
               <div class="purchase-summary-card">
                 <h3>Order Summary</h3>
-                <div class="summary-row">
-                  <span>${isAlbum ? `${trackCount} NFTs × ${trackPrice} XRP` : 'NFT Price'}</span>
-                  <span>${totalPrice} XRP</span>
-                </div>
+                ${isAlbum && hasDiscount ? `
+                  <div class="summary-row">
+                    <span>${trackCount} tracks × ${trackPrice} XRP</span>
+                    <span style="text-decoration: line-through; color: var(--text-muted);">${individualTotal} XRP</span>
+                  </div>
+                  <div class="summary-row discount">
+                    <span>Album Discount</span>
+                    <span>-${(individualTotal - albumPrice).toFixed(2)} XRP</span>
+                  </div>
+                ` : `
+                  <div class="summary-row">
+                    <span>${isAlbum ? `${trackCount} NFTs (Album Price)` : 'NFT Price'}</span>
+                    <span>${totalPrice} XRP</span>
+                  </div>
+                `}
                 <div class="summary-row small">
                   <span>Network Fee</span>
                   <span>~0.00001 XRP</span>
@@ -218,8 +244,6 @@ const PurchasePage = {
                   </div>
                 </div>
               </div>
-              
-    
               
               <!-- Status Area (hidden initially) -->
               <div class="purchase-status" id="purchase-status" style="display: none;">
@@ -304,7 +328,6 @@ const PurchasePage = {
           }
         }
         
-        /* Left Section - Item Info */
         .purchase-item-section {
           display: flex;
           flex-direction: column;
@@ -375,7 +398,6 @@ const PurchasePage = {
           background: var(--warning);
         }
         
-        /* Right Section - Purchase Flow */
         .purchase-flow-section {
           display: flex;
           flex-direction: column;
@@ -414,6 +436,10 @@ const PurchasePage = {
           color: var(--text-muted);
           padding: 8px 0;
         }
+        .summary-row.discount {
+          color: var(--success);
+          font-weight: 600;
+        }
         .summary-row.total {
           font-size: 20px;
           font-weight: 700;
@@ -424,7 +450,6 @@ const PurchasePage = {
           border-bottom: none;
         }
         
-        /* Xaman Instructions */
         .xaman-instructions {
           background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(91, 33, 182, 0.1));
           border: 1px solid rgba(124, 58, 237, 0.3);
@@ -530,7 +555,6 @@ const PurchasePage = {
           line-height: 1.5;
         }
         
-        /* Album Progress */
         .album-progress {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
@@ -576,7 +600,6 @@ const PurchasePage = {
           min-height: 20px;
         }
         
-        /* Purchase Status */
         .purchase-status {
           text-align: center;
           padding: 32px;
@@ -618,7 +641,6 @@ const PurchasePage = {
           color: var(--text-muted);
         }
         
-        /* Purchase Button */
         .purchase-btn {
           display: flex;
           align-items: center;
@@ -655,7 +677,6 @@ const PurchasePage = {
           line-height: 1.5;
         }
         
-        /* Mobile fix button animation */
         #accept-nft-btn {
           animation: pulse-btn 2s infinite;
         }
@@ -668,9 +689,6 @@ const PurchasePage = {
     `;
   },
   
-  /**
-   * Update album progress UI
-   */
   updateAlbumProgress(current, total, trackTitle, phase = 'minting') {
     const progressEl = document.getElementById('album-progress');
     const labelEl = document.getElementById('progress-label');
@@ -701,10 +719,6 @@ const PurchasePage = {
     }
   },
   
-  /**
-   * MOBILE FIX: Show intermediate step requiring user tap before next Xaman signature
-   * Mobile browsers block window.open() calls that aren't from direct user gestures
-   */
   showAcceptNFTStep(updateStatus, current, total, trackTitle = null) {
     return new Promise((resolve) => {
       const statusEl = document.getElementById('purchase-status');
@@ -712,12 +726,10 @@ const PurchasePage = {
       const textEl = document.getElementById('status-text');
       const subEl = document.getElementById('status-sub');
       
-      // Update album progress if applicable
       if (this.isAlbum && trackTitle) {
         this.updateAlbumProgress(current - 1, total, trackTitle, 'ready');
       }
       
-      // Show ready state with button
       iconEl.innerHTML = `
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -741,7 +753,6 @@ const PurchasePage = {
       `;
       subEl.textContent = 'Tap the button above to sign in Xaman';
       
-      // Wait for user tap - this makes the next window.open() work on mobile
       document.getElementById('accept-nft-btn').onclick = () => {
         resolve();
       };
@@ -795,9 +806,9 @@ const PurchasePage = {
       
       if (!platformAddress) throw new Error('Platform not configured');
       
-      const trackPrice = parseFloat(this.release.songPrice) || 0;
-      const trackCount = this.release.tracks?.length || 1;
-      const totalPrice = this.isAlbum ? (trackPrice * trackCount) : trackPrice;
+      // PRICE FIX: Use albumPrice for album purchases
+      const { trackPrice, trackCount, albumPrice } = this.getAlbumPrice();
+      const totalPrice = this.isAlbum ? albumPrice : trackPrice;
       
       // Step 1: Payment
       updateStatus('Sign Payment', `Send ${totalPrice} XRP in Xaman`);
@@ -834,7 +845,6 @@ const PurchasePage = {
   },
   
   async processSinglePurchase(paymentTxHash, updateStatus) {
-    // Call broker-sale API
     updateStatus('Preparing NFT', 'Platform is creating transfer offer...');
     
     const purchaseResponse = await fetch('/api/broker-sale', {
@@ -860,7 +870,6 @@ const PurchasePage = {
     // MOBILE FIX: Show button for user to tap before second signature
     await this.showAcceptNFTStep(updateStatus, 1, 1);
     
-    // Accept NFT offer (now triggered by user tap, so mobile allows it)
     updateStatus('Accept NFT', 'Sign in Xaman to receive your NFT');
     
     const acceptResult = await XamanWallet.acceptSellOffer(purchaseResult.sellOfferIndex);
@@ -884,7 +893,6 @@ const PurchasePage = {
       console.error('Failed to confirm:', e);
     }
     
-    // Success!
     updateStatus('Purchase Complete! 🎉', 'NFT is now in your wallet', 'success');
     
     setTimeout(() => {
@@ -893,12 +901,13 @@ const PurchasePage = {
   },
   
   /**
-   * NEW: Sequential album purchase - mint and transfer one track at a time
-   * No timeout issues, user sees progress, partial success possible
+   * Sequential album purchase - mint and transfer one track at a time
+   * PRICE FIX: Uses albumPrice for full album, per-track for partial
    */
   async processAlbumPurchaseSequential(paymentTxHash, updateStatus) {
     const tracks = this.release.tracks || [];
     const trackCount = tracks.length;
+    const { trackPrice, albumPrice } = this.getAlbumPrice();
     
     // Step 1: Initialize purchase
     updateStatus('Initializing', 'Setting up album purchase...');
@@ -920,21 +929,19 @@ const PurchasePage = {
       throw new Error(initResult.error || 'Failed to initialize purchase');
     }
     
-    const { sessionId, artistAddress, trackPrice, totalPrice } = initResult;
+    const { sessionId, artistAddress } = initResult;
     const confirmedSales = [];
     
     // Step 2: Process each track sequentially
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
       
-      // Update progress UI
       this.updateAlbumProgress(i, trackCount, track.title, 'minting');
       updateStatus(
         `Preparing NFT ${i + 1}/${trackCount}`,
         `"${track.title}" - minting...`
       );
       
-      // Mint/find NFT and create offer
       const mintResponse = await fetch('/api/broker-album-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -951,7 +958,6 @@ const PurchasePage = {
       const mintResult = await mintResponse.json();
       
       if (!mintResult.success) {
-        // If this track fails, we still have the ones we already got
         if (confirmedSales.length > 0) {
           console.error(`Track ${i + 1} failed, but got ${confirmedSales.length} NFTs`);
           updateStatus(
@@ -959,7 +965,6 @@ const PurchasePage = {
             `Got ${confirmedSales.length}/${trackCount} NFTs. "${track.title}" failed: ${mintResult.error}`,
             'error'
           );
-          // Still finalize what we got
           break;
         }
         throw new Error(mintResult.error || `Failed to prepare "${track.title}"`);
@@ -973,14 +978,12 @@ const PurchasePage = {
         track.title
       );
       
-      // Update progress
       this.updateAlbumProgress(i, trackCount, track.title, 'accepting');
       updateStatus(
         `Accepting NFT ${i + 1}/${trackCount}`,
         `"${track.title}" - sign in Xaman`
       );
       
-      // Accept NFT offer
       const acceptResult = await XamanWallet.acceptSellOffer(mintResult.offerIndex);
       
       if (!acceptResult.success) {
@@ -1009,12 +1012,10 @@ const PurchasePage = {
           txHash: acceptResult.txHash,
         });
         
-        // Update progress to show completion
         this.updateAlbumProgress(i + 1, trackCount, track.title, 'complete');
         
       } catch (e) {
         console.error('Failed to confirm sale:', e);
-        // Still count it as confirmed since the NFT transferred
         confirmedSales.push({
           trackId: track.id,
           trackTitle: track.title,
@@ -1024,8 +1025,13 @@ const PurchasePage = {
     }
     
     // Step 3: Finalize - pay artist
+    // PRICE FIX: Use albumPrice for full album, per-track price for partial
     if (confirmedSales.length > 0) {
       updateStatus('Finalizing', 'Completing purchase...');
+      
+      const finalPrice = confirmedSales.length === trackCount
+        ? albumPrice
+        : trackPrice * confirmedSales.length;
       
       try {
         await fetch('/api/broker-album-sale', {
@@ -1035,7 +1041,7 @@ const PurchasePage = {
             action: 'finalize',
             releaseId: this.release.id,
             artistAddress: artistAddress,
-            totalPrice: trackPrice * confirmedSales.length, // Only pay for what was transferred
+            totalPrice: finalPrice,
             trackCount: confirmedSales.length,
             buyerAddress: AppState.user.address,
           }),
