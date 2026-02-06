@@ -1,10 +1,7 @@
 // /api/get-track-genres.js
 // API endpoint for fetching track genres for a release
-
 import { neon } from '@neondatabase/serverless';
-
 const sql = neon(process.env.DATABASE_URL);
-
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,7 +28,7 @@ export default async function handler(req, res) {
     
     // Get all tracks with their genres for this release
     const tracks = await sql`
-      SELECT id, title, genre, genre_secondary
+      SELECT id, title, genre, genre_secondary, genre_tertiary
       FROM tracks 
       WHERE release_id = ${releaseId}
       ORDER BY track_number ASC
@@ -43,7 +40,8 @@ export default async function handler(req, res) {
         id: t.id,
         title: t.title,
         genre: t.genre || null,
-        genreSecondary: t.genre_secondary || null
+        genreSecondary: t.genre_secondary || null,
+        genreTertiary: t.genre_tertiary || null
       }))
     });
     
