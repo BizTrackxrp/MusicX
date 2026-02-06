@@ -21,6 +21,11 @@
  * SEEK BAR:
  * - Click anywhere on progress bar to seek
  * - Drag the progress ball to scrub through track
+ * 
+ * EXPANDED NOW PLAYING:
+ * - Up arrow on mobile opens Spotify-style full-screen Now Playing view
+ * - Shows album art, controls, buy button, share button
+ * - Dispatches 'player:trackchange' event for external listeners
  */
 
 /**
@@ -160,8 +165,8 @@ const Player = {
     this.bindSeekBar(progressBar, 'desktop');
     this.bindSeekBar(expProgressBar, 'expanded');
     
-    // Expand/Collapse mobile player - NOW OPENS RELEASE MODAL
-    if (expandBtn) expandBtn.addEventListener('click', () => this.openReleaseModal());
+    // Expand button - OPENS SPOTIFY-STYLE NOW PLAYING VIEW
+    if (expandBtn) expandBtn.addEventListener('click', () => this.openExpandedNowPlaying());
     if (collapseBtn) collapseBtn.addEventListener('click', () => this.collapsePlayer());
     
     // Like buttons - desktop player bar and expanded player
@@ -188,7 +193,7 @@ const Player = {
       this.showPlaylistPicker();
     });
     
-    // Click on track info to open release modal (not expanded player)
+    // Click on track info to open release modal
     const playerTrack = document.getElementById('player-track-info');
     if (playerTrack) {
       playerTrack.addEventListener('click', async (e) => {
@@ -474,7 +479,21 @@ const Player = {
   },
   
   /**
+   * Open the Spotify-style expanded Now Playing view
+   * Called when user taps the up arrow on mobile player
+   */
+  openExpandedNowPlaying() {
+    if (typeof Modals !== 'undefined' && Modals.showExpandedNowPlaying) {
+      Modals.showExpandedNowPlaying();
+    } else {
+      // Fallback to release modal if method not available yet
+      this.openReleaseModal();
+    }
+  },
+  
+  /**
    * Open release modal for current track
+   * Used when clicking track info area on desktop
    */
   async openReleaseModal() {
     const track = AppState.player.currentTrack;
@@ -522,6 +541,8 @@ const Player = {
           ipfsHash: track.audioCid,
           releaseId: release.id,
           duration: track.duration,
+          price: track.price || release.price,
+          artistAddress: release.artistAddress,
         });
       });
     });
@@ -626,6 +647,9 @@ const Player = {
     
     // Start play tracking
     this.startPlayTracking(track);
+    
+    // Dispatch track change event for external listeners (e.g., Now Playing view)
+    document.dispatchEvent(new CustomEvent('player:trackchange', { detail: { track } }));
   },
   
   /**
@@ -944,10 +968,10 @@ const Player = {
   },
   
   /**
-   * Expand mobile player (legacy - now opens release modal)
+   * Expand mobile player (legacy - now opens Now Playing view)
    */
   expandPlayer() {
-    this.openReleaseModal();
+    this.openExpandedNowPlaying();
   },
   
   /**
@@ -1031,11 +1055,18 @@ const Player = {
   // UI Updates
   // ============================================
   
+  /**
+   * Show the player bar and mark body as player-active
+   * The player-active class enables CSS spacing fixes for modals/track lists
+   */
   showPlayerBar() {
     const playerBar = document.getElementById('player-bar');
     if (playerBar) {
       playerBar.classList.remove('hidden');
     }
+    
+    // Add player-active class to body for CSS spacing adjustments
+    document.body.classList.add('player-active');
   },
   
   updateTrackInfo(track) {
