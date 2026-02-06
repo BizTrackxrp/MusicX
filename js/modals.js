@@ -4327,21 +4327,7 @@ if (editions > 10000) {
       
       updateMintFee();
       
-      // Update title label based on track count
-      const titleLabel = document.getElementById('title-label');
-      const titleHint = document.getElementById('title-hint');
-      const titleInput = document.getElementById('release-title');
-      
-      if (tracks.length > 1) {
-        if (titleLabel) titleLabel.textContent = 'Album/EP Title *';
-        if (titleInput) titleInput.placeholder = 'Album or EP name';
-        if (titleHint) titleHint.innerHTML = `Don't include your artist name — it's added automatically.<br><span style="color: var(--accent); margin-top: 4px; display: inline-block;">👆 Click track names below to edit song titles</span>`;
-      } else {
-        if (titleLabel) titleLabel.textContent = 'Song Title *';
-        if (titleInput) titleInput.placeholder = 'Song title';
-        if (titleHint) titleHint.textContent = "Don't include your artist name — it's added automatically";
-      }
-    }
+    
     
     // Calculate and display album savings
     function updateAlbumSavings() {
@@ -4393,25 +4379,7 @@ if (editions > 10000) {
       
       // Recalculate mint fee when tracks change
       updateMintFee();
-      
-    // Update title label based on track count
-const titleLabel = document.getElementById('title-label');
-const titleHint = document.getElementById('title-hint');
-const titleInput = document.getElementById('release-title');
-
-if (tracks.length > 1) {
-  // Album/EP mode
-  if (titleLabel) titleLabel.textContent = 'Album/EP Title *';
-  if (titleInput) titleInput.placeholder = 'Album or EP name';
-  if (titleHint) titleHint.innerHTML = `Don't include your artist name — it's added automatically.<br><span style="color: var(--accent); margin-top: 4px; display: inline-block;">👆 Click track names above to edit individual song titles</span>`;
-} else if (tracks.length === 1) {
-  // Single mode
-  if (titleLabel) titleLabel.textContent = 'Song Title *';
-  if (titleInput) titleInput.placeholder = 'Song title';
-  if (titleHint) titleHint.textContent = "Don't include your artist name — it's added automatically";
-}
-// If tracks.length === 0, keep the default "Title *" from the HTML
-    
+   
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
