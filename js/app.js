@@ -1067,6 +1067,11 @@ async function initApp() {
   // Initialize player
   Player.init();
   
+  // Initialize queue manager
+  if (typeof QueueManager !== 'undefined') {
+    QueueManager.init();
+  }
+  
   // Handle browser back/forward
   window.addEventListener('popstate', (e) => {
     if (e.state?.page) {
