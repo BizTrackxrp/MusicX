@@ -3907,7 +3907,27 @@ showTrackPurchase(release, track, trackIdx) {
         .track-upload-item .track-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; }
         .track-upload-item .track-remove:hover { color: var(--error); }
         
-        /* Per-track price inputs */
+        /* Track list header */
+.track-list-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+.track-header-num { width: 24px; text-align: center; }
+.track-header-title { flex: 1; }
+.track-header-price { width: 90px; text-align: right; color: var(--accent); }
+.track-header-duration { width: 50px; text-align: right; }
+.track-header-spacer { width: 24px; }
+
+/* Per-track price inputs */
         .track-price-input-wrap { display: flex; align-items: center; gap: 4px; min-width: 90px; flex-shrink: 0; }
         .track-price-input { width: 70px; padding: 4px 6px; background: var(--bg-card); border: 1px solid transparent; border-radius: 4px; color: var(--text-primary); font-size: 13px; text-align: right; outline: none; -moz-appearance: textfield; }
         .track-price-input::-webkit-outer-spin-button, .track-price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -4199,9 +4219,23 @@ if (editions > 10000) {
     
     function updateTrackList() {
       const container = document.getElementById('track-list-upload');
-      const defaultPrice = document.getElementById('release-price').value || '0';
+      const defaultPrice = 5; // Default price when no price input exists
       
-      container.innerHTML = tracks.map((track, idx) => {
+      // Add header row if tracks exist
+      let headerHtml = '';
+      if (tracks.length > 0) {
+        headerHtml = `
+          <div class="track-list-header-row">
+            <span class="track-header-num">#</span>
+            <span class="track-header-title">Track</span>
+            <span class="track-header-price">Price</span>
+            <span class="track-header-duration">Length</span>
+            <span class="track-header-spacer"></span>
+          </div>
+        `;
+      }
+      
+      container.innerHTML = headerHtml + tracks.map((track, idx) => {
         // Initialize track price from default if not set
         if (track.price === undefined || track.price === null) {
           track.price = parseFloat(defaultPrice) || 0;
@@ -4215,7 +4249,6 @@ if (editions > 10000) {
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
-          <div class="track-status ${track.status}">${track.status === 'done' ? '✓' : track.status === 'uploading' ? 'Uploading...' : ''}</div>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
       `}).join('');
@@ -4276,7 +4309,6 @@ if (editions > 10000) {
           updateMintFee();
         });
       });
-      
       // Album price editing
       document.getElementById('album-discount-price')?.addEventListener('input', updateAlbumSavings);
       
