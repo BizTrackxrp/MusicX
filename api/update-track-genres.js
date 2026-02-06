@@ -1,10 +1,7 @@
 // /api/update-track-genres.js
 // API endpoint for updating track genres (artist only)
-
 import { neon } from '@neondatabase/serverless';
-
 const sql = neon(process.env.DATABASE_URL);
-
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -46,14 +43,15 @@ export default async function handler(req, res) {
       });
     }
     
-    // Update each track's genre (both primary and secondary)
+    // Update each track's genre (primary, secondary, and tertiary)
     for (const track of tracks) {
       if (!track.trackId) continue;
       
       await sql`
         UPDATE tracks 
         SET genre = ${track.genre || null},
-            genre_secondary = ${track.genreSecondary || null}
+            genre_secondary = ${track.genreSecondary || null},
+            genre_tertiary = ${track.genreTertiary || null}
         WHERE id = ${track.trackId} AND release_id = ${releaseId}
       `;
     }
