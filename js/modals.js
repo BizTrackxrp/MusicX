@@ -2169,8 +2169,8 @@ async processListNFT(nft, price) {
     this.activeModal = 'release';
     const available = release.totalEditions - release.soldEditions;
     const defaultTrackPrice = parseFloat(release.songPrice) || 0;
-const trackCount = release.tracks?.length || 1;
-const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackCount);
+    const trackCount = release.tracks?.length || 1;
+    const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackCount);
     const isAlbum = release.type !== 'single' && trackCount > 1;
     
     // Check if full album is available (all tracks have stock)
@@ -2327,6 +2327,16 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <line x1="12" y1="5" x2="12" y2="19"></line>
       <line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+  </button>
+  <button class="track-action-btn queue-track-btn" data-track-idx="${idx}" title="Play Next">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="8" y1="6" x2="21" y2="6"></line>
+      <line x1="8" y1="12" x2="21" y2="12"></line>
+      <line x1="8" y1="18" x2="21" y2="18"></line>
+      <line x1="3" y1="6" x2="3.01" y2="6"></line>
+      <line x1="3" y1="12" x2="3.01" y2="12"></line>
+      <line x1="3" y1="18" x2="3.01" y2="18"></line>
     </svg>
   </button>
   <button class="track-action-btn share-track-btn" data-track-idx="${idx}" data-track-id="${track.id}" title="Share">
@@ -2541,7 +2551,7 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
         }
         .track-list-header {
           display: grid;
-          grid-template-columns: 48px 1fr 80px 60px 70px 100px;
+          grid-template-columns: 48px 1fr 110px 60px 70px 100px;
           gap: 16px;
           padding: 8px 16px;
           border-bottom: 1px solid var(--border-color);
@@ -2552,7 +2562,7 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
         }
         .track-row {
           display: grid;
-          grid-template-columns: 48px 1fr 80px 60px 60px 100px;
+          grid-template-columns: 48px 1fr 110px 60px 60px 100px;
           gap: 16px;
           padding: 12px 16px;
           border-radius: var(--radius-md);
@@ -2907,7 +2917,6 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
       });
     }
   },
-  
   getColorFromImage(url) {
     // Simple color extraction based on URL hash - could be enhanced
     if (!url) return 'var(--accent)';
@@ -2915,8 +2924,7 @@ const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackC
     const hue = Math.abs(hash) % 360;
     return `hsl(${hue}, 40%, 30%)`;
   },
-  
-  bindReleaseModalEvents(release) {
+bindReleaseModalEvents(release) {
   const trackPrice = parseFloat(release.songPrice) || 0;
   const trackCount = release.tracks?.length || 1;
   
@@ -3148,6 +3156,30 @@ document.getElementById('edit-price-btn')?.addEventListener('click', () => {
         }
       });
     });
+
+    // Queue track buttons (Play Next)
+    document.querySelectorAll('.queue-track-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackIdx = parseInt(btn.dataset.trackIdx, 10);
+        const track = release.tracks?.[trackIdx];
+        if (track && typeof QueueManager !== 'undefined') {
+          const trackObj = {
+            id: parseInt(track.id) || trackIdx,
+            trackId: track.id?.toString(),
+            title: release.type === 'single' ? release.title : track.title,
+            artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
+            cover: Modals.getImageUrl(release.coverUrl),
+            ipfsHash: track.audioCid,
+            releaseId: release.id,
+            duration: track.duration,
+          };
+          QueueManager.playNext(trackObj);
+          Modals.showToast(`"${trackObj.title}" will play next`);
+        }
+      });
+    });
+
     // Share track buttons
 document.querySelectorAll('.share-track-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
@@ -3166,7 +3198,6 @@ document.querySelectorAll('.share-track-btn').forEach(btn => {
   });
 });
   },
-  
   showToast(message) {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
