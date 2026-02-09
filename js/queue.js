@@ -310,6 +310,24 @@ const QueueManager = {
   },
   
   /**
+   * Move a user queue track up one position
+   */
+  moveUp(index) {
+    if (index <= 0 || index >= this.userQueue.length) return;
+    this.reorderUserQueue(index, index - 1);
+    this.renderFullPage();
+  },
+  
+  /**
+   * Move a user queue track down one position
+   */
+  moveDown(index) {
+    if (index < 0 || index >= this.userQueue.length - 1) return;
+    this.reorderUserQueue(index, index + 1);
+    this.renderFullPage();
+  },
+  
+  /**
    * Clear user queue
    */
   clearUserQueue() {
@@ -382,6 +400,14 @@ const QueueManager = {
     this.autoQueue.push(...newTracks);
     
     console.log('🔄 Auto queue refilled:', newTracks.length, 'new tracks. Total:', this.autoQueue.length);
+  },
+  
+  /**
+   * Refresh auto queue (called from app.js when track cache becomes available)
+   */
+  refreshAutoQueue() {
+    this.autoQueue = [];
+    this.loadAutoQueue();
   },
   
   // ============================================
@@ -748,22 +774,220 @@ const QueueManager = {
   // ============================================
   
   bindSidebarEvents() {
-    // Toggle queue visibility
+    // Click queue header → open full page queue view
     const toggleBtn = document.getElementById('queue-toggle');
     const content = document.getElementById('queue-content');
     
-    if (toggleBtn && content) {
-      // Start collapsed by default
-      this.isQueueVisible = false;
-      toggleBtn.classList.add('collapsed');
-      content.classList.add('collapsed');
-      
+    if (toggleBtn) {
       toggleBtn.addEventListener('click', () => {
-        this.isQueueVisible = !this.isQueueVisible;
-        content.classList.toggle('collapsed', !this.isQueueVisible);
-        toggleBtn.classList.toggle('collapsed', !this.isQueueVisible);
+        this.renderFullPage();
       });
     }
+    
+    // Hide the expandable sidebar content — we use full page instead
+    if (content) {
+      content.style.display = 'none';
+    }
+  },
+  
+  // ============================================
+  // FULL PAGE QUEUE VIEW
+  // ============================================
+  
+  /**
+   * Render full-page queue view (like playlist page)
+   * Shows: Now Playing → Your Queue (with ↑↓ reorder) → Context Queue → Auto Queue
+   */
+  renderFullPage() {
+    const currentTrack = AppState.player.currentTrack;
+    const totalTracks = this.userQueue.length + this.contextQueue.length + this.autoQueue.length;
+    
+    const allTracks = [...this.userQueue, ...this.contextQueue, ...this.autoQueue];
+    const totalSeconds = allTracks.reduce((sum, t) => sum + (parseInt(t.duration) || 0), 0);
+    const durationStr = typeof Helpers !== 'undefined' && totalSeconds > 0 ? Helpers.formatDuration(totalSeconds) : '';
+    
+    // --- Now Playing ---
+    let nowPlayingHtml = '';
+    if (currentTrack) {
+      const coverUrl = getProxiedIpfsUrl(currentTrack.cover || currentTrack.coverUrl) || '/placeholder.png';
+      nowPlayingHtml = `
+        <div class="queue-page-section">
+          <div class="queue-page-section-label">Now Playing</div>
+          <div class="queue-page-track now-playing" onclick="if(typeof Player!=='undefined') Player.openReleaseModal()">
+            <div class="queue-page-track-num">
+              <div class="queue-page-playing-bars"><span></span><span></span><span></span></div>
+            </div>
+            <img class="queue-page-track-cover" src="${coverUrl}" alt="" onerror="this.src='/placeholder.png'">
+            <div class="queue-page-track-info">
+              <div class="queue-page-track-title" style="color:var(--accent);">${currentTrack.title || 'Unknown'}</div>
+              <div class="queue-page-track-artist">${currentTrack.artist || 'Unknown'}</div>
+            </div>
+            <div class="queue-page-track-duration">${typeof Helpers !== 'undefined' && currentTrack.duration ? Helpers.formatDuration(currentTrack.duration) : ''}</div>
+          </div>
+        </div>`;
+    }
+    
+    // --- User Queue (with ↑↓ move buttons) ---
+    let userQueueHtml = '';
+    if (this.userQueue.length > 0) {
+      userQueueHtml = `
+        <div class="queue-page-section">
+          <div class="queue-page-section-label">
+            Your Queue
+            <button class="queue-page-clear-btn" onclick="QueueManager.clearUserQueue();QueueManager.renderFullPage();">Clear</button>
+          </div>
+          ${this.userQueue.map((t, i) => this._renderFullPageTrack(t, i, 'user')).join('')}
+        </div>`;
+    }
+    
+    // --- Context Queue ---
+    let contextQueueHtml = '';
+    if (this.contextQueue.length > 0) {
+      const label = this.context.name ? `Next from ${this.context.name}` : 'Next from album';
+      contextQueueHtml = `
+        <div class="queue-page-section">
+          <div class="queue-page-section-label">${label}</div>
+          ${this.contextQueue.map((t, i) => this._renderFullPageTrack(t, i, 'context')).join('')}
+        </div>`;
+    }
+    
+    // --- Auto Queue ---
+    let autoQueueHtml = '';
+    if (this.autoQueue.length > 0) {
+      const max = Math.min(this.autoQueue.length, 50);
+      autoQueueHtml = `
+        <div class="queue-page-section">
+          <div class="queue-page-section-label">Up Next</div>
+          ${this.autoQueue.slice(0, max).map((t, i) => this._renderFullPageTrack(t, i, 'auto')).join('')}
+          ${this.autoQueue.length > max ? `<div class="queue-more-indicator" style="padding:12px 0;">+${this.autoQueue.length - max} more songs</div>` : ''}
+        </div>`;
+    }
+    
+    // --- Empty ---
+    let emptyHtml = '';
+    if (!currentTrack && totalTracks === 0) {
+      emptyHtml = `
+        <div class="empty-state" style="min-height:40vh;">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3;">
+            <path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>
+          </svg>
+          <h3>Queue is empty</h3>
+          <p>Play a song to get started</p>
+        </div>`;
+    }
+    
+    const html = `
+      <div class="queue-page animate-fade-in">
+        <div class="queue-page-header">
+          <div class="queue-page-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:12px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Queue</div>
+            <h1 style="font-size:28px;font-weight:700;margin:0;">Up Next</h1>
+            <p style="color:var(--text-muted);font-size:14px;margin:4px 0 0;">${totalTracks} songs${durationStr ? ' · ' + durationStr : ''}</p>
+          </div>
+        </div>
+        ${nowPlayingHtml}${userQueueHtml}${contextQueueHtml}${autoQueueHtml}${emptyHtml}
+      </div>
+      <style>
+        .queue-page{padding:0 24px 120px;max-width:900px;}
+        .queue-page-header{display:flex;align-items:center;gap:20px;padding:24px 0 32px;}
+        .queue-page-icon{width:80px;height:80px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;}
+        .queue-page-section{margin-bottom:8px;}
+        .queue-page-section-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);padding:16px 0 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-color);margin-bottom:4px;}
+        .queue-page-clear-btn{font-size:12px;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:4px 10px;border-radius:4px;text-transform:none;letter-spacing:normal;}
+        .queue-page-clear-btn:hover{color:var(--accent);background:var(--bg-hover);}
+        .queue-page-track{display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px;cursor:pointer;transition:background 0.15s;}
+        .queue-page-track:hover{background:var(--bg-hover);}
+        .queue-page-track:hover .queue-page-track-remove{opacity:1;}
+        .queue-page-track:hover .queue-page-track-move{opacity:1;}
+        .queue-page-track-num{width:28px;text-align:center;font-size:14px;color:var(--text-muted);flex-shrink:0;}
+        .queue-page-track-cover{width:40px;height:40px;border-radius:4px;object-fit:cover;flex-shrink:0;background:var(--bg-tertiary);}
+        .queue-page-track-info{flex:1;min-width:0;}
+        .queue-page-track-title{font-size:14px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .queue-page-track-artist{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .queue-page-track-duration{font-size:13px;color:var(--text-muted);flex-shrink:0;min-width:40px;text-align:right;}
+        .queue-page-track-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;}
+        .queue-page-track-move{width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text-muted);cursor:pointer;border-radius:4px;opacity:0;transition:all 0.15s;flex-shrink:0;padding:0;}
+        .queue-page-track-move:hover{color:var(--text-primary);background:var(--bg-hover);}
+        .queue-page-track-move:disabled{opacity:0.2!important;cursor:default;pointer-events:none;}
+        .queue-page-track-remove{width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text-muted);cursor:pointer;border-radius:4px;opacity:0;transition:all 0.15s;flex-shrink:0;}
+        .queue-page-track-remove:hover{color:var(--text-primary);background:var(--bg-hover);}
+        .queue-page-playing-bars{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:14px;}
+        .queue-page-playing-bars span{width:3px;background:var(--accent);border-radius:1px;animation:queueBounce 1.2s ease-in-out infinite;}
+        .queue-page-playing-bars span:nth-child(1){animation-delay:0s;height:6px;}
+        .queue-page-playing-bars span:nth-child(2){animation-delay:0.2s;height:12px;}
+        .queue-page-playing-bars span:nth-child(3){animation-delay:0.4s;height:4px;}
+        @keyframes queueBounce{0%,100%{transform:scaleY(0.5);}50%{transform:scaleY(1.2);}}
+        .queue-page-track.now-playing{background:var(--bg-hover);}
+        @media(max-width:640px){
+          .queue-page{padding:0 16px 140px;}
+          .queue-page-header{padding:16px 0 24px;}
+          .queue-page-icon{width:60px;height:60px;}
+          .queue-page-icon svg{width:24px;height:24px;}
+          .queue-page-track-move{opacity:0.6;}
+          .queue-page-track-remove{opacity:0.6;}
+        }
+      </style>`;
+    
+    if (typeof UI !== 'undefined' && UI.renderPage) {
+      UI.renderPage(html);
+    } else {
+      const el = document.getElementById('page-content');
+      if (el) el.innerHTML = html;
+    }
+  },
+  
+  /**
+   * Render a single track row for the full page view
+   * User queue tracks get ↑↓ move buttons; all tracks get ✕ remove
+   */
+  _renderFullPageTrack(track, index, queueType) {
+    const coverUrl = getProxiedIpfsUrl(track.cover || track.coverUrl) || '/placeholder.png';
+    const duration = typeof Helpers !== 'undefined' && track.duration ? Helpers.formatDuration(track.duration) : '';
+    const removeMethod = queueType === 'user' ? 'removeFromUserQueue' : queueType === 'context' ? 'removeFromContextQueue' : 'removeFromAutoQueue';
+    
+    // Move up/down buttons only for user queue
+    let moveButtonsHtml = '';
+    if (queueType === 'user') {
+      const isFirst = index === 0;
+      const isLast = index === this.userQueue.length - 1;
+      moveButtonsHtml = `
+        <button class="queue-page-track-move" onclick="event.stopPropagation();QueueManager.moveUp(${index});" title="Move up" ${isFirst ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="18 15 12 9 6 15"></polyline>
+          </svg>
+        </button>
+        <button class="queue-page-track-move" onclick="event.stopPropagation();QueueManager.moveDown(${index});" title="Move down" ${isLast ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>`;
+    }
+    
+    return `
+      <div class="queue-page-track" onclick="QueueManager._playFromQueue('${queueType}',${index})" data-queue-type="${queueType}" data-queue-index="${index}">
+        <div class="queue-page-track-num">${index + 1}</div>
+        <img class="queue-page-track-cover" src="${coverUrl}" alt="" onerror="this.src='/placeholder.png'">
+        <div class="queue-page-track-info">
+          <div class="queue-page-track-title">${track.title || 'Unknown'}</div>
+          <div class="queue-page-track-artist">${track.artist || 'Unknown'}</div>
+        </div>
+        <div class="queue-page-track-duration">${duration}</div>
+        <div class="queue-page-track-actions">
+          ${moveButtonsHtml}
+          <button class="queue-page-track-remove" onclick="event.stopPropagation();QueueManager.${removeMethod}(${index});QueueManager.renderFullPage();" title="Remove">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>`;
   },
   
   // ============================================
