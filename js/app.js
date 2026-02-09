@@ -1095,6 +1095,23 @@ async function initApp() {
   XamanWallet.init().catch(err => {
     console.error('Xaman init error:', err);
   });
+  
+  // Wait for track cache to populate, then kick queue auto-fill
+  // Player.refreshTrackCache() runs async after releases load — 
+  // this ensures the queue populates even before a song plays
+  if (typeof QueueManager !== 'undefined') {
+    const waitForTracks = setInterval(() => {
+      if (Player.trackCache && Player.trackCache.length > 0) {
+        clearInterval(waitForTracks);
+        if (QueueManager.autoQueue.length === 0) {
+          QueueManager.refreshAutoQueue();
+          QueueManager.renderSidebar();
+        }
+      }
+    }, 500);
+    // Stop checking after 15 seconds (releases may not have loaded)
+    setTimeout(() => clearInterval(waitForTracks), 15000);
+  }
 }
 
 // Start app when DOM is ready
