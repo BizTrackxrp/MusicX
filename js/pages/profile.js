@@ -750,6 +750,10 @@ const ProfilePage = {
           min-width: unset !important;
           letter-spacing: 2px;
         }
+        /* External NFT badge (blue) */
+        .collected-nft-badge.external {
+          background: rgba(59, 130, 246, 0.85);
+        }
         
         /* ============================================
            Copies & Artist Songs Popup (NEW)
@@ -1151,7 +1155,9 @@ const ProfilePage = {
     try {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
-      countEl.textContent = data.nfts?.length || 0;
+     const platformCount = data.nfts?.length || 0;
+      const externalCount = (AppState.externalNfts || []).length;
+      countEl.textContent = platformCount + externalCount;
     } catch (e) {
       countEl.textContent = '?';
     }
@@ -1179,10 +1185,33 @@ const ProfilePage = {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
       
-      // Update the counter
-      if (countEl) countEl.textContent = data.nfts?.length || 0;
+      // Merge external music NFTs into collection
+      const externalNfts = (AppState.externalNfts || []).map(ext => ({
+        nftTokenId: ext.nftTokenId,
+        trackId: ext.id,
+        releaseId: null,
+        trackTitle: ext.title,
+        releaseTitle: ext.collectionName || ext.title,
+        artistName: ext.artist || ext.artistName,
+        artistAddress: ext.issuer || '',
+        coverUrl: ext.cover || ext.coverUrl,
+        audioUrl: ext.audioUrl,
+        duration: ext.duration || null,
+        price: null,
+        totalEditions: null,
+        releaseType: 'single',
+        editionNumber: null,
+        purchaseDate: null,
+        issuer: ext.issuer,
+        isExternal: true,
+      }));
+
+      const allNfts = [...(data.nfts || []), ...externalNfts];
       
-      if (!data.nfts || data.nfts.length === 0) {
+      // Update the counter
+      if (countEl) countEl.textContent = allNfts.length;
+      
+      if (allNfts.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1197,13 +1226,13 @@ const ProfilePage = {
       }
       
       // Process and deduplicate
-      const grouped = this.processCollectionData(data.nfts);
+      const grouped = this.processCollectionData(allNfts);
       const artists = this.getUniqueArtists(grouped);
       
       // Store for filter switching
       this._collectionGrouped = grouped;
       this._collectionArtists = artists;
-      this._collectionRawNfts = data.nfts;
+      this._collectionRawNfts = allNfts;
       this._activeCollectionFilter = 'all';
       
       container.innerHTML = `
@@ -1370,11 +1399,14 @@ const ProfilePage = {
                 </svg>
               </button>
             </div>
-            <div class="collected-nft-badge">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-              Owned
+            <div class="collected-nft-badge${item.copies[0]?._raw?.isExternal ? ' external' : ''}">
+              ${item.copies[0]?._raw?.isExternal ? `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                External
+              ` : `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                Owned
+              `}
             </div>
             ${hasMultiple ? `
               <div class="collection-multi-badge" data-group-idx="${idx}">
@@ -1655,14 +1687,15 @@ const ProfilePage = {
     
     const dropdown = document.createElement('div');
     dropdown.className = 'collection-actions-dropdown';
+    const isExternal = copy._raw?.isExternal;
     dropdown.innerHTML = `
-      <button class="collection-actions-item" data-action="sell">
+      ${!isExternal ? `<button class="collection-actions-item" data-action="sell">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="1" x2="12" y2="23"></line>
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
         </svg>
         Put up for sale
-      </button>
+      </button>` : ''}
       <button class="collection-actions-item" data-action="send">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -1681,7 +1714,8 @@ const ProfilePage = {
     document.body.appendChild(dropdown);
     
     // Sell → reuse existing Modals.showListNFTForSale
-    dropdown.querySelector('[data-action="sell"]').addEventListener('click', (e) => {
+    const sellBtn = dropdown.querySelector('[data-action="sell"]');
+    if (sellBtn) sellBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       dropdown.remove();
       Modals.showListNFTForSale(copy._raw);
