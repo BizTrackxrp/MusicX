@@ -31,6 +31,11 @@ const AppState = {
   playlists: [],
   likedTrackIds: new Set(),
   
+  // External music NFTs (from XRP Cafe, etc)
+  externalNfts: [],
+  externalNftsLoaded: false,
+  externalNftsScanning: false,
+  
   // UI state
   theme: 'dark',
   sidebarOpen: false,
@@ -124,6 +129,9 @@ function clearSession() {
   AppState.profile = null;
   AppState.playlists = [];
   AppState.likedTrackIds.clear();
+  AppState.externalNfts = [];
+  AppState.externalNftsLoaded = false;
+  AppState.externalNftsScanning = false;
   sessionStorage.removeItem(STORAGE_KEYS.session);
 }
 
@@ -188,6 +196,132 @@ function getUserInitial() {
   if (AppState.profile?.name) return AppState.profile.name[0].toUpperCase();
   if (AppState.user?.address) return AppState.user.address[0].toUpperCase();
   return 'X';
+}
+
+
+// =====================================================
+// EXTERNAL MUSIC NFTs
+// =====================================================
+
+/**
+ * Scan wallet for external music NFTs (from XRP Cafe, etc).
+ * Call this after wallet connect — runs in background, doesn't block UI.
+ * Results cached server-side, so second call is instant.
+ */
+async function scanExternalMusicNfts(walletAddress) {
+  if (!walletAddress || AppState.externalNftsScanning) return;
+  
+  AppState.externalNftsScanning = true;
+  
+  try {
+    // Step 1: Get cached results instantly
+    const listRes = await fetch('/api/external-nfts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list', walletAddress }),
+    });
+    const listData = await listRes.json();
+    
+    if (listData.success && listData.nfts?.length > 0) {
+      AppState.externalNfts = listData.nfts.map(normalizeExternalNft);
+      AppState.externalNftsLoaded = true;
+      console.log(`🎵 Loaded ${listData.nfts.length} cached external music NFTs`);
+    }
+    
+    // Step 2: Background scan (API handles cooldown automatically)
+    const scanRes = await fetch('/api/external-nfts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'scan', walletAddress }),
+    });
+    const scanData = await scanRes.json();
+    
+    if (scanData.success) {
+      AppState.externalNfts = (scanData.nfts || []).map(normalizeExternalNft);
+      AppState.externalNftsLoaded = true;
+      
+      if (!scanData.fromCache) {
+        console.log(`🔍 Scan complete: ${scanData.totalFound} music NFTs from ${scanData.totalWalletNfts} total wallet NFTs`);
+      }
+    }
+  } catch (error) {
+    console.error('External NFT scan failed:', error);
+  } finally {
+    AppState.externalNftsScanning = false;
+  }
+}
+
+/**
+ * Force re-scan wallet for external music NFTs (ignores cooldown).
+ * Use for manual "Rescan Wallet" button.
+ */
+async function refreshExternalNfts() {
+  if (!AppState.user?.address) return;
+  
+  AppState.externalNftsScanning = true;
+  
+  try {
+    const res = await fetch('/api/external-nfts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'refresh',
+        walletAddress: AppState.user.address,
+      }),
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      AppState.externalNfts = (data.nfts || []).map(normalizeExternalNft);
+      AppState.externalNftsLoaded = true;
+      console.log(`🔄 Refreshed: ${data.totalFound} music NFTs`);
+    }
+  } catch (error) {
+    console.error('External NFT refresh failed:', error);
+  } finally {
+    AppState.externalNftsScanning = false;
+  }
+}
+
+/**
+ * Normalize a DB record from /api/external-nfts into player-compatible format.
+ * Uses IpfsHelper to resolve ipfs:// URIs through the /api/ipfs/ proxy.
+ */
+function normalizeExternalNft(nft) {
+  const coverUrl = typeof IpfsHelper !== 'undefined'
+    ? IpfsHelper.toProxyUrl(nft.image_url)
+    : nft.image_url;
+  const audioProxyUrl = typeof IpfsHelper !== 'undefined'
+    ? IpfsHelper.toProxyUrl(nft.audio_url)
+    : nft.audio_url;
+  const audioCid = typeof IpfsHelper !== 'undefined'
+    ? IpfsHelper.extractCid(nft.audio_url)
+    : null;
+  
+  return {
+    // Player-compatible fields (same shape as platform tracks)
+    id: nft.id,
+    trackId: nft.id,
+    title: nft.name || 'Unknown Track',
+    artist: nft.artist_name || nft.collection_name || 'Unknown Artist',
+    cover: coverUrl,
+    ipfsHash: audioCid,
+    audioUrl: audioProxyUrl,
+    duration: 0,
+    
+    // External NFT metadata
+    isExternal: true,
+    nftTokenId: nft.nft_token_id,
+    issuer: nft.issuer,
+    collectionName: nft.collection_name,
+    description: nft.description,
+    metadataUri: nft.metadata_uri,
+    
+    // For UI display
+    releaseTitle: nft.collection_name || nft.name,
+    artistName: nft.artist_name || nft.collection_name || 'Unknown Artist',
+    coverUrl: coverUrl,
+  };
 }
 
 
