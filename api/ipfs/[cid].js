@@ -8,9 +8,11 @@
  * - Range requests for audio/video seeking
  * - Proper Content-Length headers
  * - Accept-Ranges header
+ * - Directory-style IPFS paths (e.g., bafyXXX/31.png)
  * 
  * Usage: /api/ipfs/[cid]
  * Example: /api/ipfs/QmZw9HdDHPZrvJwqrhfM9is3YaxSNLYvQUuav15LqMg
+ * Example: /api/ipfs/bafybeiej3o.../31.png (directory-style, handled via rewrite)
  */
 
 const GATEWAYS = [
@@ -25,16 +27,19 @@ const CACHE_DURATION = 86400;
 
 export default async function handler(req, res) {
   // Get CID from path
-  const { cid } = req.query;
+  const { cid, path } = req.query;
   
   if (!cid) {
     return res.status(400).json({ error: 'Missing IPFS CID' });
   }
   
-  // Validate CID format (basic check)
+  // Validate CID format (basic check - just the CID part)
   if (!/^Qm[a-zA-Z0-9]{44}$|^bafy[a-zA-Z0-9]{50,}$/.test(cid)) {
     return res.status(400).json({ error: 'Invalid IPFS CID format' });
   }
+  
+  // Support directory-style paths (e.g., bafybeiej.../31.png)
+  const ipfsPath = path ? `${cid}/${path}` : cid;
   
   // Check for Range header (for seeking in audio/video)
   const rangeHeader = req.headers.range;
@@ -54,7 +59,7 @@ export default async function handler(req, res) {
         fetchHeaders['Range'] = rangeHeader;
       }
       
-      const response = await fetch(`${gateway}${cid}`, {
+      const response = await fetch(`${gateway}${ipfsPath}`, {
         headers: fetchHeaders,
       });
       
