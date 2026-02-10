@@ -280,6 +280,9 @@ const XamanWallet = {
       
       const playlists = await API.getPlaylists(address);
       setPlaylists(playlists);
+
+      // Scan for external music NFTs (runs in background, doesn't block)
+      scanExternalMusicNfts(address);
       
     } catch (error) {
       console.error('Failed to load user data:', error);
