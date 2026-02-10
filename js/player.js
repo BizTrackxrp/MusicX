@@ -441,6 +441,8 @@ const Player = {
     
     const track = AppState.player.currentTrack;
     if (!track) return;
+
+    if (track.isExternal) return;
     
     const trackId = track.trackId || track.id;
     const releaseId = track.releaseId;
