@@ -15,6 +15,10 @@
  * 3. Platform creates sell offer → buyer accepts
  * 4. Platform sends 98% to artist
  * 5. Platform keeps 2%
+ * 
+ * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
+ * that doesn't match any track in the release, we fall back to the first
+ * track instead of returning "Track not found in release" error.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -205,6 +209,32 @@ function isLazyMintRelease(release) {
 }
 
 /**
+ * Resolve the target track from a release.
+ * If trackId is provided but doesn't match, falls back to first track (stale cache fix).
+ * Returns { targetTrack, targetTrackId } or null if no tracks exist.
+ */
+function resolveTargetTrack(release, trackId) {
+  let targetTrack = null;
+  let targetTrackId = trackId;
+
+  if (trackId && release.tracks) {
+    targetTrack = release.tracks.find(t => t.id === trackId);
+    if (!targetTrack) {
+      // FIX: Stale cache fallback - frontend sent an old trackId, use first track
+      console.warn(`⚠️ Track ID "${trackId}" not found in release "${release.id}", falling back to first track`);
+      targetTrack = release.tracks[0] || null;
+      targetTrackId = targetTrack?.id || null;
+    }
+  } else if (release.tracks?.length > 0) {
+    targetTrack = release.tracks[0];
+    targetTrackId = targetTrack.id;
+  }
+
+  if (!targetTrack) return null;
+  return { targetTrack, targetTrackId };
+}
+
+/**
  * PRE-CHECK: Verify NFT availability BEFORE payment
  * Works for both legacy and lazy mint releases
  */
@@ -253,29 +283,17 @@ async function handleAvailabilityCheck(req, res, sql) {
       });
     }
     
-    let targetTrackId = trackId;
-    let targetTrack = null;
+    // Resolve target track (with stale cache fallback)
+    const resolved = resolveTargetTrack(release, trackId);
     
-    if (trackId && release.tracks) {
-      targetTrack = release.tracks.find(t => t.id === trackId);
-      if (!targetTrack) {
-        return res.status(404).json({ 
-          available: false, 
-          error: 'Track not found in release' 
-        });
-      }
-    } else if (release.tracks?.length > 0) {
-      targetTrack = release.tracks[0];
-      targetTrackId = targetTrack.id;
-    }
-    
-    if (!targetTrack) {
+    if (!resolved) {
       return res.status(400).json({ 
         available: false, 
         error: 'No tracks found for this release' 
       });
     }
     
+    const { targetTrack, targetTrackId } = resolved;
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     
     // For LAZY MINT releases: check sold_count vs total_editions
@@ -596,23 +614,14 @@ async function handlePurchase(req, res, sql) {
       return res.status(400).json({ error: 'Release not available for purchase' });
     }
     
-    // Determine target track
-    let targetTrack = null;
-    let targetTrackId = trackId;
+    // Resolve target track (with stale cache fallback)
+    const resolved = resolveTargetTrack(release, trackId);
     
-    if (trackId && release.tracks) {
-      targetTrack = release.tracks.find(t => t.id === trackId);
-      if (!targetTrack) {
-        return res.status(404).json({ error: 'Track not found in release' });
-      }
-    } else if (release.tracks?.length > 0) {
-      targetTrack = release.tracks[0];
-      targetTrackId = targetTrack.id;
-    }
-    
-    if (!targetTrack) {
+    if (!resolved) {
       return res.status(400).json({ error: 'No track found' });
     }
+    
+    const { targetTrack, targetTrackId } = resolved;
     
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
