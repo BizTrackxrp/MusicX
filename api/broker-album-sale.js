@@ -12,6 +12,10 @@
  * - 'mint-single': Mint/find one NFT and create offer (called per track)
  * - 'confirm-single': Confirm single track sale after buyer accepts
  * - 'finalize': Pay artist after all tracks transferred
+ * 
+ * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
+ * that doesn't match any track in the release, we fall back by index or
+ * first track instead of returning "Track not found" error.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -212,6 +216,32 @@ function isReleaseAvailable(release) {
  */
 function isLazyMintRelease(release) {
   return release.mint_fee_paid === true || release.status === 'live';
+}
+
+/**
+ * Resolve a track from a release by trackId, with fallback to trackIndex or first track.
+ * Handles stale/cached trackIds gracefully.
+ * Returns the matched track object, or null if no tracks exist.
+ */
+function resolveTrack(tracks, trackId, trackIndex) {
+  if (!tracks || tracks.length === 0) return null;
+
+  // Try exact match first
+  if (trackId) {
+    const exact = tracks.find(t => t.id === trackId);
+    if (exact) return exact;
+    console.warn(`⚠️ Track ID "${trackId}" not found in release, falling back`);
+  }
+
+  // Fall back to trackIndex if provided
+  if (trackIndex !== undefined && trackIndex !== null && tracks[trackIndex]) {
+    console.warn(`⚠️ Using trackIndex ${trackIndex} as fallback`);
+    return tracks[trackIndex];
+  }
+
+  // Last resort: first track
+  console.warn(`⚠️ No trackId or trackIndex match, using first track`);
+  return tracks[0];
 }
 
 /**
@@ -444,7 +474,7 @@ async function handleMintSingle(req, res, sql) {
   try {
     const { releaseId, trackId, trackIndex, buyerAddress, sessionId } = req.body;
     
-    if (!releaseId || !trackId || !buyerAddress) {
+    if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -455,7 +485,7 @@ async function handleMintSingle(req, res, sql) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
     
-    // Get release and track (including per-track price)
+    // Get release and tracks (including per-track price)
     const releases = await sql`
       SELECT r.*, 
         COALESCE(
@@ -468,6 +498,7 @@ async function handleMintSingle(req, res, sql) {
               'minted_editions', COALESCE(t.minted_editions, 0),
               'price', t.price
             )
+            ORDER BY t.track_number, t.id
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
         ) as tracks
@@ -482,10 +513,16 @@ async function handleMintSingle(req, res, sql) {
       return res.status(404).json({ error: 'Release not found' });
     }
     
-    const track = (release.tracks || []).find(t => t.id === trackId);
+    const tracks = release.tracks || [];
+    
+    // FIX: Resolve track with stale cache fallback
+    const track = resolveTrack(tracks, trackId, trackIndex);
     if (!track) {
-      return res.status(404).json({ error: 'Track not found' });
+      return res.status(400).json({ error: 'No tracks found in release' });
     }
+    
+    // Use the resolved track's actual ID going forward
+    const resolvedTrackId = track.id;
     
     const useLazyMint = isLazyMintRelease(release);
     
@@ -518,7 +555,7 @@ async function handleMintSingle(req, res, sql) {
       // STEP 1: Try to get from nfts table first
       const availableNfts = await sql`
         SELECT * FROM nfts 
-        WHERE track_id = ${trackId} 
+        WHERE track_id = ${resolvedTrackId} 
           AND status = 'available'
         ORDER BY edition_number ASC
         LIMIT 1
@@ -555,7 +592,7 @@ async function handleMintSingle(req, res, sql) {
           nftTokenId = matchingNft.NFTokenID;
           
           const salesCount = await sql`
-            SELECT COUNT(*) as count FROM sales WHERE track_id = ${trackId}
+            SELECT COUNT(*) as count FROM sales WHERE track_id = ${resolvedTrackId}
           `;
           editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
           
@@ -568,7 +605,7 @@ async function handleMintSingle(req, res, sql) {
               id, nft_token_id, release_id, track_id, edition_number,
               owner_address, status, created_at
             ) VALUES (
-              ${nftRecordId}, ${nftTokenId}, ${releaseId}, ${trackId},
+              ${nftRecordId}, ${nftTokenId}, ${releaseId}, ${resolvedTrackId},
               ${editionNumber}, ${platformAddress}, 'pending', NOW()
             )
           `;
@@ -669,7 +706,7 @@ async function handleMintSingle(req, res, sql) {
       return res.json({
         success: true,
         trackIndex,
-        trackId,
+        trackId: resolvedTrackId,
         trackTitle: track.title,
         nftTokenId,
         editionNumber,
@@ -677,7 +714,7 @@ async function handleMintSingle(req, res, sql) {
         didLazyMint,
         pendingSale: {
           releaseId,
-          trackId,
+          trackId: resolvedTrackId,
           buyerAddress,
           artistAddress: release.artist_address,
           nftTokenId,
