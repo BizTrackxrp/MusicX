@@ -860,9 +860,9 @@ const PurchasePage = {
     
     const purchaseResult = await purchaseResponse.json();
     
-    if (!purchaseResult.success) {
+   if (!purchaseResult.success) {
       if (purchaseResult.refunded) {
-        throw new Error('Sold out - payment refunded');
+        throw new Error((purchaseResult.error || 'Purchase failed') + ' - payment refunded');
       }
       throw new Error(purchaseResult.error || 'Purchase failed');
     }
