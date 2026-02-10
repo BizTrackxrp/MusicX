@@ -1484,12 +1484,17 @@ const ProfilePage = {
         const idx = parseInt(btn.dataset.groupIdx);
         const item = grouped[idx];
         if (item && item.audioUrl) {
-          Player.play({
+        Player.playTrack({
             id: item.trackId || item.releaseId,
+            trackId: item.trackId || item.releaseId,
             title: item.title,
             artist: item.artist,
+            cover: this.getImageUrl(item.coverUrl),
             coverUrl: this.getImageUrl(item.coverUrl),
             audioUrl: item.audioUrl,
+            ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(item.audioUrl) : null,
+            releaseId: item.releaseId,
+            isExternal: item.copies[0]?._raw?.isExternal || false,
           });
         }
       });
@@ -1665,12 +1670,17 @@ const ProfilePage = {
         const songIdx = parseInt(row.dataset.songIdx);
         const song = artist.songs[songIdx];
         if (song && song.audioUrl) {
-          Player.play({
+         Player.playTrack({
             id: song.trackId || song.releaseId,
+            trackId: song.trackId || song.releaseId,
             title: song.title,
             artist: song.artist,
+            cover: this.getImageUrl(song.coverUrl),
             coverUrl: this.getImageUrl(song.coverUrl),
             audioUrl: song.audioUrl,
+            ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(song.audioUrl) : null,
+            releaseId: song.releaseId,
+            isExternal: song.copies[0]?._raw?.isExternal || false,
           });
         }
       });
