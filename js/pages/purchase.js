@@ -895,10 +895,14 @@ const PurchasePage = {
     
     updateStatus('Purchase Complete! 🎉', 'NFT is now in your wallet', 'success');
     
-    setTimeout(() => {
+  setTimeout(() => {
+      if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
     }, 2000);
   },
+  
+  /**
+   * Sequential album purchase
   
   /**
    * Sequential album purchase - mint and transfer one track at a time
@@ -1064,7 +1068,8 @@ const PurchasePage = {
       throw new Error('No NFTs were transferred');
     }
     
-    setTimeout(() => {
+   setTimeout(() => {
+      if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
     }, 2000);
   },
