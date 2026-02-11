@@ -11,6 +11,9 @@
  * 
  * PRICE FIX: Uses albumPrice for album purchases (artist-set discount)
  * Falls back to trackPrice * trackCount only if albumPrice not set
+ *
+ * VERIFY FIX: After each NFT accept, verifies on-chain transfer before confirming
+ * Prevents silent failures from being reported as success
  */
 
 const PurchasePage = {
@@ -713,6 +716,9 @@ const PurchasePage = {
     } else if (phase === 'accepting') {
       labelEl.textContent = 'Accepting NFT...';
       trackEl.textContent = `"${trackTitle}"`;
+    } else if (phase === 'verifying') {
+      labelEl.textContent = 'Verifying transfer...';
+      trackEl.textContent = `"${trackTitle}" - checking on-chain`;
     } else if (phase === 'complete') {
       labelEl.textContent = 'NFT received!';
       trackEl.innerHTML = `<span style="color: var(--success)">✓</span> "${trackTitle}"`;
@@ -860,7 +866,7 @@ const PurchasePage = {
     
     const purchaseResult = await purchaseResponse.json();
     
-   if (!purchaseResult.success) {
+    if (!purchaseResult.success) {
       if (purchaseResult.refunded) {
         throw new Error((purchaseResult.error || 'Purchase failed') + ' - payment refunded');
       }
@@ -895,18 +901,16 @@ const PurchasePage = {
     
     updateStatus('Purchase Complete! 🎉', 'NFT is now in your wallet', 'success');
     
-  setTimeout(() => {
+    setTimeout(() => {
       if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
     }, 2000);
   },
   
   /**
-   * Sequential album purchase
-  
-  /**
    * Sequential album purchase - mint and transfer one track at a time
    * PRICE FIX: Uses albumPrice for full album, per-track for partial
+   * VERIFY FIX: Checks on-chain after each accept to catch silent failures
    */
   async processAlbumPurchaseSequential(paymentTxHash, updateStatus) {
     const tracks = this.release.tracks || [];
@@ -935,6 +939,7 @@ const PurchasePage = {
     
     const { sessionId, artistAddress } = initResult;
     const confirmedSales = [];
+    const failedTracks = [];
     
     // Step 2: Process each track sequentially
     for (let i = 0; i < tracks.length; i++) {
@@ -962,16 +967,12 @@ const PurchasePage = {
       const mintResult = await mintResponse.json();
       
       if (!mintResult.success) {
-        if (confirmedSales.length > 0) {
-          console.error(`Track ${i + 1} failed, but got ${confirmedSales.length} NFTs`);
-          updateStatus(
-            `Partial Success`,
-            `Got ${confirmedSales.length}/${trackCount} NFTs. "${track.title}" failed: ${mintResult.error}`,
-            'error'
-          );
-          break;
+        console.error(`Track ${i + 1} mint failed:`, mintResult.error);
+        failedTracks.push(track.title);
+        if (confirmedSales.length === 0 && failedTracks.length === 1) {
+          throw new Error(mintResult.error || `Failed to prepare "${track.title}"`);
         }
-        throw new Error(mintResult.error || `Failed to prepare "${track.title}"`);
+        continue;
       }
       
       // MOBILE FIX: Show button for user to tap before signature
@@ -991,14 +992,60 @@ const PurchasePage = {
       const acceptResult = await XamanWallet.acceptSellOffer(mintResult.offerIndex);
       
       if (!acceptResult.success) {
-        if (confirmedSales.length > 0) {
-          console.error(`Accept failed for track ${i + 1}, but got ${confirmedSales.length} NFTs`);
-          break;
+        console.error(`Accept failed for track ${i + 1}`);
+        failedTracks.push(track.title);
+        if (confirmedSales.length === 0 && failedTracks.length === 1) {
+          throw new Error(`Failed to accept "${track.title}" - check Xaman Requests`);
         }
-        throw new Error(`Failed to accept "${track.title}" - check Xaman Requests`);
+        continue;
       }
       
-      // Confirm this single sale
+      // VERIFY FIX: Check if the NFT actually transferred on-chain
+      this.updateAlbumProgress(i, trackCount, track.title, 'verifying');
+      updateStatus(
+        `Verifying NFT ${i + 1}/${trackCount}`,
+        `"${track.title}" - confirming on-chain...`
+      );
+      
+      let verified = false;
+      for (let v = 0; v < 3; v++) {
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          const verifyResponse = await fetch('/api/broker-album-sale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'verify-transfer',
+              nftTokenId: mintResult.nftTokenId,
+              buyerAddress: AppState.user.address,
+              offerIndex: mintResult.offerIndex,
+            }),
+          });
+          const verifyResult = await verifyResponse.json();
+          if (verifyResult.verified) {
+            verified = true;
+            console.log(`✅ Verified "${track.title}" via ${verifyResult.method}`);
+            break;
+          }
+          console.warn(`⚠️ Not verified "${track.title}", attempt ${v + 1}/3`);
+        } catch (e) {
+          console.warn('Verify failed:', e.message);
+        }
+      }
+      
+      if (!verified) {
+        console.error(`❌ Transfer NOT verified for "${track.title}"`);
+        failedTracks.push(track.title);
+        updateStatus(
+          `Transfer Issue — Track ${i + 1}`,
+          `"${track.title}" may not have transferred. Continuing...`,
+          'error'
+        );
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      
+      // Only confirm sale if verified on-chain
       try {
         await fetch('/api/broker-album-sale', {
           method: 'POST',
@@ -1020,6 +1067,7 @@ const PurchasePage = {
         
       } catch (e) {
         console.error('Failed to confirm sale:', e);
+        // Still count it since we verified on-chain
         confirmedSales.push({
           trackId: track.id,
           trackTitle: track.title,
@@ -1029,7 +1077,6 @@ const PurchasePage = {
     }
     
     // Step 3: Finalize - pay artist
-    // PRICE FIX: Use albumPrice for full album, per-track price for partial
     if (confirmedSales.length > 0) {
       updateStatus('Finalizing', 'Completing purchase...');
       
@@ -1055,23 +1102,23 @@ const PurchasePage = {
       }
     }
     
-    // Success!
+    // Final status
     if (confirmedSales.length === trackCount) {
       updateStatus('Album Purchased! 🎉', `${trackCount} NFTs are now in your wallet`, 'success');
     } else if (confirmedSales.length > 0) {
       updateStatus(
-        'Partial Purchase Complete',
-        `${confirmedSales.length}/${trackCount} NFTs are now in your wallet`,
-        'success'
+        `${confirmedSales.length}/${trackCount} NFTs Received`,
+        `Failed: ${failedTracks.join(', ')}. Contact support for missing tracks.`,
+        confirmedSales.length >= trackCount - 1 ? 'success' : 'error'
       );
     } else {
       throw new Error('No NFTs were transferred');
     }
     
-   setTimeout(() => {
+    setTimeout(() => {
       if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
-    }, 2000);
+    }, 3000);
   },
   
   showError(message) {
