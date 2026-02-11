@@ -1405,7 +1405,7 @@ getUniqueArtists(grouped) {
           songs: []
         };
       }
-      artistMap[key].songCount++;
+    artistMap[key].songCount += item.isAlbum ? (item.ownedTrackCount || 1) : 1;
       artistMap[key].songs.push(item);
     });
     return Object.values(artistMap);
