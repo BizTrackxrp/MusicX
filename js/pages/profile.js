@@ -20,6 +20,7 @@ const ProfilePage = {
   _collectionArtists: [],
   _collectionRawNfts: [],
   _activeCollectionFilter: 'all',
+  _needsRefresh: false,
   
   // Genre definitions (must match modals.js)
   genres: [
@@ -81,7 +82,10 @@ const ProfilePage = {
       if (profile) {
         setProfile(profile);
       }
-      
+      if (this._needsRefresh) {
+        this.activeTab = 'collected';
+        this._needsRefresh = false;
+      }
       this.renderContent();
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -1045,13 +1049,33 @@ const ProfilePage = {
           font-size: 12px;
           line-height: 1.4;
         }
+
+        /* ============================================
+           Album Badge on Collection Cards
+           ============================================ */
+        .collection-album-badge {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          right: 8px;
+          padding: 6px 10px;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          text-align: center;
+          z-index: 2;
+        }
+        .collection-album-badge.complete { color: #00ff88; }
+        .collection-album-badge.partial { color: #f59e0b; }
       </style>
     `;
     
     UI.renderPage(html);
     this.bindEvents();
   },
-  
   // ============================================
   // POSTED TAB (unchanged)
   // ============================================
@@ -1071,8 +1095,7 @@ const ProfilePage = {
         </div>
       `;
     }
-    
-    // Count unlisted releases - now uses isForSale() helper
+   // Count unlisted releases - now uses isForSale() helper
     const unlistedCount = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
     
     return `
@@ -1130,6 +1153,10 @@ const ProfilePage = {
       </div>
     `;
   },
+
+  markNeedsRefresh() {
+    this._needsRefresh = true;
+  },
   
   // ============================================
   // COLLECTED TAB (OVERHAULED)
@@ -1155,7 +1182,7 @@ const ProfilePage = {
     try {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
-     const platformCount = data.nfts?.length || 0;
+      const platformCount = data.nfts?.length || 0;
       const externalCount = (AppState.externalNfts || []).length;
       countEl.textContent = platformCount + externalCount;
     } catch (e) {
@@ -1200,6 +1227,7 @@ const ProfilePage = {
         price: null,
         totalEditions: null,
         releaseType: 'single',
+        totalTracks: 1,
         editionNumber: null,
         purchaseDate: null,
         issuer: ext.issuer,
@@ -1292,47 +1320,81 @@ const ProfilePage = {
   // ============================================
   
   processCollectionData(nfts) {
-    const grouped = {};
+    const releaseGroups = {};
     
     nfts.forEach(nft => {
-      // Group by releaseId (same song = same card)
-      // Fall back to trackId, then nftTokenId for ungroupable items
-      const groupKey = nft.releaseId || nft.trackId || nft.nftTokenId;
+      const releaseId = nft.releaseId || nft.trackId || nft.nftTokenId;
+      const isAlbumOrEP = (nft.releaseType === 'album' || nft.releaseType === 'ep') && (nft.totalTracks || 0) > 1;
       
-      if (!grouped[groupKey]) {
-        grouped[groupKey] = {
+      if (!releaseGroups[releaseId]) {
+        releaseGroups[releaseId] = {
           releaseId: nft.releaseId,
-          trackId: nft.trackId,
-          title: nft.trackTitle || nft.releaseTitle || 'Unknown Track',
+          releaseTitle: nft.releaseTitle || nft.trackTitle || 'Unknown',
           artist: nft.artistName || 'Unknown Artist',
           artistAddress: nft.artistAddress || '',
           coverUrl: nft.coverUrl || '',
-          audioUrl: nft.audioUrl || '',
-          duration: nft.duration || null,
           price: nft.price || null,
+          albumPrice: nft.albumPrice || null,
           totalEditions: nft.totalEditions || null,
           releaseType: nft.releaseType || 'single',
-          copies: []
+          totalTracks: nft.totalTracks || 1,
+          isAlbum: isAlbumOrEP,
+          tracks: {},
+          copies: [],
         };
       }
       
-      grouped[groupKey].copies.push({
-        nftTokenId: nft.nftTokenId,
-        editionNumber: nft.editionNumber || null,
-        purchaseDate: nft.purchaseDate || null,
-        issuer: nft.issuer || null,
-        // Keep full nft data for actions (list for sale, send)
-        _raw: nft
-      });
+      const group = releaseGroups[releaseId];
+      
+      if (group.isAlbum && nft.trackId) {
+        if (!group.tracks[nft.trackId]) {
+          group.tracks[nft.trackId] = {
+            trackId: nft.trackId,
+            trackTitle: nft.trackTitle || 'Unknown Track',
+            trackNumber: nft.trackNumber || null,
+            audioUrl: nft.audioUrl || '',
+            duration: nft.duration || null,
+            copies: [],
+          };
+        }
+        group.tracks[nft.trackId].copies.push({
+          nftTokenId: nft.nftTokenId,
+          editionNumber: nft.editionNumber || null,
+          purchaseDate: nft.purchaseDate || null,
+          issuer: nft.issuer || null,
+          _raw: nft,
+        });
+      } else {
+        group.copies.push({
+          nftTokenId: nft.nftTokenId,
+          editionNumber: nft.editionNumber || null,
+          purchaseDate: nft.purchaseDate || null,
+          issuer: nft.issuer || null,
+          _raw: nft,
+        });
+        if (!group.audioUrl) {
+          group.audioUrl = nft.audioUrl;
+          group.duration = nft.duration;
+          group.trackId = nft.trackId;
+        }
+      }
     });
     
-    return Object.values(grouped);
+    return Object.values(releaseGroups).map(group => {
+      if (group.isAlbum) {
+        group.tracksArray = Object.values(group.tracks).sort((a, b) => {
+          if (a.trackNumber && b.trackNumber) return a.trackNumber - b.trackNumber;
+          return (a.trackTitle || '').localeCompare(b.trackTitle || '');
+        });
+        group.ownedTrackCount = group.tracksArray.length;
+        group.totalNftCount = group.tracksArray.reduce((sum, t) => sum + t.copies.length, 0);
+      }
+      return group;
+    });
   },
-  
-  getUniqueArtists(groupedCollection) {
+getUniqueArtists(grouped) {
     const artistMap = {};
-    
-    groupedCollection.forEach(item => {
+    grouped.forEach(item => {
       const key = item.artistAddress || item.artist;
       if (!artistMap[key]) {
         artistMap[key] = {
@@ -1346,10 +1408,8 @@ const ProfilePage = {
       artistMap[key].songCount++;
       artistMap[key].songs.push(item);
     });
-    
     return Object.values(artistMap);
   },
-  
   // ============================================
   // COLLECTION CARD RENDERERS (NEW)
   // ============================================
@@ -1359,87 +1419,92 @@ const ProfilePage = {
     
     grid.innerHTML = grouped.map((item, idx) => {
       const coverUrl = this.getImageUrl(item.coverUrl);
-      const hasMultiple = item.copies.length > 1;
-      const isOneOfOne = item.totalEditions === 1;
+      const isExternal = item.copies[0]?._raw?.isExternal || false;
       
-      // Edition display for single copy
-      let editionText = '';
-      let editionClass = '';
-      let editionIcon = '';
-      if (!hasMultiple && item.copies[0]) {
-        const copy = item.copies[0];
-        if (isOneOfOne) {
-          editionText = '1/1';
-          editionClass = 'edition-one-of-one';
-          editionIcon = '💎';
-        } else if (copy.editionNumber === 1) {
-          editionText = `#1 of ${item.totalEditions}`;
-          editionClass = 'edition-first';
-          editionIcon = '🥇';
-        } else if (copy.editionNumber && copy.editionNumber <= 10) {
-          editionText = `#${copy.editionNumber} of ${item.totalEditions}`;
-          editionClass = 'edition-early';
-          editionIcon = '⭐';
-        } else if (copy.editionNumber) {
-          editionText = `#${copy.editionNumber} of ${item.totalEditions}`;
-        }
-      }
-      
-      return `
-        <div class="collected-nft-card" data-group-idx="${idx}">
-          <div class="collected-nft-cover">
-            ${item.coverUrl
-              ? `<img src="${coverUrl}" alt="${item.title}" onerror="this.src='/placeholder.png'">`
-              : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
-            }
-            <div class="collected-nft-overlay">
-              <button class="nft-play-btn" data-group-idx="${idx}">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-              </button>
-            </div>
-            <div class="collected-nft-badge${item.copies[0]?._raw?.isExternal ? ' external' : ''}">
-              ${item.copies[0]?._raw?.isExternal ? `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                External
-              ` : `
+      if (item.isAlbum) {
+        const owned = item.ownedTrackCount;
+        const total = item.totalTracks;
+        const isComplete = owned >= total;
+        const typeLabel = item.releaseType === 'ep' ? 'EP' : 'Album';
+        
+        return `
+          <div class="collected-nft-card collection-album-card" data-group-idx="${idx}" style="cursor:pointer;">
+            <div class="collected-nft-cover">
+              ${item.coverUrl
+                ? `<img src="${coverUrl}" alt="${item.releaseTitle}" onerror="this.src='/placeholder.png'">`
+                : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+              }
+              <div class="collected-nft-badge">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                 Owned
-              `}
-            </div>
-            ${hasMultiple ? `
-              <div class="collection-multi-badge" data-group-idx="${idx}">
-                Multiple copies (${item.copies.length})
               </div>
-            ` : editionText ? `
-              <div class="edition-badge ${editionClass}">${editionIcon} ${editionText}</div>
-            ` : ''}
-          </div>
-          <div class="collected-nft-info">
-            <div class="collected-nft-title">${item.title}</div>
-            <div class="collected-nft-artist">${item.artist}</div>
-            <div class="collected-nft-actions">
-              ${hasMultiple ? `
-                <button class="btn btn-sm btn-secondary collection-multi-btn" data-group-idx="${idx}">
-                  ${item.copies.length} copies ▾
-                </button>
-              ` : `
-                <button class="btn btn-sm btn-secondary nft-actions-btn" data-group-idx="${idx}" data-copy-idx="0">
-                  ⋯
-                </button>
-              `}
+              <div class="collection-album-badge ${isComplete ? 'complete' : 'partial'}">
+                ${typeLabel} • ${owned}/${total} tracks owned
+              </div>
+            </div>
+            <div class="collected-nft-info">
+              <div class="collected-nft-title">${item.releaseTitle}</div>
+              <div class="collected-nft-artist">${item.artist}</div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+      } else {
+        const hasMultiple = item.copies.length > 1;
+        const isOneOfOne = item.totalEditions === 1;
+        
+        let editionText = '';
+        let editionClass = '';
+        let editionIcon = '';
+        if (!hasMultiple && item.copies[0]) {
+          const copy = item.copies[0];
+          if (isOneOfOne) { editionText = '1/1'; editionClass = 'edition-one-of-one'; editionIcon = '💎'; }
+          else if (copy.editionNumber === 1) { editionText = `#1 of ${item.totalEditions}`; editionClass = 'edition-first'; editionIcon = '🥇'; }
+          else if (copy.editionNumber && copy.editionNumber <= 10) { editionText = `#${copy.editionNumber} of ${item.totalEditions}`; editionClass = 'edition-early'; editionIcon = '⭐'; }
+          else if (copy.editionNumber) { editionText = `#${copy.editionNumber} of ${item.totalEditions}`; }
+        }
+        
+        return `
+          <div class="collected-nft-card" data-group-idx="${idx}">
+            <div class="collected-nft-cover">
+              ${item.coverUrl
+                ? `<img src="${coverUrl}" alt="${item.releaseTitle}" onerror="this.src='/placeholder.png'">`
+                : `<div class="cover-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+              }
+              <div class="collected-nft-overlay">
+                <button class="nft-play-btn" data-group-idx="${idx}">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </button>
+              </div>
+              <div class="collected-nft-badge${isExternal ? ' external' : ''}">
+                ${isExternal ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> External` : `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> Owned`}
+              </div>
+              ${hasMultiple ? `
+                <div class="collection-multi-badge" data-group-idx="${idx}">${item.copies.length} copies owned</div>
+              ` : editionText ? `
+                <div class="edition-badge ${editionClass}">${editionIcon} ${editionText}</div>
+              ` : ''}
+            </div>
+            <div class="collected-nft-info">
+              <div class="collected-nft-title">${item.releaseTitle || item.copies[0]?._raw?.trackTitle || 'Unknown'}</div>
+              <div class="collected-nft-artist">${item.artist}</div>
+              <div class="collected-nft-actions">
+                ${hasMultiple ? `
+                  <button class="btn btn-sm btn-secondary collection-multi-btn" data-group-idx="${idx}">${item.copies.length} copies ▾</button>
+                ` : `
+                  <button class="btn btn-sm btn-secondary nft-actions-btn" data-group-idx="${idx}" data-copy-idx="0">⋯</button>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }
     }).join('');
     
     this.bindCollectionCardEvents(grouped, grid);
   },
   
   renderSongCards(grouped, grid) {
-    const sorted = [...grouped].sort((a, b) => a.title.localeCompare(b.title));
+    const sorted = [...grouped].sort((a, b) => (a.releaseTitle || '').localeCompare(b.releaseTitle || ''));
     this.renderAllCards(sorted, grid);
   },
   
@@ -1465,7 +1530,6 @@ const ProfilePage = {
         </div>
       `;
     }).join('');
-    
     // Click artist → show their songs popup
     grid.querySelectorAll('.collection-artist-card').forEach(card => {
       card.addEventListener('click', () => {
@@ -1475,19 +1539,28 @@ const ProfilePage = {
       });
     });
   },
-  
   bindCollectionCardEvents(grouped, grid) {
-    // Play buttons
+    // Album card click → album popup
+    grid.querySelectorAll('.collection-album-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const idx = parseInt(card.dataset.groupIdx);
+        const item = grouped[idx];
+        if (item) this.showAlbumPopup(item);
+      });
+    });
+    
+    // Play buttons (singles only)
     grid.querySelectorAll('.nft-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.groupIdx);
         const item = grouped[idx];
         if (item && item.audioUrl) {
-        Player.playTrack({
+          Player.playTrack({
             id: item.trackId || item.releaseId,
             trackId: item.trackId || item.releaseId,
-            title: item.title,
+            title: item.releaseTitle,
             artist: item.artist,
             cover: this.getImageUrl(item.coverUrl),
             coverUrl: this.getImageUrl(item.coverUrl),
@@ -1500,7 +1573,6 @@ const ProfilePage = {
       });
     });
     
-    // Multi-copy badge click → copies popup
     grid.querySelectorAll('.collection-multi-badge').forEach(badge => {
       badge.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1510,7 +1582,6 @@ const ProfilePage = {
       });
     });
     
-    // Multi-copy button below card → copies popup
     grid.querySelectorAll('.collection-multi-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1520,7 +1591,6 @@ const ProfilePage = {
       });
     });
     
-    // Single-copy ⋯ button → actions dropdown
     grid.querySelectorAll('.nft-actions-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1533,7 +1603,127 @@ const ProfilePage = {
       });
     });
   },
-  
+  showAlbumPopup(item) {
+    document.querySelector('.copies-popup-overlay')?.remove();
+    
+    const coverUrl = this.getImageUrl(item.coverUrl);
+    const owned = item.ownedTrackCount;
+    const total = item.totalTracks;
+    const typeLabel = item.releaseType === 'ep' ? 'EP' : 'Album';
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'copies-popup-overlay';
+    overlay.innerHTML = `
+      <div class="copies-popup" style="max-width:480px;">
+        <div class="copies-popup-header" style="display:flex;gap:16px;align-items:center;padding:20px;">
+          <img src="${coverUrl}" style="width:64px;height:64px;border-radius:10px;object-fit:cover;" onerror="this.src='/placeholder.png'" />
+          <div style="flex:1;min-width:0;">
+            <div class="copies-popup-title">${item.releaseTitle}</div>
+            <div class="copies-popup-subtitle">${item.artist} • ${typeLabel} • ${owned}/${total} tracks owned</div>
+          </div>
+          <button class="copies-popup-close" style="position:static;flex-shrink:0;">✕</button>
+        </div>
+        <div class="copies-popup-list">
+          ${item.tracksArray.map((track, i) => {
+            const copyCount = track.copies.length;
+            const firstCopy = track.copies[0];
+            const edNum = firstCopy?.editionNumber;
+            
+            let metaHtml = '';
+            if (copyCount > 1) {
+              metaHtml = `<span style="color:#f59e0b;font-weight:600;cursor:pointer;" class="multi-click" data-track-idx="${i}">${copyCount} copies — tap to see editions</span>`;
+            } else if (edNum) {
+              metaHtml = `<span style="color:#00ff88;font-weight:600;">Edition #${edNum}</span>${item.totalEditions ? ` of ${item.totalEditions}` : ''}`;
+            }
+            
+            return `
+              <div class="album-track-row" data-track-idx="${i}" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;">
+                <div style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.08);color:var(--text-muted);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${track.trackTitle}</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${metaHtml}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                  <button class="album-sell-btn" data-track-idx="${i}" style="padding:6px 12px;border:1px solid rgba(34,197,94,0.4);border-radius:8px;background:rgba(34,197,94,0.1);color:#22c55e;font-size:12px;font-weight:600;cursor:pointer;">Sell</button>
+                  <button class="album-send-btn" data-track-idx="${i}" style="padding:6px 10px;border:1px solid var(--border-color);border-radius:8px;background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    
+    // Play track on row click
+    overlay.querySelectorAll('.album-track-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('.multi-click')) return;
+        const trackIdx = parseInt(row.dataset.trackIdx);
+        const track = item.tracksArray[trackIdx];
+        if (track && track.audioUrl) {
+          Player.playTrack({
+            id: track.trackId, trackId: track.trackId,
+            title: track.trackTitle, artist: item.artist,
+            cover: this.getImageUrl(item.coverUrl), coverUrl: this.getImageUrl(item.coverUrl),
+            audioUrl: track.audioUrl,
+            ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(track.audioUrl) : null,
+            releaseId: item.releaseId,
+          });
+        }
+      });
+    });
+    
+    // Multi-copy click
+    overlay.querySelectorAll('.multi-click').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackIdx = parseInt(el.dataset.trackIdx);
+        const track = item.tracksArray[trackIdx];
+        if (track) {
+          overlay.remove();
+          this.showCopiesPopup({ title: track.trackTitle, releaseTitle: track.trackTitle, artist: item.artist, totalEditions: item.totalEditions, copies: track.copies });
+        }
+      });
+    });
+    
+    // Sell buttons
+    overlay.querySelectorAll('.album-sell-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackIdx = parseInt(btn.dataset.trackIdx);
+        const track = item.tracksArray[trackIdx];
+        if (!track) return;
+        if (track.copies.length > 1) {
+          // TODO: edition picker
+          alert('Multiple copies — pick which edition to sell (coming soon)');
+        } else {
+          Modals.showListNFTForSale(track.copies[0]._raw);
+        }
+      });
+    });
+    
+    // Send buttons
+    overlay.querySelectorAll('.album-send-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackIdx = parseInt(btn.dataset.trackIdx);
+        const track = item.tracksArray[trackIdx];
+        if (!track) return;
+        if (track.copies.length > 1) {
+          alert('Multiple copies — pick which edition to send (coming soon)');
+        } else {
+          this.handleSendNft({ title: track.trackTitle, totalEditions: item.totalEditions }, track.copies[0]);
+        }
+      });
+    });
+  },
   // ============================================
   // COLLECTION POPUPS (NEW)
   // ============================================
@@ -1547,7 +1737,7 @@ const ProfilePage = {
     overlay.innerHTML = `
       <div class="copies-popup">
         <div class="copies-popup-header">
-          <div class="copies-popup-title">${item.title}</div>
+          <div class="copies-popup-title">${item.releaseTitle || item.title}</div>
           <div class="copies-popup-subtitle">${item.artist} — ${item.copies.length} copies</div>
           <button class="copies-popup-close">✕</button>
         </div>
@@ -1606,7 +1796,7 @@ const ProfilePage = {
                 <img class="artist-song-row-cover" src="${coverUrl}" alt="" 
                      onerror="this.src='/placeholder.png'" />
                 <div class="artist-song-row-info">
-                  <div class="artist-song-row-title">${song.title}</div>
+                  <div class="artist-song-row-title">${song.releaseTitle || song.title}</div>
                   <div class="artist-song-row-copies">
                     ${song.copies.length > 1
                       ? `${song.copies.length} copies`
@@ -1673,7 +1863,7 @@ const ProfilePage = {
          Player.playTrack({
             id: song.trackId || song.releaseId,
             trackId: song.trackId || song.releaseId,
-            title: song.title,
+           title: song.releaseTitle || song.title,
             artist: song.artist,
             cover: this.getImageUrl(song.coverUrl),
             coverUrl: this.getImageUrl(song.coverUrl),
@@ -1761,7 +1951,7 @@ const ProfilePage = {
         <div class="copies-popup-header">
           <div class="copies-popup-title">Send NFT</div>
           <div class="copies-popup-subtitle">
-            ${item.title}${copy.editionNumber ? ` — Edition #${copy.editionNumber}` : ''}
+            ${item.releaseTitle || item.title}${copy.editionNumber ? ` — Edition #${copy.editionNumber}` : ''}
           </div>
           <button class="copies-popup-close">✕</button>
         </div>
