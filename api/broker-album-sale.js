@@ -11,6 +11,7 @@
  * - 'init': Initialize purchase, take payment, return track count
  * - 'mint-single': Mint/find one NFT and create offer (called per track)
  * - 'confirm-single': Confirm single track sale after buyer accepts
+ * - 'verify-transfer': Verify NFT actually transferred on-chain
  * - 'finalize': Pay artist after all tracks transferred
  * 
  * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
@@ -245,6 +246,8 @@ export default async function handler(req, res) {
       return handleMintSingle(req, res, sql);
     case 'confirm-single':
       return handleConfirmSingle(req, res, sql);
+    case 'verify-transfer':
+      return handleVerifyTransfer(req, res, sql);
     case 'finalize':
       return handleFinalize(req, res, sql);
     case 'confirm':
@@ -922,6 +925,61 @@ async function handleConfirmSingle(req, res, sql) {
   } catch (error) {
     console.error('Confirm single sale error:', error);
     return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Verify that an NFT was actually transferred to the buyer
+ * Checks if sell offer was consumed OR checks on-chain ownership
+ */
+async function handleVerifyTransfer(req, res, sql) {
+  let client = null;
+  try {
+    const { nftTokenId, buyerAddress, offerIndex } = req.body;
+    
+    if (!nftTokenId || !buyerAddress) {
+      return res.json({ verified: false, error: 'Missing fields' });
+    }
+    
+    client = await connectXRPL();
+    
+    // Method 1: Check if the sell offer still exists
+    if (offerIndex) {
+      try {
+        await client.request({
+          command: 'ledger_entry',
+          index: offerIndex,
+        });
+        // Offer still exists = NOT transferred
+        await disconnectSafe(client);
+        return res.json({ verified: false, reason: 'Offer still exists' });
+      } catch (e) {
+        // Offer not found = consumed = transfer succeeded
+        if (e.data?.error === 'entryNotFound') {
+          await disconnectSafe(client);
+          return res.json({ verified: true, method: 'offer_consumed' });
+        }
+      }
+    }
+    
+    // Method 2: Check NFT ownership directly
+    try {
+      const nftInfo = await client.request({
+        command: 'account_nfts',
+        account: buyerAddress,
+        limit: 400,
+      });
+      const owns = (nftInfo.result.account_nfts || []).some(n => n.NFTokenID === nftTokenId);
+      await disconnectSafe(client);
+      return res.json({ verified: owns, method: 'ownership_check' });
+    } catch (e) {
+      await disconnectSafe(client);
+      return res.json({ verified: false, reason: e.message });
+    }
+    
+  } catch (error) {
+    await disconnectSafe(client);
+    return res.json({ verified: false, error: error.message });
   }
 }
 
