@@ -1806,7 +1806,11 @@ getUniqueArtists(grouped) {
                     }
                   </div>
                 </div>
-                ${song.copies.length > 1 ? `
+              ${song.isAlbum ? `
+                  <button class="artist-song-row-expand" data-song-idx="${idx}">
+                    ${song.ownedTrackCount} tracks ▾
+                  </button>
+                ` : song.copies.length > 1 ? `
                   <button class="artist-song-row-expand" data-song-idx="${idx}">
                     ${song.copies.length} copies ▾
                   </button>
