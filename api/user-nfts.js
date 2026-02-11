@@ -1,10 +1,32 @@
 /**
  * XRP Music - User NFTs API
  * Fetches NFTs owned by a user from XRPL and matches with our releases
+ * 
+ * UPDATED: Returns totalTracks, trackNumber, albumPrice for album grouping
+ * UPDATED: XRPL connection with fallback nodes
  */
 
 import { neon } from '@neondatabase/serverless';
 import * as xrpl from 'xrpl';
+
+const XRPL_NODES = [
+  'wss://xrplcluster.com',
+  'wss://s1.ripple.com',
+  'wss://s2.ripple.com',
+];
+
+async function connectXRPL() {
+  for (const node of XRPL_NODES) {
+    try {
+      const client = new xrpl.Client(node);
+      await client.connect();
+      return client;
+    } catch (e) {
+      console.warn(`Failed to connect to ${node}:`, e.message);
+    }
+  }
+  throw new Error('All XRPL nodes failed');
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,12 +50,9 @@ export default async function handler(req, res) {
   try {
     const sql = neon(process.env.DATABASE_URL);
     
-    // Connect to XRPL
-    const client = new xrpl.Client('wss://xrplcluster.com');
-    await client.connect();
+    const client = await connectXRPL();
     
     try {
-      // Get user's NFTs from XRPL
       const nftsResponse = await client.request({
         command: 'account_nfts',
         account: address,
@@ -46,7 +65,7 @@ export default async function handler(req, res) {
         return res.json({ nfts: [] });
       }
       
-      // Get all tracks with metadata CIDs from our database
+      // Get all tracks with metadata CIDs — includes total_tracks count per release
       const tracks = await sql`
         SELECT 
           t.id as track_id,
@@ -54,14 +73,17 @@ export default async function handler(req, res) {
           t.metadata_cid,
           t.audio_url,
           t.duration,
+          t.track_number,
           r.id as release_id,
           r.title as release_title,
           r.cover_url,
           r.artist_address,
           r.artist_name,
           r.song_price,
+          r.album_price,
           r.type,
-          r.total_editions
+          r.total_editions,
+          (SELECT COUNT(*) FROM tracks t2 WHERE t2.release_id = r.id) as total_tracks
         FROM tracks t
         JOIN releases r ON r.id = t.release_id
         WHERE t.metadata_cid IS NOT NULL
@@ -77,6 +99,7 @@ export default async function handler(req, res) {
           artist_address,
           artist_name,
           song_price,
+          album_price,
           type,
           total_editions
         FROM releases
@@ -92,6 +115,7 @@ export default async function handler(req, res) {
             type: 'track',
             trackId: track.track_id,
             trackTitle: track.track_title,
+            trackNumber: track.track_number || null,
             releaseId: track.release_id,
             releaseTitle: track.release_title,
             coverUrl: track.cover_url,
@@ -100,8 +124,10 @@ export default async function handler(req, res) {
             audioUrl: track.audio_url,
             duration: track.duration,
             price: track.song_price,
+            albumPrice: track.album_price || null,
             releaseType: track.type,
             totalEditions: track.total_editions,
+            totalTracks: parseInt(track.total_tracks) || 1,
           });
         }
       }
@@ -116,8 +142,10 @@ export default async function handler(req, res) {
             artistAddress: release.artist_address,
             artistName: release.artist_name,
             price: release.song_price,
+            albumPrice: release.album_price || null,
             releaseType: release.type,
             totalEditions: release.total_editions,
+            totalTracks: 1,
           });
         }
       }
@@ -125,7 +153,6 @@ export default async function handler(req, res) {
       // Match user's NFTs with our database
       const matchedNFTs = [];
       
-      // Get edition numbers from sales table (purchased NFTs)
       const sales = await sql`
         SELECT nft_token_id, edition_number, release_id, created_at
         FROM sales 
@@ -142,7 +169,6 @@ export default async function handler(req, res) {
         }
       }
       
-      // Also get edition numbers from nfts table (gifted NFTs)
       const nftRecords = await sql`
         SELECT nft_token_id, edition_number, created_at
         FROM nfts
@@ -161,7 +187,6 @@ export default async function handler(req, res) {
       
       for (const nft of userNFTs) {
         try {
-          // Decode URI from hex
           const uri = nft.URI ? xrpl.convertHexToString(nft.URI) : null;
           
           if (uri && uri.startsWith('ipfs://')) {
@@ -183,7 +208,6 @@ export default async function handler(req, res) {
             }
           }
         } catch (e) {
-          // Skip NFTs we can't decode
           console.error('Error decoding NFT:', e);
         }
       }
