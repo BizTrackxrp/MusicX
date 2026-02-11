@@ -1324,7 +1324,7 @@ const ProfilePage = {
     
     nfts.forEach(nft => {
       const releaseId = nft.releaseId || nft.trackId || nft.nftTokenId;
-      const isAlbumOrEP = (nft.releaseType === 'album' || nft.releaseType === 'ep') && (nft.totalTracks || 0) > 1;
+     const isAlbumOrEP = (nft.totalTracks || 0) > 1;
       
       if (!releaseGroups[releaseId]) {
         releaseGroups[releaseId] = {
