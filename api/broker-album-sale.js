@@ -44,7 +44,7 @@ async function connectXRPL(maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     for (const node of XRPL_NODES) {
       try {
-        const client = new xrpl.Client(node, { connectionTimeout: 10000 });
+        const client = new xrpl.Client(node, { connectionTimeout: 10000, timeout: 10000 });
         await client.connect();
         console.log(`✅ XRPL connected: ${node}`);
         return client;
@@ -671,18 +671,31 @@ async function handleMintSingle(req, res, sql) {
         }
         
       } else {
-        // STEP 3: Lazy mint - create NFT on-demand
+        // STEP 3: Lazy mint - create NFT on-demand (with retry)
         console.log('🎵 Lazy minting NFT for track:', track.title);
         
-        client = await ensureConnected(client);
-        const mintResult = await mintSingleNFT(
-          client, 
-          platformWallet, 
-          platformAddress, 
-          track, 
-          release, 
-          sql
-        );
+        let mintResult = null;
+        for (let mintAttempt = 0; mintAttempt < 3; mintAttempt++) {
+          try {
+            client = await ensureConnected(client);
+            console.log(`🔨 Mint attempt ${mintAttempt + 1}...`);
+            mintResult = await mintSingleNFT(
+              client, 
+              platformWallet, 
+              platformAddress, 
+              track, 
+              release, 
+              sql
+            );
+            break; // Success
+          } catch (mintError) {
+            console.warn(`⚠️ Mint attempt ${mintAttempt + 1} failed:`, mintError.message);
+            await disconnectSafe(client);
+            client = null;
+            if (mintAttempt === 2) throw mintError;
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
         
         nftTokenId = mintResult.nftTokenId;
         editionNumber = mintResult.editionNumber;
@@ -722,21 +735,32 @@ async function handleMintSingle(req, res, sql) {
         // No existing offers, that's fine
       }
       
-      // Ensure still connected before creating offer
-      client = await ensureConnected(client);
-      
-      // STEP 5: Create sell offer for buyer
-      const createOfferTx = await client.autofill({
-        TransactionType: 'NFTokenCreateOffer',
-        Account: platformAddress,
-        NFTokenID: nftTokenId,
-        Amount: '1', // 1 drop (buyer already paid)
-        Flags: 1, // tfSellNFToken
-        Destination: buyerAddress,
-      });
-      
-      const signedOffer = platformWallet.sign(createOfferTx);
-      const offerResult = await client.submitAndWait(signedOffer.tx_blob);
+      // STEP 5: Create sell offer for buyer (with retry on timeout)
+      let offerResult = null;
+      for (let offerAttempt = 0; offerAttempt < 3; offerAttempt++) {
+        try {
+          client = await ensureConnected(client);
+          console.log(`📝 Creating sell offer (attempt ${offerAttempt + 1})...`);
+          const createOfferTx = await client.autofill({
+            TransactionType: 'NFTokenCreateOffer',
+            Account: platformAddress,
+            NFTokenID: nftTokenId,
+            Amount: '1', // 1 drop (buyer already paid)
+            Flags: 1, // tfSellNFToken
+            Destination: buyerAddress,
+          });
+          
+          const signedOffer = platformWallet.sign(createOfferTx);
+          offerResult = await client.submitAndWait(signedOffer.tx_blob);
+          break; // Success - exit retry loop
+        } catch (offerError) {
+          console.warn(`⚠️ Offer attempt ${offerAttempt + 1} failed:`, offerError.message);
+          await disconnectSafe(client);
+          client = null;
+          if (offerAttempt === 2) throw offerError; // Last attempt, rethrow
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
       
       if (offerResult.result.meta.TransactionResult !== 'tesSUCCESS') {
         // Reset NFT status
