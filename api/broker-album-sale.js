@@ -16,6 +16,9 @@
  * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
  * that doesn't match any track in the release, we fall back by index or
  * first track instead of returning "Track not found" error.
+ * 
+ * FEB 2026 FIX: XRPL websocket reconnection - prevents DisconnectedError
+ * on tracks 5-6 of album purchases by using fallback nodes and auto-reconnect.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -26,6 +29,52 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // 🤖 Buy bot animated gif - host this on your server and update the URL
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
+
+// XRPL nodes to try (fallback if primary drops)
+const XRPL_NODES = [
+  'wss://xrplcluster.com',
+  'wss://s1.ripple.com',
+  'wss://s2.ripple.com',
+];
+
+/**
+ * Connect to XRPL with fallback nodes and retry
+ */
+async function connectXRPL(maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (const node of XRPL_NODES) {
+      try {
+        const client = new xrpl.Client(node, { connectionTimeout: 10000 });
+        await client.connect();
+        console.log(`✅ XRPL connected: ${node}`);
+        return client;
+      } catch (e) {
+        console.warn(`⚠️ Failed to connect to ${node}:`, e.message);
+      }
+    }
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  throw new Error('Failed to connect to any XRPL node');
+}
+
+/**
+ * Safely disconnect XRPL client (never throws)
+ */
+async function disconnectSafe(client) {
+  try { if (client?.isConnected()) await client.disconnect(); } catch (e) { /* ignore */ }
+}
+
+/**
+ * Ensure client is connected, reconnect if not
+ */
+async function ensureConnected(client) {
+  if (client && client.isConnected()) return client;
+  console.log('🔌 XRPL disconnected, reconnecting...');
+  await disconnectSafe(client);
+  return await connectXRPL(1);
+}
 
 /**
  * Send artist notification for a sale
@@ -315,15 +364,14 @@ async function handleAvailabilityCheck(req, res, sql) {
       let platformNFTs = [];
       
       try {
-        const client = new xrpl.Client('wss://xrplcluster.com');
-        await client.connect();
+        const client = await connectXRPL();
         const nftsResponse = await client.request({
           command: 'account_nfts',
           account: platformAddress,
           limit: 400,
         });
         platformNFTs = nftsResponse.result.account_nfts || [];
-        await client.disconnect();
+        await disconnectSafe(client);
       } catch (e) {
         console.error('Failed to get platform NFTs:', e.message);
       }
@@ -469,8 +517,13 @@ async function handleInitPurchase(req, res, sql) {
 /**
  * Mint/find a single NFT and create sell offer
  * Called once per track in the album
+ * 
+ * FEB 2026 FIX: Uses connectXRPL() with fallback nodes and ensureConnected()
+ * before each XRPL operation to prevent DisconnectedError on later tracks.
  */
 async function handleMintSingle(req, res, sql) {
+  let client = null;
+  
   try {
     const { releaseId, trackId, trackIndex, buyerAddress, sessionId } = req.body;
     
@@ -540,9 +593,8 @@ async function handleMintSingle(req, res, sql) {
       }
     }
     
-    // Connect to XRPL
-    const client = new xrpl.Client('wss://xrplcluster.com');
-    await client.connect();
+    // Connect to XRPL (with fallback nodes)
+    client = await connectXRPL();
     
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
     
@@ -574,10 +626,11 @@ async function handleMintSingle(req, res, sql) {
       } else if (!useLazyMint) {
         // STEP 2: Legacy - check on-chain
         if (!track.metadata_cid) {
-          await client.disconnect();
+          await disconnectSafe(client);
           return res.status(400).json({ error: `Track "${track.title}" is missing metadata` });
         }
         
+        client = await ensureConnected(client);
         const nftsResponse = await client.request({
           command: 'account_nfts',
           account: platformAddress,
@@ -610,7 +663,7 @@ async function handleMintSingle(req, res, sql) {
             )
           `;
         } else {
-          await client.disconnect();
+          await disconnectSafe(client);
           return res.status(400).json({ 
             error: `NFT not available for track: ${track.title}`,
             soldOut: true 
@@ -621,6 +674,7 @@ async function handleMintSingle(req, res, sql) {
         // STEP 3: Lazy mint - create NFT on-demand
         console.log('🎵 Lazy minting NFT for track:', track.title);
         
+        client = await ensureConnected(client);
         const mintResult = await mintSingleNFT(
           client, 
           platformWallet, 
@@ -637,10 +691,13 @@ async function handleMintSingle(req, res, sql) {
         
         console.log('✅ Lazy minted NFT:', nftTokenId, 'Edition:', editionNumber);
         
-        // Wait for ledger to settle
+        // Wait for ledger to settle (increased from 1s to 2s)
         console.log('⏳ Waiting for ledger to settle...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
+      
+      // Ensure still connected before offer operations
+      client = await ensureConnected(client);
       
       // STEP 4: Cancel any existing offers for this NFT
       try {
@@ -651,6 +708,7 @@ async function handleMintSingle(req, res, sql) {
         
         for (const offer of (offersResponse.result.offers || [])) {
           if (offer.owner === platformAddress) {
+            client = await ensureConnected(client);
             const cancelTx = await client.autofill({
               TransactionType: 'NFTokenCancelOffer',
               Account: platformAddress,
@@ -663,6 +721,9 @@ async function handleMintSingle(req, res, sql) {
       } catch (e) {
         // No existing offers, that's fine
       }
+      
+      // Ensure still connected before creating offer
+      client = await ensureConnected(client);
       
       // STEP 5: Create sell offer for buyer
       const createOfferTx = await client.autofill({
@@ -682,7 +743,7 @@ async function handleMintSingle(req, res, sql) {
         if (nftRecordId) {
           await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftRecordId}`;
         }
-        await client.disconnect();
+        await disconnectSafe(client);
         return res.status(400).json({ 
           error: `Failed to create offer for: ${track.title}` 
         });
@@ -697,7 +758,7 @@ async function handleMintSingle(req, res, sql) {
         }
       }
       
-      await client.disconnect();
+      await disconnectSafe(client);
       
       const platformFee = trackPrice * (PLATFORM_FEE_PERCENT / 100);
       
@@ -733,12 +794,13 @@ async function handleMintSingle(req, res, sql) {
         await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftRecordId}`;
       }
       
-      await client.disconnect();
+      await disconnectSafe(client);
       return res.status(500).json({ error: innerError.message });
     }
     
   } catch (error) {
     console.error('Mint single error:', error);
+    await disconnectSafe(client);
     return res.status(500).json({ error: error.message });
   }
 }
@@ -860,8 +922,7 @@ async function handleFinalize(req, res, sql) {
     let paymentTxHash = null;
     
     if (artistPayment > 0) {
-      const client = new xrpl.Client('wss://xrplcluster.com');
-      await client.connect();
+      const client = await connectXRPL();
       
       const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
       
@@ -882,7 +943,7 @@ async function handleFinalize(req, res, sql) {
       const paymentResult = await client.submitAndWait(signedPayment.tx_blob);
       paymentTxHash = paymentResult.result.hash;
       
-      await client.disconnect();
+      await disconnectSafe(client);
       
       console.log('💰 Paid artist:', artistPayment, 'XRP for', trackCount, 'tracks');
     }
