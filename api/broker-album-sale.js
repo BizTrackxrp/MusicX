@@ -36,24 +36,32 @@ const XRPL_NODES = [
   'wss://s1.ripple.com',
   'wss://s2.ripple.com',
 ];
+let xrplNodeIndex = 0; // Rotate starting node across calls
 
 /**
  * Connect to XRPL with fallback nodes and retry
+ * Rotates starting node so retries hit different servers
+ * Verifies connection with a ping before returning
  */
 async function connectXRPL(maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    for (const node of XRPL_NODES) {
+    for (let i = 0; i < XRPL_NODES.length; i++) {
+      const node = XRPL_NODES[(xrplNodeIndex + i) % XRPL_NODES.length];
       try {
-        const client = new xrpl.Client(node, { connectionTimeout: 10000, timeout: 10000 });
+        const client = new xrpl.Client(node, { connectionTimeout: 8000, timeout: 10000 });
         await client.connect();
-        console.log(`✅ XRPL connected: ${node}`);
+        // Verify the connection actually works with a quick ping
+        await client.request({ command: 'ping' });
+        xrplNodeIndex = (xrplNodeIndex + i + 1) % XRPL_NODES.length; // Next call starts at next node
+        console.log(`✅ XRPL connected + verified: ${node}`);
         return client;
       } catch (e) {
-        console.warn(`⚠️ Failed to connect to ${node}:`, e.message);
+        console.warn(`⚠️ Failed ${node}:`, e.message);
+        try { await client?.disconnect(); } catch (_) {}
       }
     }
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
   throw new Error('Failed to connect to any XRPL node');
@@ -677,6 +685,23 @@ async function handleMintSingle(req, res, sql) {
         let mintResult = null;
         for (let mintAttempt = 0; mintAttempt < 3; mintAttempt++) {
           try {
+            // Before retrying, check if previous attempt already minted (DB insert may have failed)
+            if (mintAttempt > 0) {
+              const existing = await sql`
+                SELECT * FROM nfts WHERE track_id = ${resolvedTrackId} AND status = 'pending' 
+                AND owner_address = ${platformAddress} LIMIT 1
+              `;
+              if (existing.length > 0) {
+                console.log(`♻️ Found existing pending NFT from previous attempt: ${existing[0].nft_token_id}`);
+                mintResult = {
+                  nftTokenId: existing[0].nft_token_id,
+                  editionNumber: existing[0].edition_number,
+                  nftRecordId: existing[0].id,
+                };
+                break;
+              }
+            }
+            
             client = await ensureConnected(client);
             console.log(`🔨 Mint attempt ${mintAttempt + 1}...`);
             mintResult = await mintSingleNFT(
@@ -1140,7 +1165,8 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   
   const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  await sql`
+  // Use ON CONFLICT to handle retries where mint succeeded but DB insert failed
+  const inserted = await sql`
     INSERT INTO nfts (
       id, nft_token_id, release_id, track_id, edition_number,
       owner_address, status, created_at
@@ -1148,7 +1174,11 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
       ${nftId}, ${nftTokenId}, ${release.id}, ${track.id},
       ${editionNumber}, ${platformAddress}, 'pending', NOW()
     )
+    ON CONFLICT (nft_token_id) DO UPDATE SET status = 'pending'
+    RETURNING id
   `;
+  
+  const finalNftId = inserted[0]?.id || nftId;
   
   await sql`
     UPDATE tracks 
@@ -1165,7 +1195,7 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   return {
     nftTokenId,
     editionNumber,
-    nftRecordId: nftId,
+    nftRecordId: finalNftId,
   };
 }
 
