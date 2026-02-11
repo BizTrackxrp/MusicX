@@ -3,6 +3,8 @@
  * /api/playlists
  * 
  * Handles playlist CRUD, track management, and playlist likes
+ * UPDATED: releaseId optional for external NFT tracks
+ * UPDATED: LEFT JOIN releases for external tracks without release records
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -81,8 +83,8 @@ export default async function handler(req, res) {
               r.artist_address,
               r.type as release_type
             FROM playlist_tracks pt
-            JOIN tracks t ON pt.track_id = t.id
-            JOIN releases r ON pt.release_id = r.id
+            LEFT JOIN tracks t ON pt.track_id = t.id
+            LEFT JOIN releases r ON pt.release_id = r.id
             WHERE pt.playlist_id = ${id}
             ORDER BY pt.position ASC
           `;
@@ -109,7 +111,7 @@ export default async function handler(req, res) {
           const covers = await sql`
             SELECT r.cover_url
             FROM playlist_tracks pt
-            JOIN releases r ON pt.release_id = r.id
+            LEFT JOIN releases r ON pt.release_id = r.id
             WHERE pt.playlist_id = ${playlist.id}
             ORDER BY pt.position ASC
             LIMIT 4
@@ -149,7 +151,7 @@ export default async function handler(req, res) {
           const covers = await sql`
             SELECT r.cover_url
             FROM playlist_tracks pt
-            JOIN releases r ON pt.release_id = r.id
+            LEFT JOIN releases r ON pt.release_id = r.id
             WHERE pt.playlist_id = ${playlist.id}
             ORDER BY pt.position ASC
             LIMIT 4
@@ -185,8 +187,8 @@ export default async function handler(req, res) {
       
       // Add track to playlist
       if (action === 'addTrack') {
-        if (!playlistId || !ownerAddress || !trackId || !releaseId) {
-          return res.status(400).json({ success: false, error: 'Playlist ID, owner, track ID, and release ID required' });
+        if (!playlistId || !ownerAddress || !trackId) {
+          return res.status(400).json({ success: false, error: 'Playlist ID, owner, and track ID required' });
         }
         
         // Verify ownership
@@ -216,7 +218,7 @@ export default async function handler(req, res) {
         
         await sql`
           INSERT INTO playlist_tracks (id, playlist_id, track_id, release_id, position, added_at)
-          VALUES (${id}, ${playlistId}, ${trackId}, ${releaseId}, ${nextPosition}, NOW())
+          VALUES (${id}, ${playlistId}, ${trackId}, ${releaseId || null}, ${nextPosition}, NOW())
         `;
         
         // Update playlist updated_at
