@@ -1839,7 +1839,11 @@ getUniqueArtists(grouped) {
         const song = artist.songs[songIdx];
         if (song) {
           overlay.remove();
-          this.showCopiesPopup(song);
+          if (song.isAlbum) {
+            this.showAlbumPopup(song);
+          } else {
+            this.showCopiesPopup(song);
+          }
         }
       });
     });
