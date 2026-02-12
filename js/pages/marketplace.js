@@ -7,33 +7,30 @@
  * 2. Newest Drops - Most recently released
  * 3. Get Them Before They're Gone - Fewest copies remaining
  * 
- * UPDATED: View All buttons now navigate to Analytics page
+ * FEATURES:
+ * - MV badges on releases with music videos
+ * - Primary market (from artists) and Secondary market (resale)
+ * - View All navigates to Analytics page
  */
 
 const MarketplacePage = {
   releases: [],
   secondaryListings: [],
-  marketType: 'primary', // 'primary' or 'secondary'
+  marketType: 'primary',
   
-  // Helper to get proxied image URL
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
-    if (typeof IpfsHelper !== 'undefined') {
-      return IpfsHelper.toProxyUrl(url);
-    }
-    return url;
+    return typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(url) : url;
   },
   
-  /**
-   * Check if a release is "for sale" (available for purchase)
-   */
   isForSale(release) {
     return release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
   },
   
-  /**
-   * Render marketplace page
-   */
+  hasVideo(release) {
+    return release?.tracks?.some(t => t.videoUrl || t.videoCid);
+  },
+  
   async render() {
     UI.showLoading();
     
@@ -57,55 +54,36 @@ const MarketplacePage = {
     }
   },
   
-  /**
-   * Get releases that are for sale and have availability
-   */
   getAvailableReleases() {
     return this.releases.filter(r => 
       this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0
     );
   },
   
-  /**
-   * Get top selling releases (most sales)
-   */
   getTopSelling(limit = 5) {
     return [...this.getAvailableReleases()]
       .sort((a, b) => (b.soldEditions || 0) - (a.soldEditions || 0))
       .slice(0, limit);
   },
   
-  /**
-   * Get newest drops (most recent first)
-   */
   getNewestDrops(limit = 5) {
     return [...this.getAvailableReleases()]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, limit);
   },
   
-  /**
-   * Get scarce releases (fewest copies remaining)
-   */
   getScarceReleases(limit = 5) {
     return [...this.getAvailableReleases()]
-      .map(r => ({
-        ...r,
-        remaining: r.totalEditions - r.soldEditions
-      }))
+      .map(r => ({ ...r, remaining: r.totalEditions - r.soldEditions }))
       .sort((a, b) => a.remaining - b.remaining)
       .slice(0, limit);
   },
   
-  /**
-   * Render main content
-   */
   renderContent() {
     const available = this.getAvailableReleases();
     
     const html = `
       <div class="marketplace-page animate-fade-in">
-        <!-- Header -->
         <div class="marketplace-header">
           <h2 class="section-title">NFT Marketplace</h2>
           <div class="market-type-tabs">
@@ -134,23 +112,19 @@ const MarketplacePage = {
         ${this.marketType === 'primary' ? this.renderPrimaryMarket() : this.renderSecondaryMarket()}
       </div>
       
-      ${this.getMarketplaceStyles()}
+      ${this.getStyles()}
     `;
     
     UI.renderPage(html);
     this.bindEvents();
   },
   
-  /**
-   * Render primary market with featured sections
-   */
   renderPrimaryMarket() {
     const topSelling = this.getTopSelling(5);
     const newestDrops = this.getNewestDrops(5);
     const scarce = this.getScarceReleases(5);
     
     return `
-      <!-- Top Selling Section -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
@@ -175,7 +149,6 @@ const MarketplacePage = {
         </div>
       </section>
       
-      <!-- Newest Drops Section -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
@@ -200,7 +173,6 @@ const MarketplacePage = {
         </div>
       </section>
       
-      <!-- Scarce Section -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
@@ -227,22 +199,19 @@ const MarketplacePage = {
     `;
   },
   
-  /**
-   * Render a featured card for the grid sections
-   */
   renderFeaturedCard(release, rank, type) {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
     const coverUrl = this.getImageUrl(release.coverUrl);
     const soldPercent = Math.round((release.soldEditions / release.totalEditions) * 100);
+    const showMV = this.hasVideo(release);
     
-    // Badge content based on type
     let badge = '';
     if (type === 'sales') {
       badge = `<span class="card-badge sales">${release.soldEditions} sold</span>`;
     } else if (type === 'date') {
       const date = new Date(release.createdAt);
-      const isNew = (Date.now() - date.getTime()) < 7 * 24 * 60 * 60 * 1000; // 7 days
+      const isNew = (Date.now() - date.getTime()) < 7 * 24 * 60 * 60 * 1000;
       badge = `<span class="card-badge date ${isNew ? 'new' : ''}">${isNew ? 'NEW' : this.formatDate(date)}</span>`;
     } else if (type === 'scarce') {
       const urgency = available <= 5 ? 'critical' : available <= 20 ? 'low' : '';
@@ -258,6 +227,7 @@ const MarketplacePage = {
           }
           <span class="rank-badge rank-${rank}">#${rank}</span>
           ${badge}
+          ${showMV ? '<span class="mv-badge">▶ MV</span>' : ''}
           <div class="card-overlay">
             <button class="play-btn" data-release-id="${release.id}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -283,9 +253,6 @@ const MarketplacePage = {
     `;
   },
   
-  /**
-   * Render secondary market
-   */
   renderSecondaryMarket() {
     return `
       <div style="margin-bottom: 24px;">
@@ -298,9 +265,6 @@ const MarketplacePage = {
     `;
   },
   
-  /**
-   * Render a secondary listing card
-   */
   renderSecondaryCard(listing) {
     const title = listing.track_title || listing.release_title || 'NFT';
     const artist = listing.artist_name || 'Unknown Artist';
@@ -329,9 +293,6 @@ const MarketplacePage = {
     `;
   },
   
-  /**
-   * Format date for display
-   */
   formatDate(date) {
     const now = new Date();
     const diff = now - date;
@@ -344,9 +305,6 @@ const MarketplacePage = {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   },
   
-  /**
-   * Render empty state
-   */
   renderEmptyState(message) {
     return `
       <div class="empty-state">
@@ -361,11 +319,8 @@ const MarketplacePage = {
     `;
   },
   
-  /**
-   * Render error state
-   */
   renderError() {
-    const html = `
+    UI.renderPage(`
       <div class="empty-state" style="min-height: 60vh;">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
           <circle cx="12" cy="12" r="10"></circle>
@@ -376,14 +331,63 @@ const MarketplacePage = {
         <p>There was an error loading the marketplace. Please try again.</p>
         <button class="btn btn-primary" style="margin-top: 16px;" onclick="MarketplacePage.render()">Retry</button>
       </div>
-    `;
-    UI.renderPage(html);
+    `);
   },
   
-  /**
-   * Get all styles
-   */
-  getMarketplaceStyles() {
+  bindEvents() {
+    document.querySelectorAll('.market-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.marketType = btn.dataset.market;
+        this.renderContent();
+      });
+    });
+    
+    document.querySelectorAll('.view-all-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sort = btn.dataset.sort;
+        Router.navigate('analytics', { sort: sort, period: '7d' });
+      });
+    });
+    
+    document.querySelectorAll('.featured-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.play-btn')) return;
+        const releaseId = card.dataset.releaseId;
+        const release = this.releases.find(r => r.id === releaseId);
+        if (release) Modals.showRelease(release);
+      });
+    });
+    
+    document.querySelectorAll('.play-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const releaseId = btn.dataset.releaseId;
+        const release = this.releases.find(r => r.id === releaseId);
+        if (release?.tracks?.length > 0) {
+          StreamPage.playRelease(release);
+        }
+      });
+    });
+    
+    document.querySelectorAll('.secondary-buy-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const listing = JSON.parse(btn.dataset.listing);
+        Modals.showSecondaryPurchase(listing);
+      });
+    });
+    
+    document.getElementById('secondary-search')?.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('.secondary-listing-card').forEach(card => {
+        const title = card.querySelector('.secondary-title')?.textContent.toLowerCase() || '';
+        const artist = card.querySelector('.secondary-artist')?.textContent.toLowerCase() || '';
+        card.style.display = (title.includes(query) || artist.includes(query)) ? '' : 'none';
+      });
+    });
+  },
+  
+  getStyles() {
     return `
       <style>
         .marketplace-header {
@@ -394,11 +398,7 @@ const MarketplacePage = {
           gap: 16px;
           margin-bottom: 32px;
         }
-        
-        .market-type-tabs {
-          display: flex;
-          gap: 12px;
-        }
+        .market-type-tabs { display: flex; gap: 12px; }
         .market-type-btn {
           display: flex;
           align-items: center;
@@ -413,139 +413,47 @@ const MarketplacePage = {
           cursor: pointer;
           transition: all 150ms ease;
         }
-        .market-type-btn:hover {
-          border-color: var(--accent);
-          color: var(--text-primary);
-        }
-        .market-type-btn.active {
-          border-color: var(--accent);
-          background: rgba(59, 130, 246, 0.1);
-          color: var(--accent);
-        }
-        .market-count {
-          padding: 2px 8px;
-          background: var(--bg-hover);
-          border-radius: 100px;
-          font-size: 12px;
-        }
-        .market-type-btn.active .market-count {
-          background: var(--accent);
-          color: white;
-        }
+        .market-type-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+        .market-type-btn.active { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+        .market-count { padding: 2px 8px; background: var(--bg-hover); border-radius: 100px; font-size: 12px; }
+        .market-type-btn.active .market-count { background: var(--accent); color: white; }
         
-        /* Featured Sections */
-        .featured-section {
-          margin-bottom: 40px;
-        }
-        .section-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 20px;
-        }
-        .section-title-group {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
+        .featured-section { margin-bottom: 40px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .section-title-group { display: flex; align-items: center; gap: 12px; }
         .section-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
+          width: 48px; height: 48px; border-radius: 12px;
+          display: flex; align-items: center; justify-content: center; font-size: 24px;
         }
-        .section-icon.hot {
-          background: linear-gradient(135deg, #f97316, #ef4444);
-        }
-        .section-icon.new {
-          background: linear-gradient(135deg, #8b5cf6, #6366f1);
-        }
-        .section-icon.scarce {
-          background: linear-gradient(135deg, #eab308, #f59e0b);
-        }
-        .section-name {
-          font-size: 18px;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0;
-        }
-        .section-subtitle {
-          font-size: 13px;
-          color: var(--text-muted);
-          margin: 2px 0 0 0;
-        }
+        .section-icon.hot { background: linear-gradient(135deg, #f97316, #ef4444); }
+        .section-icon.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
+        .section-icon.scarce { background: linear-gradient(135deg, #eab308, #f59e0b); }
+        .section-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
+        .section-subtitle { font-size: 13px; color: var(--text-muted); margin: 2px 0 0 0; }
         .view-all-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 10px 16px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-md);
-          color: var(--text-secondary);
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 150ms;
+          display: flex; align-items: center; gap: 4px; padding: 10px 16px;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-md); color: var(--text-secondary);
+          font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms;
         }
-        .view-all-btn:hover {
-          border-color: var(--accent);
-          color: var(--accent);
-        }
+        .view-all-btn:hover { border-color: var(--accent); color: var(--accent); }
         
-        /* Featured Grid */
-        .featured-grid {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 16px;
-        }
-        @media (max-width: 1200px) {
-          .featured-grid { grid-template-columns: repeat(4, 1fr); }
-        }
-        @media (max-width: 900px) {
-          .featured-grid { grid-template-columns: repeat(3, 1fr); }
-        }
-        @media (max-width: 640px) {
-          .featured-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        }
+        .featured-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+        @media (max-width: 1200px) { .featured-grid { grid-template-columns: repeat(4, 1fr); } }
+        @media (max-width: 900px) { .featured-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 640px) { .featured-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
         
-        /* Featured Card */
         .featured-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          cursor: pointer;
-          transition: all 200ms ease;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: all 200ms ease;
         }
-        .featured-card:hover {
-          transform: translateY(-4px);
-          border-color: var(--accent);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
-        .featured-card-cover {
-          position: relative;
-          aspect-ratio: 1;
-          background: var(--bg-hover);
-        }
-        .featured-card-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
+        .featured-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+        .featured-card-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
+        .featured-card-cover img { width: 100%; height: 100%; object-fit: cover; }
+        
         .rank-badge {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          padding: 4px 10px;
-          font-size: 12px;
-          font-weight: 800;
-          border-radius: 6px;
-          color: white;
-          z-index: 2;
+          position: absolute; top: 8px; left: 8px; padding: 4px 10px;
+          font-size: 12px; font-weight: 800; border-radius: 6px; color: white; z-index: 2;
         }
         .rank-badge.rank-1 { background: linear-gradient(135deg, #ffd700, #ffaa00); }
         .rank-badge.rank-2 { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); }
@@ -553,14 +461,8 @@ const MarketplacePage = {
         .rank-badge.rank-4, .rank-badge.rank-5 { background: rgba(59, 130, 246, 0.9); }
         
         .card-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 10px;
-          font-size: 11px;
-          font-weight: 600;
-          border-radius: 6px;
-          color: white;
+          position: absolute; top: 8px; right: 8px; padding: 4px 10px;
+          font-size: 11px; font-weight: 600; border-radius: 6px; color: white;
         }
         .card-badge.sales { background: linear-gradient(135deg, #22c55e, #16a34a); }
         .card-badge.date { background: rgba(139, 92, 246, 0.9); }
@@ -569,224 +471,72 @@ const MarketplacePage = {
         .card-badge.scarce.low { background: linear-gradient(135deg, #f59e0b, #d97706); }
         .card-badge.scarce.critical { background: linear-gradient(135deg, #ef4444, #dc2626); animation: pulse 1.5s infinite; }
         
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
+        .mv-badge {
+          position: absolute; bottom: 8px; right: 8px; padding: 3px 8px;
+          font-size: 10px; font-weight: 700; letter-spacing: 0.5px; border-radius: 4px;
+          background: linear-gradient(135deg, #8b5cf6, #ec4899); color: white;
+          z-index: 3; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
         }
         
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        
         .card-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          opacity: 0;
-          transition: opacity 200ms;
+          position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+          display: flex; align-items: center; justify-content: center;
+          opacity: 0; transition: opacity 200ms;
         }
         .featured-card:hover .card-overlay { opacity: 1; }
         .play-btn {
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--accent);
-          border: none;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: transform 150ms;
+          width: 56px; height: 56px; border-radius: 50%; background: var(--accent);
+          border: none; color: white; display: flex; align-items: center;
+          justify-content: center; cursor: pointer; transition: transform 150ms;
         }
         .play-btn:hover { transform: scale(1.1); }
         
-        .featured-card-info {
-          padding: 12px;
-        }
+        .featured-card-info { padding: 12px; }
         .card-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .card-artist {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 12px; color: var(--text-muted); margin-bottom: 8px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .card-footer {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-        }
-        .card-price {
-          font-size: 14px;
-          font-weight: 700;
-          color: var(--success);
-        }
-        .card-progress {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex: 1;
-          max-width: 80px;
-        }
-        .progress-bar {
-          flex: 1;
-          height: 4px;
-          background: var(--bg-hover);
-          border-radius: 2px;
-          overflow: hidden;
-        }
-        .progress-fill {
-          height: 100%;
-          background: var(--accent);
-          border-radius: 2px;
-        }
-        .progress-text {
-          font-size: 10px;
-          color: var(--text-muted);
-        }
+        .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .card-price { font-size: 14px; font-weight: 700; color: var(--success); }
+        .card-progress { display: flex; align-items: center; gap: 6px; flex: 1; max-width: 80px; }
+        .progress-bar { flex: 1; height: 4px; background: var(--bg-hover); border-radius: 2px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+        .progress-text { font-size: 10px; color: var(--text-muted); }
         
         .empty-section {
-          grid-column: 1 / -1;
-          padding: 40px;
-          text-align: center;
-          color: var(--text-muted);
-          background: var(--bg-card);
-          border: 1px dashed var(--border-color);
-          border-radius: var(--radius-lg);
+          grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);
+          background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-lg);
         }
         
-        /* Secondary Market Styles */
         .secondary-listing-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          cursor: pointer;
-          transition: all 150ms ease;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: all 150ms ease;
         }
-        .secondary-listing-card:hover {
-          border-color: var(--accent);
-          transform: translateY(-4px);
-        }
-        .secondary-cover {
-          position: relative;
-          aspect-ratio: 1;
-          background: var(--bg-hover);
-        }
-        .secondary-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
+        .secondary-listing-card:hover { border-color: var(--accent); transform: translateY(-4px); }
+        .secondary-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
+        .secondary-cover img { width: 100%; height: 100%; object-fit: cover; }
         .secondary-price {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          padding: 6px 12px;
-          background: linear-gradient(135deg, #22c55e, #16a34a);
-          border-radius: 100px;
-          font-size: 13px;
-          font-weight: 700;
-          color: white;
+          position: absolute; top: 8px; left: 8px; padding: 6px 12px;
+          background: linear-gradient(135deg, #22c55e, #16a34a); border-radius: 100px;
+          font-size: 13px; font-weight: 700; color: white;
         }
         .secondary-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 8px;
-          background: rgba(139, 92, 246, 0.9);
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: 600;
-          color: white;
+          position: absolute; top: 8px; right: 8px; padding: 4px 8px;
+          background: rgba(139, 92, 246, 0.9); border-radius: 6px;
+          font-size: 11px; font-weight: 600; color: white;
         }
         .secondary-info { padding: 12px; }
-        .secondary-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-        }
-        .secondary-artist {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-        }
+        .secondary-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .secondary-artist { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
         .secondary-seller { font-size: 11px; color: var(--text-muted); }
         .secondary-buy-btn { width: 100%; margin-top: 8px; }
       </style>
     `;
-  },
-  
-  /**
-   * Bind events
-   */
-  bindEvents() {
-    // Market type toggle
-    document.querySelectorAll('.market-type-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.marketType = btn.dataset.market;
-        this.renderContent();
-      });
-    });
-    
-    // View All buttons - Navigate to Analytics page
-    document.querySelectorAll('.view-all-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const sort = btn.dataset.sort;
-        Router.navigate('analytics', { sort: sort, period: '7d' });
-      });
-    });
-    
-    // Featured cards - click to open modal
-    document.querySelectorAll('.featured-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.play-btn')) return;
-        const releaseId = card.dataset.releaseId;
-        const release = this.releases.find(r => r.id === releaseId);
-        if (release) Modals.showRelease(release);
-      });
-    });
-    
-    // Play buttons
-    document.querySelectorAll('.play-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const releaseId = btn.dataset.releaseId;
-        const release = this.releases.find(r => r.id === releaseId);
-        if (release?.tracks?.length > 0) {
-          StreamPage.playRelease(release);
-        }
-      });
-    });
-    
-    // Secondary market buy buttons
-    document.querySelectorAll('.secondary-buy-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const listing = JSON.parse(btn.dataset.listing);
-        Modals.showSecondaryPurchase(listing);
-      });
-    });
-    
-    // Secondary search
-    document.getElementById('secondary-search')?.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      document.querySelectorAll('.secondary-listing-card').forEach(card => {
-        const title = card.querySelector('.secondary-title')?.textContent.toLowerCase() || '';
-        const artist = card.querySelector('.secondary-artist')?.textContent.toLowerCase() || '';
-        card.style.display = (title.includes(query) || artist.includes(query)) ? '' : 'none';
-      });
-    });
   },
 };
