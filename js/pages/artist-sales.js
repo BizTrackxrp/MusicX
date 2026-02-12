@@ -1,6 +1,6 @@
 /**
  * XRP Music - Artist Sales Page
- * Shows artists their sold tracks and buyer details
+ * Shows artists their sold tracks, buyer details, and earnings analytics
  */
 
 const ArtistSalesPage = {
@@ -27,8 +27,14 @@ const ArtistSalesPage = {
     UI.showLoading();
 
     try {
-      const data = await API.getArtistSoldTracks(AppState.user.address);
-      const tracks = data.tracks || [];
+      // Fetch tracks and analytics in parallel
+      const [trackData, analyticsData] = await Promise.all([
+        API.getArtistSoldTracks(AppState.user.address),
+        API.getArtistAnalytics(AppState.user.address)
+      ]);
+      
+      const tracks = trackData.tracks || [];
+      const analytics = analyticsData;
 
       if (tracks.length === 0) {
         UI.renderPage(`
@@ -64,6 +70,8 @@ const ArtistSalesPage = {
           <div class="release-grid">
             ${tracks.map(track => this.renderTrackCard(track)).join('')}
           </div>
+
+          ${analytics.totals ? this.renderAnalytics(analytics) : ''}
         </div>
         
         <style>
@@ -121,6 +129,233 @@ const ArtistSalesPage = {
           .release-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+          }
+
+          /* ===== Analytics Dashboard ===== */
+          .analytics-section {
+            margin-top: 48px;
+            padding-top: 32px;
+            border-top: 1px solid var(--border-color);
+          }
+
+          .analytics-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .analytics-title svg {
+            color: var(--accent);
+          }
+
+          /* Top-level stat cards */
+          .analytics-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+          }
+
+          .analytics-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-xl);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+          }
+
+          .analytics-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+          }
+
+          .analytics-card.card-nfts::before { background: var(--accent); }
+          .analytics-card.card-gross::before { background: #10b981; }
+          .analytics-card.card-fees::before { background: #f59e0b; }
+          .analytics-card.card-net::before { background: #8b5cf6; }
+          .analytics-card.card-buyers::before { background: #ec4899; }
+
+          .analytics-card-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+          }
+
+          .analytics-card-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+          }
+
+          .analytics-card-value.xrp::after {
+            content: ' XRP';
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+          }
+
+          /* Release breakdown table */
+          .analytics-breakdown {
+            margin-bottom: 32px;
+          }
+
+          .analytics-breakdown-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+          }
+
+          .breakdown-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+          }
+
+          .breakdown-table th {
+            text-align: left;
+            padding: 10px 16px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+          }
+
+          .breakdown-table th:not(:first-child) {
+            text-align: right;
+          }
+
+          .breakdown-table td {
+            padding: 14px 16px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+          }
+
+          .breakdown-table td:not(:first-child) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+          }
+
+          .breakdown-table tr:last-child td {
+            border-bottom: none;
+          }
+
+          .breakdown-table .release-name {
+            color: var(--text-primary);
+            font-weight: 500;
+          }
+
+          .breakdown-table .release-type-pill {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            margin-left: 8px;
+            vertical-align: middle;
+          }
+
+          .breakdown-table .xrp-value {
+            color: #10b981;
+            font-weight: 500;
+          }
+
+          /* Recent sales */
+          .recent-sales-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+          }
+
+          .recent-sale-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-lg);
+          }
+
+          .recent-sale-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981, #059669);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+          }
+
+          .recent-sale-icon svg {
+            width: 16px;
+            height: 16px;
+            color: white;
+          }
+
+          .recent-sale-info {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .recent-sale-track {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .recent-sale-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+          }
+
+          .recent-sale-amount {
+            font-size: 15px;
+            font-weight: 600;
+            color: #10b981;
+            white-space: nowrap;
+          }
+
+          .recent-sale-amount span {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-muted);
+          }
+
+          /* Mobile adjustments */
+          @media (max-width: 600px) {
+            .analytics-stats {
+              grid-template-columns: repeat(2, 1fr);
+            }
+            .analytics-card-value {
+              font-size: 22px;
+            }
+            .breakdown-table {
+              font-size: 13px;
+            }
+            .breakdown-table th,
+            .breakdown-table td {
+              padding: 10px 10px;
+            }
           }
           
           /* Buyers Modal Styles */
@@ -309,6 +544,148 @@ const ArtistSalesPage = {
   },
 
   /**
+   * Render analytics dashboard
+   */
+  renderAnalytics(data) {
+    const t = data.totals;
+    const grossXrp = parseFloat(t.gross_xrp || 0);
+    const totalFees = parseFloat(t.total_fees || 0);
+    const netXrp = parseFloat(t.net_xrp || 0);
+    const totalNfts = parseInt(t.total_nfts_sold || 0);
+    const uniqueBuyers = parseInt(t.unique_buyers || 0);
+
+    return `
+      <div class="analytics-section">
+        <div class="analytics-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+          </svg>
+          Earnings Overview
+        </div>
+
+        <div class="analytics-stats">
+          <div class="analytics-card card-nfts">
+            <div class="analytics-card-label">NFTs Sold</div>
+            <div class="analytics-card-value">${totalNfts}</div>
+          </div>
+          <div class="analytics-card card-gross">
+            <div class="analytics-card-label">Gross Revenue</div>
+            <div class="analytics-card-value xrp">${grossXrp.toFixed(2)}</div>
+          </div>
+          <div class="analytics-card card-fees">
+            <div class="analytics-card-label">Platform Fees (2%)</div>
+            <div class="analytics-card-value xrp">${totalFees.toFixed(2)}</div>
+          </div>
+          <div class="analytics-card card-net">
+            <div class="analytics-card-label">Net Earned</div>
+            <div class="analytics-card-value xrp">${netXrp.toFixed(2)}</div>
+          </div>
+          <div class="analytics-card card-buyers">
+            <div class="analytics-card-label">Unique Collectors</div>
+            <div class="analytics-card-value">${uniqueBuyers}</div>
+          </div>
+        </div>
+
+        ${data.releases && data.releases.length > 0 ? this.renderBreakdownTable(data.releases) : ''}
+        ${data.recent && data.recent.length > 0 ? this.renderRecentSales(data.recent) : ''}
+      </div>
+    `;
+  },
+
+  /**
+   * Render per-release breakdown table
+   */
+  renderBreakdownTable(releases) {
+    return `
+      <div class="analytics-breakdown">
+        <div class="analytics-breakdown-title">Breakdown by Release</div>
+        <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Release</th>
+              <th>NFTs Sold</th>
+              <th>Gross XRP</th>
+              <th>Fees</th>
+              <th>Net XRP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${releases.map(r => `
+              <tr>
+                <td>
+                  <span class="release-name">${r.title}</span>
+                  <span class="release-type-pill">${r.type}</span>
+                </td>
+                <td>${parseInt(r.nfts_sold)}</td>
+                <td>${parseFloat(r.gross_xrp).toFixed(2)}</td>
+                <td>${parseFloat(r.fees).toFixed(2)}</td>
+                <td class="xrp-value">${parseFloat(r.net_xrp).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  },
+
+  /**
+   * Render recent sales feed
+   */
+  renderRecentSales(recent) {
+    return `
+      <div class="analytics-breakdown">
+        <div class="analytics-breakdown-title">Recent Sales</div>
+        <div class="recent-sales-list">
+          ${recent.map(sale => {
+            const buyerName = sale.buyer_name || `${sale.buyer_address.slice(0, 6)}...${sale.buyer_address.slice(-4)}`;
+            const price = parseFloat(sale.price || 0);
+            const fee = parseFloat(sale.platform_fee || 0);
+            const net = price - fee;
+            const date = new Date(sale.created_at);
+            const timeAgo = this.timeAgo(date);
+            
+            return `
+              <div class="recent-sale-row">
+                <div class="recent-sale-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="recent-sale-info">
+                  <div class="recent-sale-track">${sale.track_title}</div>
+                  <div class="recent-sale-meta">${buyerName} · ${timeAgo}</div>
+                </div>
+                <div class="recent-sale-amount">
+                  ${net.toFixed(2)} <span>XRP</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * Simple time ago formatter
+   */
+  timeAgo(date) {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.floor(months / 12)}y ago`;
+  },
+
+  /**
    * Render a track card
    */
   renderTrackCard(track) {
@@ -322,7 +699,7 @@ const ArtistSalesPage = {
       <div class="release-card" data-track-id="${track.track_id}">
         <div class="release-card-cover">
           <img src="${coverUrl}" alt="${track.track_title}" onerror="this.src='/placeholder.png'">
-          <span class="release-type-badge ${track.type || 'single'}">${track.type || 'single'}</span>
+          <span class="release-type-badge ${track.release_type || 'single'}">${track.release_type || 'single'}</span>
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${track.track_title}</div>
