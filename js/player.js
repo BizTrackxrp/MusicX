@@ -79,9 +79,10 @@ const Player = {
     PLAY_THRESHOLD_SECONDS: 30, // Record play after 30 seconds
   },
 
-  // Desktop drawer state
-  _dnpVideoSync: null,
-  _dnpTrackHandler: null,
+  // Desktop video viewer state
+  _videoViewerMode: null, // null | 'fullscreen' | 'mini'
+  _videoSyncInterval: null,
+  _videoTrackHandler: null,
   
   /**
    * Initialize player
@@ -1044,47 +1045,364 @@ const Player = {
   },
   
   // ============================================
-  // DESKTOP NOW-PLAYING DRAWER (with video support)
+  // DESKTOP VIDEO VIEWER (3 modes: fullscreen / mini / hidden)
   // ============================================
 
   /**
-   * Toggle desktop now-playing drawer
-   * Bottom drawer that slides up from player bar
+   * Toggle desktop video viewer
+   * First click → fullscreen, if already open → close
    */
   toggleDesktopDrawer() {
-    const existing = document.getElementById('desktop-np-drawer');
-    if (existing) {
+    if (this._videoViewerMode) {
       this.closeDesktopDrawer();
-      return;
+    } else {
+      this.openDesktopDrawer();
     }
-    this.openDesktopDrawer();
   },
 
   /**
-   * Open the desktop now-playing drawer
-   * Shows cover art or synced video, track info, and action buttons
+   * Open desktop video viewer in fullscreen mode (default)
    */
   openDesktopDrawer() {
     const track = AppState.player.currentTrack;
     if (!track) return;
-    
-    const coverUrl = track.cover || '/placeholder.png';
+
+    // Remove any existing viewer
+    document.getElementById('desktop-np-drawer')?.remove();
+    this._cleanupVideoSync();
+
     const hasVideo = !!(track.videoUrl || track.videoCid);
-    const videoSrc = track.videoUrl 
-      ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl)
-      : (track.videoCid ? '/api/ipfs/' + track.videoCid : '');
+    const coverUrl = track.cover || '/placeholder.png';
+    const videoSrc = this._getVideoSrc(track);
+
+    this._videoViewerMode = 'fullscreen';
+    this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
+    this._startVideoSync();
+    this._videoTrackHandler = () => this._onTrackChangeViewer();
+    document.addEventListener('player:trackchange', this._videoTrackHandler);
+  },
+
+  /**
+   * Get video source URL for a track
+   */
+  _getVideoSrc(track) {
+    if (track.videoUrl) {
+      return typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl;
+    }
+    if (track.videoCid) {
+      return '/api/ipfs/' + track.videoCid;
+    }
+    return '';
+  },
+
+  /**
+   * Create fullscreen video viewer
+   * Takes over main content area with video + transport controls
+   */
+  _createFullscreenViewer(track, hasVideo, videoSrc, coverUrl) {
+    const viewer = document.createElement('div');
+    viewer.id = 'desktop-np-drawer';
+    viewer.className = 'video-viewer-fullscreen';
     
+    const isPlaying = AppState.player.isPlaying;
+    const progress = AppState.player.progress || 0;
+    const currentTime = this.audio?.currentTime || 0;
+    const duration = this.audio?.duration || 0;
+    const formatTime = typeof Helpers !== 'undefined' ? Helpers.formatDuration : (t) => {
+      const m = Math.floor(t / 60);
+      const s = Math.floor(t % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    viewer.innerHTML = `
+      <div class="vvf-backdrop" id="vvf-backdrop"></div>
+      <div class="vvf-container">
+        <!-- Top bar -->
+        <div class="vvf-topbar">
+          <div class="vvf-track-info">
+            <div class="vvf-title">${track.title || 'Unknown'}</div>
+            <div class="vvf-artist">${track.artist || 'Unknown'}</div>
+          </div>
+          <div class="vvf-topbar-actions">
+            <button class="vvf-btn" id="vvf-minimize" title="Mini player">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            </button>
+            <button class="vvf-btn" id="vvf-close" title="Close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Visual area -->
+        <div class="vvf-visual">
+          ${hasVideo ? `
+            <video class="vvf-video" id="vvf-video" src="${videoSrc}" 
+              playsinline muted loop poster="${coverUrl}"></video>
+          ` : `
+            <img class="vvf-cover" src="${coverUrl}" alt="Cover">
+          `}
+        </div>
+
+        <!-- Transport controls -->
+        <div class="vvf-transport">
+          <div class="vvf-progress-row">
+            <span class="vvf-time" id="vvf-current">${formatTime(currentTime)}</span>
+            <div class="vvf-progress" id="vvf-progress">
+              <div class="vvf-progress-fill" id="vvf-progress-fill" style="width: ${progress}%"></div>
+              <div class="vvf-progress-knob" id="vvf-progress-knob" style="left: ${progress}%"></div>
+            </div>
+            <span class="vvf-time" id="vvf-duration">${formatTime(duration)}</span>
+          </div>
+          <div class="vvf-controls">
+            <button class="vvf-ctrl" id="vvf-prev" title="Previous">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5"></line>
+              </svg>
+            </button>
+            <button class="vvf-play" id="vvf-play" title="Play/Pause">
+              ${isPlaying 
+                ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
+                : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>'
+              }
+            </button>
+            <button class="vvf-ctrl" id="vvf-next" title="Next">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        .video-viewer-fullscreen {
+          position: fixed; inset: 0; z-index: 900;
+          display: flex; flex-direction: column;
+        }
+        .vvf-backdrop {
+          position: absolute; inset: 0;
+          background: rgba(0, 0, 0, 0.95);
+        }
+        .vvf-container {
+          position: relative; z-index: 1;
+          display: flex; flex-direction: column;
+          width: 100%; height: 100%;
+          padding-bottom: 80px; /* space for player bar */
+        }
+
+        /* Top bar */
+        .vvf-topbar {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 24px;
+          background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+        }
+        .vvf-track-info { flex: 1; min-width: 0; }
+        .vvf-title {
+          font-size: 18px; font-weight: 700; color: white;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .vvf-artist {
+          font-size: 14px; color: rgba(255,255,255,0.6);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .vvf-topbar-actions { display: flex; gap: 8px; margin-left: 16px; }
+        .vvf-btn {
+          width: 40px; height: 40px; border-radius: 50%;
+          background: rgba(255,255,255,0.1); border: none;
+          color: white; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: background 150ms;
+        }
+        .vvf-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* Visual */
+        .vvf-visual {
+          flex: 1; display: flex; align-items: center; justify-content: center;
+          overflow: hidden; min-height: 0;
+        }
+        .vvf-video {
+          max-width: 100%; max-height: 100%;
+          width: auto; height: auto;
+          object-fit: contain;
+          border-radius: 8px;
+        }
+        .vvf-cover {
+          max-width: 60vh; max-height: 60vh;
+          width: auto; height: auto;
+          object-fit: contain;
+          border-radius: 12px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        /* Transport */
+        .vvf-transport {
+          padding: 16px 24px 24px;
+          background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+          max-width: 700px; width: 100%;
+          margin: 0 auto;
+        }
+        .vvf-progress-row {
+          display: flex; align-items: center; gap: 12px;
+          margin-bottom: 16px;
+        }
+        .vvf-time {
+          font-size: 12px; color: rgba(255,255,255,0.5);
+          min-width: 40px; text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+        .vvf-progress {
+          flex: 1; height: 6px; position: relative;
+          background: rgba(255,255,255,0.15); border-radius: 3px;
+          cursor: pointer;
+        }
+        .vvf-progress-fill {
+          height: 100%; background: white; border-radius: 3px;
+          transition: width 100ms linear; pointer-events: none;
+        }
+        .vvf-progress-knob {
+          position: absolute; top: 50%; transform: translate(-50%, -50%);
+          width: 14px; height: 14px; border-radius: 50%;
+          background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          pointer-events: none; opacity: 0; transition: opacity 150ms;
+        }
+        .vvf-progress:hover .vvf-progress-knob { opacity: 1; }
+
+        .vvf-controls {
+          display: flex; align-items: center; justify-content: center; gap: 24px;
+        }
+        .vvf-ctrl {
+          width: 48px; height: 48px;
+          background: none; border: none; color: white;
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          border-radius: 50%; transition: background 150ms;
+        }
+        .vvf-ctrl:hover { background: rgba(255,255,255,0.1); }
+        .vvf-play {
+          width: 64px; height: 64px; border-radius: 50%;
+          background: white; border: none; color: black;
+          cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: transform 150ms;
+        }
+        .vvf-play:hover { transform: scale(1.05); }
+        .vvf-play svg { margin-left: 2px; }
+
+        /* Mini mode */
+        .desktop-np-drawer {
+          position: fixed; bottom: 80px; right: 16px; z-index: 800;
+          width: 320px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-xl);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+          transform: translateY(20px); opacity: 0;
+          transition: transform 300ms ease, opacity 300ms ease;
+          overflow: hidden;
+        }
+        .desktop-np-drawer.open {
+          transform: translateY(0); opacity: 1;
+        }
+        .dnp-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .dnp-header-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .dnp-close, .dnp-expand {
+          background: none; border: none; color: var(--text-muted);
+          cursor: pointer; padding: 4px; transition: color 150ms;
+        }
+        .dnp-close:hover, .dnp-expand:hover { color: var(--text-primary); }
+        .dnp-body { padding: 16px; }
+        .dnp-visual { width: 100%; aspect-ratio: 1; border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-hover); margin-bottom: 12px; }
+        .dnp-video, .dnp-cover { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .dnp-info { text-align: center; }
+        .dnp-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dnp-artist { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dnp-actions { display: flex; justify-content: center; gap: 12px; }
+        .dnp-action-btn {
+          display: flex; align-items: center; gap: 6px;
+          padding: 8px 12px; background: var(--bg-hover);
+          border: 1px solid var(--border-color); border-radius: var(--radius-md);
+          color: var(--text-secondary); font-size: 12px;
+          cursor: pointer; transition: all 150ms;
+        }
+        .dnp-action-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+        .dnp-action-btn.liked { color: var(--error); border-color: var(--error); }
+      </style>
+    `;
+
+    document.body.appendChild(viewer);
+
+    // Bind fullscreen events
+    document.getElementById('vvf-close')?.addEventListener('click', () => this.closeDesktopDrawer());
+    document.getElementById('vvf-minimize')?.addEventListener('click', () => this._switchToMini());
+    document.getElementById('vvf-play')?.addEventListener('click', () => {
+      this.togglePlay();
+      this._updateViewerPlayButton();
+    });
+    document.getElementById('vvf-prev')?.addEventListener('click', () => this.previous());
+    document.getElementById('vvf-next')?.addEventListener('click', () => this.next());
+
+    // Progress bar seeking
+    this._bindViewerSeek();
+
+    // Start video playback if playing
+    if (hasVideo && isPlaying) {
+      const video = document.getElementById('vvf-video');
+      if (video) video.play().catch(() => {});
+    }
+  },
+
+  /**
+   * Switch to mini drawer mode
+   */
+  _switchToMini() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+
+    // Remove fullscreen
+    document.getElementById('desktop-np-drawer')?.remove();
+    this._cleanupVideoSync();
+
+    this._videoViewerMode = 'mini';
+
+    const hasVideo = !!(track.videoUrl || track.videoCid);
+    const coverUrl = track.cover || '/placeholder.png';
+    const videoSrc = this._getVideoSrc(track);
+
     const drawer = document.createElement('div');
     drawer.id = 'desktop-np-drawer';
     drawer.className = 'desktop-np-drawer';
     drawer.innerHTML = `
       <div class="dnp-header">
         <span class="dnp-header-title">Now Playing</span>
-        <button class="dnp-close" id="dnp-close">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 15 12 9 18 15"></polyline>
-          </svg>
-        </button>
+        <div style="display:flex;gap:4px;">
+          <button class="dnp-expand" id="dnp-expand" title="Fullscreen">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <polyline points="9 21 3 21 3 15"></polyline>
+              <line x1="21" y1="3" x2="14" y2="10"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+          </button>
+          <button class="dnp-close" id="dnp-close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="dnp-body">
         <div class="dnp-visual">
@@ -1122,115 +1440,202 @@ const Player = {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(drawer);
-    
-    // Animate in
     requestAnimationFrame(() => drawer.classList.add('open'));
-    
-    // Bind events
+
+    // Bind mini events
     document.getElementById('dnp-close')?.addEventListener('click', () => this.closeDesktopDrawer());
+    document.getElementById('dnp-expand')?.addEventListener('click', () => this._switchToFullscreen());
     document.getElementById('dnp-like')?.addEventListener('click', () => this.toggleLike());
     document.getElementById('dnp-add')?.addEventListener('click', () => this.showPlaylistPicker());
     document.getElementById('dnp-buy')?.addEventListener('click', () => this.openReleaseModal());
-    
-    // Sync like button state
+
     this.syncAllLikeButtons();
-    
-    // Sync video with audio
-    if (hasVideo) {
-      this._dnpVideoSync = setInterval(() => {
-        const video = document.getElementById('dnp-video');
-        if (!video || !this.audio) return;
+    this._startVideoSync();
+  },
+
+  /**
+   * Switch from mini back to fullscreen
+   */
+  _switchToFullscreen() {
+    document.getElementById('desktop-np-drawer')?.remove();
+    this._cleanupVideoSync();
+    this._videoViewerMode = null;
+    this.openDesktopDrawer(); // Re-opens in fullscreen
+  },
+
+  /**
+   * Close desktop viewer (any mode)
+   */
+  closeDesktopDrawer() {
+    const el = document.getElementById('desktop-np-drawer');
+    if (el) {
+      if (this._videoViewerMode === 'mini') {
+        el.classList.remove('open');
+        setTimeout(() => el.remove(), 300);
+      } else {
+        el.remove();
+      }
+    }
+    this._cleanupVideoSync();
+    this._videoViewerMode = null;
+    if (this._videoTrackHandler) {
+      document.removeEventListener('player:trackchange', this._videoTrackHandler);
+      this._videoTrackHandler = null;
+    }
+  },
+
+  /**
+   * Cleanup video sync interval
+   */
+  _cleanupVideoSync() {
+    if (this._videoSyncInterval) {
+      clearInterval(this._videoSyncInterval);
+      this._videoSyncInterval = null;
+    }
+  },
+
+  /**
+   * Start syncing video element with audio player
+   */
+  _startVideoSync() {
+    this._videoSyncInterval = setInterval(() => {
+      // Sync video in either mode
+      const video = document.getElementById('vvf-video') || document.getElementById('dnp-video');
+      if (video && this.audio) {
         if (!this.audio.paused && video.paused) video.play().catch(() => {});
         if (this.audio.paused && !video.paused) video.pause();
-        // Sync time if drifted more than 0.5s
         if (Math.abs(video.currentTime - this.audio.currentTime) > 0.5) {
           video.currentTime = this.audio.currentTime;
         }
-      }, 250);
-    }
-    
-    // Listen for track changes
-    this._dnpTrackHandler = () => this.updateDesktopDrawer();
-    document.addEventListener('player:trackchange', this._dnpTrackHandler);
+      }
+
+      // Update fullscreen transport
+      if (this._videoViewerMode === 'fullscreen' && this.audio) {
+        const progress = this.audio.duration ? (this.audio.currentTime / this.audio.duration) * 100 : 0;
+        const fill = document.getElementById('vvf-progress-fill');
+        const knob = document.getElementById('vvf-progress-knob');
+        const currentEl = document.getElementById('vvf-current');
+        const durationEl = document.getElementById('vvf-duration');
+        
+        if (fill) fill.style.width = `${progress}%`;
+        if (knob) knob.style.left = `${progress}%`;
+        
+        const formatTime = typeof Helpers !== 'undefined' ? Helpers.formatDuration : (t) => {
+          const m = Math.floor(t / 60);
+          const s = Math.floor(t % 60);
+          return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+        if (currentEl) currentEl.textContent = formatTime(this.audio.currentTime || 0);
+        if (durationEl) durationEl.textContent = formatTime(this.audio.duration || 0);
+      }
+    }, 200);
   },
-  
+
   /**
-   * Close the desktop now-playing drawer
+   * Bind seek on fullscreen progress bar
    */
-  closeDesktopDrawer() {
-    const drawer = document.getElementById('desktop-np-drawer');
-    if (drawer) {
-      drawer.classList.remove('open');
-      setTimeout(() => drawer.remove(), 300);
-    }
-    if (this._dnpVideoSync) {
-      clearInterval(this._dnpVideoSync);
-      this._dnpVideoSync = null;
-    }
-    if (this._dnpTrackHandler) {
-      document.removeEventListener('player:trackchange', this._dnpTrackHandler);
-      this._dnpTrackHandler = null;
+  _bindViewerSeek() {
+    const bar = document.getElementById('vvf-progress');
+    if (!bar) return;
+    
+    const seek = (e) => {
+      if (!this.audio || !this.audio.duration) return;
+      const rect = bar.getBoundingClientRect();
+      let percent = (e.clientX - rect.left) / rect.width;
+      percent = Math.max(0, Math.min(1, percent));
+      this.audio.currentTime = percent * this.audio.duration;
+    };
+
+    bar.addEventListener('click', seek);
+    
+    let dragging = false;
+    bar.addEventListener('mousedown', (e) => {
+      dragging = true;
+      seek(e);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (dragging) seek(e);
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+  },
+
+  /**
+   * Update play button in viewer
+   */
+  _updateViewerPlayButton() {
+    const btn = document.getElementById('vvf-play');
+    if (!btn) return;
+    btn.innerHTML = AppState.player.isPlaying
+      ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>'
+      : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+  },
+
+  /**
+   * Handle track change while viewer is open
+   */
+  _onTrackChangeViewer() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    if (this._videoViewerMode === 'fullscreen') {
+      // Rebuild fullscreen with new track
+      document.getElementById('desktop-np-drawer')?.remove();
+      this._cleanupVideoSync();
+      
+      const hasVideo = !!(track.videoUrl || track.videoCid);
+      const videoSrc = this._getVideoSrc(track);
+      const coverUrl = track.cover || '/placeholder.png';
+      
+      this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
+      this._startVideoSync();
+    } else if (this._videoViewerMode === 'mini') {
+      // Update mini drawer content
+      this.updateDesktopDrawer();
     }
   },
-  
+
   /**
-   * Update the desktop drawer when track changes
+   * Update mini drawer when track changes (legacy compat)
    */
   updateDesktopDrawer() {
     const track = AppState.player.currentTrack;
     if (!track) return;
     const drawer = document.getElementById('desktop-np-drawer');
-    if (!drawer) return;
-    
+    if (!drawer || this._videoViewerMode !== 'mini') return;
+
     const titleEl = document.getElementById('dnp-title');
     const artistEl = document.getElementById('dnp-artist');
     if (titleEl) titleEl.textContent = track.title || 'Unknown';
     if (artistEl) artistEl.textContent = track.artist || 'Unknown';
-    
+
     const hasVideo = !!(track.videoUrl || track.videoCid);
     const visualContainer = drawer.querySelector('.dnp-visual');
     const coverUrl = track.cover || '/placeholder.png';
-    
-    // Clear old video sync
-    if (this._dnpVideoSync) {
-      clearInterval(this._dnpVideoSync);
-      this._dnpVideoSync = null;
-    }
-    
+
+    this._cleanupVideoSync();
+
     if (hasVideo) {
-      const videoSrc = track.videoUrl 
-        ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl)
-        : '/api/ipfs/' + track.videoCid;
+      const videoSrc = this._getVideoSrc(track);
       visualContainer.innerHTML = `<video class="dnp-video" id="dnp-video" src="${videoSrc}" 
         playsinline muted autoplay loop poster="${coverUrl}"></video>`;
-      
-      // Restart video sync
-      this._dnpVideoSync = setInterval(() => {
-        const video = document.getElementById('dnp-video');
-        if (!video || !this.audio) return;
-        if (!this.audio.paused && video.paused) video.play().catch(() => {});
-        if (this.audio.paused && !video.paused) video.pause();
-        if (Math.abs(video.currentTime - this.audio.currentTime) > 0.5) {
-          video.currentTime = this.audio.currentTime;
-        }
-      }, 250);
     } else {
       visualContainer.innerHTML = `<img class="dnp-cover" id="dnp-cover" src="${coverUrl}" alt="Cover">`;
     }
-    
-    // Update buy button price
+
+    this._startVideoSync();
+
+    // Update buy button
     const buyBtn = document.getElementById('dnp-buy');
     if (buyBtn) {
       const svgHtml = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>`;
       buyBtn.innerHTML = svgHtml + (track.price ? ' ' + track.price + ' XRP' : '');
     }
-    
-    // Sync like state
+
     this.syncAllLikeButtons();
   },
-  
+
   // ============================================
   // Event Handlers
   // ============================================
