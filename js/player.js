@@ -30,6 +30,11 @@
  * - Up arrow on mobile opens Spotify-style full-screen Now Playing view
  * - Shows album art, controls, buy button, share button
  * - Dispatches 'player:trackchange' event for external listeners
+ * 
+ * MUSIC VIDEO SUPPORT:
+ * - Tracks can have optional videoUrl/videoCid for music videos
+ * - Desktop drawer shows video synced to audio playback
+ * - Video is purely visual — audio element remains the playback engine
  */
 
 /**
@@ -73,6 +78,10 @@ const Player = {
     playCheckInterval: null,
     PLAY_THRESHOLD_SECONDS: 30, // Record play after 30 seconds
   },
+
+  // Desktop drawer state
+  _dnpVideoSync: null,
+  _dnpTrackHandler: null,
   
   /**
    * Initialize player
@@ -531,6 +540,7 @@ const Player = {
   /**
    * Build queue from all available tracks in AppState
    * ALWAYS SHUFFLED - fresh random order each time site loads
+   * Now includes videoUrl/videoCid for music video support
    */
   buildGlobalQueue() {
     const releases = AppState.releases || [];
@@ -549,6 +559,8 @@ const Player = {
           duration: track.duration,
           price: track.price || release.price,
           artistAddress: release.artistAddress,
+          videoUrl: track.videoUrl || null,
+          videoCid: track.videoCid || null,
         });
       });
     });
@@ -654,7 +666,7 @@ const Player = {
     // Start play tracking
     this.startPlayTracking(track);
     
-    // Dispatch track change event for external listeners (e.g., Now Playing view)
+    // Dispatch track change event for external listeners (e.g., Now Playing view, desktop drawer)
     document.dispatchEvent(new CustomEvent('player:trackchange', { detail: { track } }));
     
     // Notify QueueManager to update sidebar
@@ -976,6 +988,14 @@ const Player = {
       if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
     }
     
+    // 5. Desktop drawer like button
+    const dnpLikeBtn = document.getElementById('dnp-like');
+    if (dnpLikeBtn) {
+      dnpLikeBtn.classList.toggle('liked', isLiked);
+      const svg = dnpLikeBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+    }
+    
     console.log('❤️ Synced all like buttons. Liked:', isLiked);
   },
   
@@ -1021,6 +1041,194 @@ const Player = {
       document.body.style.overflow = '';
       AppState.expandedPlayer = false;
     }
+  },
+  
+  // ============================================
+  // DESKTOP NOW-PLAYING DRAWER (with video support)
+  // ============================================
+
+  /**
+   * Toggle desktop now-playing drawer
+   * Bottom drawer that slides up from player bar
+   */
+  toggleDesktopDrawer() {
+    const existing = document.getElementById('desktop-np-drawer');
+    if (existing) {
+      this.closeDesktopDrawer();
+      return;
+    }
+    this.openDesktopDrawer();
+  },
+
+  /**
+   * Open the desktop now-playing drawer
+   * Shows cover art or synced video, track info, and action buttons
+   */
+  openDesktopDrawer() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    
+    const coverUrl = track.cover || '/placeholder.png';
+    const hasVideo = !!(track.videoUrl || track.videoCid);
+    const videoSrc = track.videoUrl 
+      ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl)
+      : (track.videoCid ? '/api/ipfs/' + track.videoCid : '');
+    
+    const drawer = document.createElement('div');
+    drawer.id = 'desktop-np-drawer';
+    drawer.className = 'desktop-np-drawer';
+    drawer.innerHTML = `
+      <div class="dnp-header">
+        <span class="dnp-header-title">Now Playing</span>
+        <button class="dnp-close" id="dnp-close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 15 12 9 18 15"></polyline>
+          </svg>
+        </button>
+      </div>
+      <div class="dnp-body">
+        <div class="dnp-visual">
+          ${hasVideo ? `
+            <video class="dnp-video" id="dnp-video" src="${videoSrc}" 
+              playsinline muted autoplay loop poster="${coverUrl}"></video>
+          ` : `
+            <img class="dnp-cover" id="dnp-cover" src="${coverUrl}" alt="Cover">
+          `}
+        </div>
+        <div class="dnp-info">
+          <div class="dnp-title" id="dnp-title">${track.title || 'Unknown'}</div>
+          <div class="dnp-artist" id="dnp-artist">${track.artist || 'Unknown'}</div>
+          <div class="dnp-actions">
+            <button class="dnp-action-btn" id="dnp-like" title="Like">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+            <button class="dnp-action-btn" id="dnp-add" title="Add to Playlist">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+            <button class="dnp-action-btn" id="dnp-buy" title="Buy">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              ${track.price ? track.price + ' XRP' : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(drawer);
+    
+    // Animate in
+    requestAnimationFrame(() => drawer.classList.add('open'));
+    
+    // Bind events
+    document.getElementById('dnp-close')?.addEventListener('click', () => this.closeDesktopDrawer());
+    document.getElementById('dnp-like')?.addEventListener('click', () => this.toggleLike());
+    document.getElementById('dnp-add')?.addEventListener('click', () => this.showPlaylistPicker());
+    document.getElementById('dnp-buy')?.addEventListener('click', () => this.openReleaseModal());
+    
+    // Sync like button state
+    this.syncAllLikeButtons();
+    
+    // Sync video with audio
+    if (hasVideo) {
+      this._dnpVideoSync = setInterval(() => {
+        const video = document.getElementById('dnp-video');
+        if (!video || !this.audio) return;
+        if (!this.audio.paused && video.paused) video.play().catch(() => {});
+        if (this.audio.paused && !video.paused) video.pause();
+        // Sync time if drifted more than 0.5s
+        if (Math.abs(video.currentTime - this.audio.currentTime) > 0.5) {
+          video.currentTime = this.audio.currentTime;
+        }
+      }, 250);
+    }
+    
+    // Listen for track changes
+    this._dnpTrackHandler = () => this.updateDesktopDrawer();
+    document.addEventListener('player:trackchange', this._dnpTrackHandler);
+  },
+  
+  /**
+   * Close the desktop now-playing drawer
+   */
+  closeDesktopDrawer() {
+    const drawer = document.getElementById('desktop-np-drawer');
+    if (drawer) {
+      drawer.classList.remove('open');
+      setTimeout(() => drawer.remove(), 300);
+    }
+    if (this._dnpVideoSync) {
+      clearInterval(this._dnpVideoSync);
+      this._dnpVideoSync = null;
+    }
+    if (this._dnpTrackHandler) {
+      document.removeEventListener('player:trackchange', this._dnpTrackHandler);
+      this._dnpTrackHandler = null;
+    }
+  },
+  
+  /**
+   * Update the desktop drawer when track changes
+   */
+  updateDesktopDrawer() {
+    const track = AppState.player.currentTrack;
+    if (!track) return;
+    const drawer = document.getElementById('desktop-np-drawer');
+    if (!drawer) return;
+    
+    const titleEl = document.getElementById('dnp-title');
+    const artistEl = document.getElementById('dnp-artist');
+    if (titleEl) titleEl.textContent = track.title || 'Unknown';
+    if (artistEl) artistEl.textContent = track.artist || 'Unknown';
+    
+    const hasVideo = !!(track.videoUrl || track.videoCid);
+    const visualContainer = drawer.querySelector('.dnp-visual');
+    const coverUrl = track.cover || '/placeholder.png';
+    
+    // Clear old video sync
+    if (this._dnpVideoSync) {
+      clearInterval(this._dnpVideoSync);
+      this._dnpVideoSync = null;
+    }
+    
+    if (hasVideo) {
+      const videoSrc = track.videoUrl 
+        ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl)
+        : '/api/ipfs/' + track.videoCid;
+      visualContainer.innerHTML = `<video class="dnp-video" id="dnp-video" src="${videoSrc}" 
+        playsinline muted autoplay loop poster="${coverUrl}"></video>`;
+      
+      // Restart video sync
+      this._dnpVideoSync = setInterval(() => {
+        const video = document.getElementById('dnp-video');
+        if (!video || !this.audio) return;
+        if (!this.audio.paused && video.paused) video.play().catch(() => {});
+        if (this.audio.paused && !video.paused) video.pause();
+        if (Math.abs(video.currentTime - this.audio.currentTime) > 0.5) {
+          video.currentTime = this.audio.currentTime;
+        }
+      }, 250);
+    } else {
+      visualContainer.innerHTML = `<img class="dnp-cover" id="dnp-cover" src="${coverUrl}" alt="Cover">`;
+    }
+    
+    // Update buy button price
+    const buyBtn = document.getElementById('dnp-buy');
+    if (buyBtn) {
+      const svgHtml = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>`;
+      buyBtn.innerHTML = svgHtml + (track.price ? ' ' + track.price + ' XRP' : '');
+    }
+    
+    // Sync like state
+    this.syncAllLikeButtons();
   },
   
   // ============================================
