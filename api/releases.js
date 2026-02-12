@@ -66,7 +66,9 @@ async function getReleases(req, res, sql) {
               'metadataCid', t.metadata_cid,
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
-              'price', t.price
+              'price', t.price,
+              'videoCid', t.video_cid,
+              'videoUrl', t.video_url
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -103,7 +105,9 @@ async function getReleases(req, res, sql) {
                 'metadataCid', t.metadata_cid,
                 'soldCount', COALESCE(t.sold_count, 0),
                 'mintedEditions', COALESCE(t.minted_editions, 0),
-                'price', t.price
+                'price', t.price,
+                'videoCid', t.video_cid,
+                'videoUrl', t.video_url
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -132,7 +136,9 @@ async function getReleases(req, res, sql) {
                 'metadataCid', t.metadata_cid,
                 'soldCount', COALESCE(t.sold_count, 0),
                 'mintedEditions', COALESCE(t.minted_editions, 0),
-                'price', t.price
+                'price', t.price,
+                'videoCid', t.video_cid,
+                'videoUrl', t.video_url
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -166,7 +172,9 @@ async function getReleases(req, res, sql) {
               'metadataCid', t.metadata_cid,
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
-              'price', t.price
+              'price', t.price,
+              'videoCid', t.video_cid,
+              'videoUrl', t.video_url
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -203,7 +211,9 @@ async function getReleases(req, res, sql) {
               'metadataCid', t.metadata_cid,
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
-              'price', t.price
+              'price', t.price,
+              'videoCid', t.video_cid,
+              'videoUrl', t.video_url
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -315,7 +325,9 @@ async function createRelease(req, res, sql) {
           sold_count,
           minted_editions,
           track_number,
-          price
+          price,
+          video_cid,
+          video_url
         ) VALUES (
           ${trackId},
           ${release.id},
@@ -328,7 +340,9 @@ async function createRelease(req, res, sql) {
           0,
           0,
           ${i + 1},
-          ${track.price !== undefined && track.price !== null ? track.price : null}
+          ${track.price !== undefined && track.price !== null ? track.price : null},
+          ${track.videoCid || null},
+          ${track.videoUrl || null}
         )
       `;
       trackIds.push(trackId);
