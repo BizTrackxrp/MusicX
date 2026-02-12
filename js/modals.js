@@ -6172,7 +6172,7 @@ async loadArtistCollectors(artistAddress) {
     
     // Update video source if track changed
     const npVideo = document.getElementById('np-cover-video');
-    const track = AppState.player.currentTrack;
+    
     if (track?.videoUrl || track?.videoCid) {
       if (!npVideo) {
         // Need to add video element - replace img with video
