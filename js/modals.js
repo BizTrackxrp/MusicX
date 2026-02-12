@@ -2199,8 +2199,18 @@ async processListNFT(nft, price) {
           <!-- Header with gradient background -->
           <div class="release-header" style="background: linear-gradient(180deg, ${this.getColorFromImage(release.coverUrl)} 0%, var(--bg-primary) 100%);">
             <div class="release-header-content">
-              <div class="release-cover-small">
-                ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'">` : '<div class="cover-placeholder">🎵</div>'}
+              <div class="release-cover-small" id="release-cover-container">
+                ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'" id="release-cover-img">` : '<div class="cover-placeholder">🎵</div>'}
+                ${(release.tracks?.[0]?.videoUrl || release.tracks?.[0]?.videoCid) ? `
+                  <div class="video-play-overlay" id="release-video-play-overlay">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="white" opacity="0.9">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                  </div>
+                  <video class="release-cover-video hidden" id="release-cover-video" 
+                    src="${release.tracks[0].videoUrl ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(release.tracks[0].videoUrl) : release.tracks[0].videoUrl) : '/api/ipfs/' + release.tracks[0].videoCid}" 
+                    preload="metadata" playsinline loop></video>
+                ` : ''}
               </div>
               <div class="release-header-info">
                 <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
@@ -2431,6 +2441,40 @@ async processListNFT(nft, price) {
           width: 100%;
           height: 100%;
           object-fit: cover;
+        }
+        .release-cover-small {
+          position: relative;
+        }
+        .video-play-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0,0,0,0.3);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: background 200ms;
+          z-index: 2;
+        }
+        .video-play-overlay:hover {
+          background: rgba(0,0,0,0.5);
+        }
+        .video-play-overlay.playing {
+          opacity: 0;
+          pointer-events: none;
+        }
+        .release-cover-video {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border-radius: var(--radius-lg);
+          z-index: 1;
+        }
+        .release-cover-video.hidden {
+          display: none;
         }
         .release-header-info {
           flex: 1;
@@ -2951,6 +2995,32 @@ bindReleaseModalEvents(release) {
           cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
         }));
         Player.playTrack(queue[0], queue, 0);
+      }
+    });
+
+  // Video overlay play
+    document.getElementById('release-video-play-overlay')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const video = document.getElementById('release-cover-video');
+      const overlay = document.getElementById('release-video-play-overlay');
+      const coverImg = document.getElementById('release-cover-img');
+      if (video) {
+        video.classList.remove('hidden');
+        video.muted = false;
+        video.play();
+        if (overlay) overlay.classList.add('playing');
+        if (coverImg) coverImg.style.opacity = '0';
+        
+        // Click video to pause/show overlay again
+        video.addEventListener('click', () => {
+          if (video.paused) {
+            video.play();
+            if (overlay) overlay.classList.add('playing');
+          } else {
+            video.pause();
+            if (overlay) overlay.classList.remove('playing');
+          }
+        });
       }
     });
     
@@ -3859,6 +3929,33 @@ const totalPrice = albumPrice;
                   <div class="track-list-upload" id="track-list-upload"></div>
                 </div>
                 
+                <!-- Music Video (Optional) -->
+                <div class="form-group">
+                  <label class="form-label">Music Video <span style="color: var(--text-muted); font-weight: 400;">(Optional)</span></label>
+                  <p class="form-hint" style="margin-bottom: 8px;">Attach an MP4 video that plays instead of cover art in the player</p>
+                  <div class="upload-zone video-zone" id="video-upload-zone">
+                    <input type="file" id="video-input" accept="video/mp4,video/quicktime" hidden>
+                    <div class="upload-placeholder" id="video-placeholder">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                      </svg>
+                      <span>Click to upload music video</span>
+                      <span class="upload-hint">MP4, MOV supported (up to 10GB)</span>
+                    </div>
+                    <div class="upload-preview hidden" id="video-preview">
+                      <video id="video-preview-player" style="width:100%;max-width:320px;border-radius:var(--radius-md);" muted></video>
+                      <div id="video-preview-info" style="font-size:13px;color:var(--text-secondary);margin-top:8px;"></div>
+                      <button type="button" class="upload-remove" id="video-remove">×</button>
+                    </div>
+                  </div>
+                  <div class="video-upload-progress hidden" id="video-upload-progress">
+                    <div class="progress-bar" style="height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden;margin-top:8px;">
+                      <div class="progress-fill" id="video-progress-fill" style="height:100%;background:var(--accent-gradient);border-radius:3px;width:0%;transition:width 300ms;"></div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="video-progress-text">Uploading video...</div>
+                  </div>
+                </div>
                
                 <div class="mint-fee-preview">
                   <span>Mint Fee:</span>
@@ -4072,6 +4169,9 @@ const totalPrice = albumPrice;
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
+    let videoFile = null;
+    let videoCid = null;
+    let videoUrl = null;
    // Calculate listing fee: pre-funds future on-demand mints
 // tracks × editions × network fee + buffer for reserves
 function calculateMintFee(editions, trackCount = 1) {
@@ -4216,6 +4316,59 @@ if (editions > 10000) {
       document.getElementById('cover-preview').classList.add('hidden');
       coverZone.classList.remove('has-file');
     });
+
+    // Video upload
+    const videoZone = document.getElementById('video-upload-zone');
+    const videoInput = document.getElementById('video-input');
+    
+    videoZone?.addEventListener('click', (e) => {
+      if (e.target.closest('#video-remove')) return;
+      videoInput?.click();
+    });
+    videoZone?.addEventListener('dragover', (e) => { e.preventDefault(); videoZone.classList.add('dragover'); });
+    videoZone?.addEventListener('dragleave', () => videoZone.classList.remove('dragover'));
+    videoZone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      videoZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) handleVideoFile(e.dataTransfer.files[0]);
+    });
+    
+    videoInput?.addEventListener('change', () => {
+      if (videoInput.files[0]) handleVideoFile(videoInput.files[0]);
+    });
+    
+    document.getElementById('video-remove')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      videoFile = null;
+      videoCid = null;
+      videoUrl = null;
+      document.getElementById('video-placeholder').classList.remove('hidden');
+      document.getElementById('video-preview').classList.add('hidden');
+      videoZone.classList.remove('has-file');
+    });
+    
+    function handleVideoFile(file) {
+      const validTypes = ['video/mp4', 'video/quicktime'];
+      if (!validTypes.includes(file.type)) { 
+        alert('Please upload an MP4 or MOV video file'); 
+        return; 
+      }
+      if (file.size > 10 * 1024 * 1024 * 1024) { 
+        alert('Video too large (max 10GB)'); 
+        return; 
+      }
+      
+      videoFile = file;
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      
+      // Show preview
+      const previewVideo = document.getElementById('video-preview-player');
+      previewVideo.src = URL.createObjectURL(file);
+      document.getElementById('video-preview-info').textContent = `${file.name} (${sizeMB} MB)`;
+      document.getElementById('video-placeholder').classList.add('hidden');
+      document.getElementById('video-preview').classList.remove('hidden');
+      videoZone.classList.add('has-file');
+    }
     
     function handleCoverFile(file) {
       if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return; }
@@ -4492,6 +4645,19 @@ if (editions > 10000) {
           });
           updateTrackList();
         }
+        // Step 2.5: Upload video if present
+        if (videoFile) {
+          const videoSizeMB = (videoFile.size / (1024 * 1024)).toFixed(1);
+          showStatus(2, 6, `Uploading music video...`, `${videoSizeMB}MB — uploading directly to IPFS`);
+          
+          const videoResult = await DirectUploader.upload(videoFile, (pct) => {
+            showStatus(2, 6, `Uploading music video... ${pct}%`, `${videoSizeMB}MB — uploading directly to IPFS`);
+          });
+          
+          videoCid = videoResult.cid;
+          videoUrl = videoResult.url;
+          console.log('Video uploaded:', { videoCid, videoUrl });
+        }
         // Step 3: Create metadata JSON(s)
         showStatus(3, 5, 'Creating metadata...', 'Almost ready for Xaman signatures');
         const releaseType = document.getElementById('release-type').value;
@@ -4515,10 +4681,11 @@ if (editions > 10000) {
               { trait_type: 'Track Number', value: i + 1 },
               { trait_type: 'Total Tracks', value: uploadedTracks.length },
             ],
-            properties: {
+           properties: {
               title: track.title,
               duration: track.duration,
               audio: `ipfs://${track.audioCid}`,
+              ...(videoCid ? { video: `ipfs://${videoCid}` } : {}),
               albumTitle: releaseTitle,
               trackNumber: i + 1,
             },
@@ -4581,11 +4748,12 @@ const preReleaseData = {
   editionsPerTrack: editions,
   nftTokenIds: [],
   txHash: null,
-  tracks: uploadedTracks.map((t, i) => ({
+ tracks: uploadedTracks.map((t, i) => ({
     ...t,
     price: tracks[i]?.price || defaultTrackPrice,
     soldEditions: 0,
     availableEditions: editions,
+    ...(videoCid ? { videoCid, videoUrl } : {}),
   })),
   sellOfferIndex: null,
 };
@@ -5745,8 +5913,16 @@ async loadArtistCollectors(artistAddress) {
       </div>
       
       <div class="np-content">
-        <div class="np-cover">
-          <img src="${coverUrl}" alt="${title}" id="np-cover-img">
+       <div class="np-cover">
+          ${track.videoUrl || track.videoCid ? `
+            <video class="np-cover-video" id="np-cover-video" 
+              src="${track.videoUrl ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) : '/api/ipfs/' + track.videoCid}" 
+              playsinline muted autoplay loop
+              poster="${coverUrl}"
+              style="width:100%;height:100%;object-fit:cover;border-radius:inherit;"></video>
+          ` : `
+            <img src="${coverUrl}" alt="${title}" id="np-cover-img">
+          `}
         </div>
         
         <div class="np-info">
@@ -5937,6 +6113,16 @@ async loadArtistCollectors(artistAddress) {
       
       const totalEl = document.getElementById('np-time-total');
       if (totalEl && dur && typeof Helpers !== 'undefined') totalEl.textContent = Helpers.formatDuration(dur);
+// Sync video with audio
+      const npVideo = document.getElementById('np-cover-video');
+      if (npVideo && audio) {
+        if (!audio.paused && npVideo.paused) npVideo.play().catch(() => {});
+        if (audio.paused && !npVideo.paused) npVideo.pause();
+        // Sync time if drifted more than 0.5s
+        if (Math.abs(npVideo.currentTime - ct) > 0.5) {
+          npVideo.currentTime = ct;
+        }
+      }
       
       // Sync play/pause icon with actual audio state
       const playBtn = document.getElementById('np-play');
@@ -5983,6 +6169,36 @@ async loadArtistCollectors(artistAddress) {
     
     const coverImg = document.getElementById('np-cover-img');
     if (coverImg) coverImg.src = coverUrl;
+    
+    // Update video source if track changed
+    const npVideo = document.getElementById('np-cover-video');
+    const track = AppState.player.currentTrack;
+    if (track?.videoUrl || track?.videoCid) {
+      if (!npVideo) {
+        // Need to add video element - replace img with video
+        const coverContainer = document.querySelector('.np-cover');
+        if (coverContainer) {
+          const videoSrc = track.videoUrl 
+            ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) 
+            : '/api/ipfs/' + track.videoCid;
+          coverContainer.innerHTML = `<video class="np-cover-video" id="np-cover-video" 
+            src="${videoSrc}" playsinline muted autoplay loop
+            poster="${coverUrl}"
+            style="width:100%;height:100%;object-fit:cover;border-radius:inherit;"></video>`;
+        }
+      } else {
+        const videoSrc = track.videoUrl 
+          ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) 
+          : '/api/ipfs/' + track.videoCid;
+        if (npVideo.src !== videoSrc) npVideo.src = videoSrc;
+      }
+    } else if (npVideo) {
+      // No video on this track, replace with img
+      const coverContainer = document.querySelector('.np-cover');
+      if (coverContainer) {
+        coverContainer.innerHTML = `<img src="${coverUrl}" alt="${track?.title || ''}" id="np-cover-img">`;
+      }
+    }
     
     overlay.style.setProperty('--np-cover-url', `url(${coverUrl})`);
     
