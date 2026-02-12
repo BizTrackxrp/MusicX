@@ -439,7 +439,12 @@ const API = {
   async getTrackBuyers(artistAddress, trackId) {
     return this.fetch(`/api/artist-sales?action=buyers&artist=${artistAddress}&trackId=${trackId}`);
   },
-
+ /**
+   * Get artist analytics (earnings breakdown)
+   */
+  async getArtistAnalytics(artistAddress) {
+    return this.fetch(`/api/artist-sales?action=analytics&artist=${artistAddress}`);
+  },
   // ============================================
   // UPLOADS (IPFS via Lighthouse - Direct)
   // ============================================
