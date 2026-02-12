@@ -2201,16 +2201,7 @@ async processListNFT(nft, price) {
             <div class="release-header-content">
               <div class="release-cover-small" id="release-cover-container">
                 ${release.coverUrl ? `<img src="${this.getImageUrl(release.coverUrl)}" alt="${release.title}" onerror="this.src='/placeholder.png'" id="release-cover-img">` : '<div class="cover-placeholder">🎵</div>'}
-                ${(release.tracks?.[0]?.videoUrl || release.tracks?.[0]?.videoCid) ? `
-                  <div class="video-play-overlay" id="release-video-play-overlay">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="white" opacity="0.9">
-                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                    </svg>
-                  </div>
-                  <video class="release-cover-video hidden" id="release-cover-video" 
-                    src="${release.tracks[0].videoUrl ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(release.tracks[0].videoUrl) : release.tracks[0].videoUrl) : '/api/ipfs/' + release.tracks[0].videoCid}" 
-                    preload="metadata" playsinline loop></video>
-                ` : ''}
+                
               </div>
               <div class="release-header-info">
                 <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
@@ -2442,40 +2433,7 @@ async processListNFT(nft, price) {
           height: 100%;
           object-fit: cover;
         }
-        .release-cover-small {
-          position: relative;
-        }
-        .video-play-overlay {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(0,0,0,0.3);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: background 200ms;
-          z-index: 2;
-        }
-        .video-play-overlay:hover {
-          background: rgba(0,0,0,0.5);
-        }
-        .video-play-overlay.playing {
-          opacity: 0;
-          pointer-events: none;
-        }
-        .release-cover-video {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          border-radius: var(--radius-lg);
-          z-index: 1;
-        }
-        .release-cover-video.hidden {
-          display: none;
-        }
+       
         .release-header-info {
           flex: 1;
           min-width: 0;
@@ -2998,18 +2956,7 @@ bindReleaseModalEvents(release) {
       }
     });
 
-  // Video overlay play
-    document.getElementById('release-video-play-overlay')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const video = document.getElementById('release-cover-video');
-      const overlay = document.getElementById('release-video-play-overlay');
-      const coverImg = document.getElementById('release-cover-img');
-      if (video) {
-        video.classList.remove('hidden');
-        video.muted = false;
-        video.play();
-        if (overlay) overlay.classList.add('playing');
-        if (coverImg) coverImg.style.opacity = '0';
+  
         
         // Click video to pause/show overlay again
         video.addEventListener('click', () => {
