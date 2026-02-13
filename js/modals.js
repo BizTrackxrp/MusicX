@@ -2968,8 +2968,8 @@ bindReleaseModalEvents(release) {
             if (overlay) overlay.classList.remove('playing');
           }
         });
-      }
-    });
+      
+    
     
     // Track row click to play
     document.querySelectorAll('.track-row').forEach(row => {
