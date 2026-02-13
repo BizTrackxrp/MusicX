@@ -5861,47 +5861,14 @@ async loadArtistCollectors(artistAddress) {
           `}
         </div>
         
-        <div class="np-info">
-          <div class="np-title" id="np-title">${title}</div>
-          <div class="np-artist" id="np-artist" data-release-id="${releaseId}">${artist}</div>
+       <div class="np-info" style="text-align:center;">
+          <div class="np-title" id="np-title" style="font-size:20px;font-weight:700;color:white;">${title}</div>
+          <div class="np-artist" id="np-artist" data-release-id="${releaseId}" style="font-size:15px;color:rgba(255,255,255,0.7);margin-top:4px;cursor:pointer;">${artist}</div>
         </div>
         
-        <div class="np-progress">
-          <div class="np-progress-bar" id="np-progress-bar">
-            <div class="np-progress-fill" id="np-progress-fill" style="width: ${duration ? (currentTime / duration * 100) : 0}%"></div>
-          </div>
-          <div class="np-times">
-            <span id="np-time-current">${typeof Helpers !== 'undefined' ? Helpers.formatDuration(currentTime) : '0:00'}</span>
-            <span id="np-time-total">${typeof Helpers !== 'undefined' ? Helpers.formatDuration(duration) : '0:00'}</span>
-          </div>
-        </div>
+       
         
-        <div class="np-controls">
-          <button class="np-ctrl-btn" id="np-prev">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-            </svg>
-          </button>
-          <button class="np-ctrl-btn np-play-btn" id="np-play">
-            ${isPlaying ? `
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16"></rect>
-                <rect x="14" y="4" width="4" height="16"></rect>
-              </svg>
-            ` : `
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-            `}
-          </button>
-          <button class="np-ctrl-btn" id="np-next">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
-            </svg>
-          </button>
-        </div>
-        
-        <div class="np-actions">
+     <div class="np-actions">
           <button class="np-buy-btn" id="np-buy" data-release-id="${releaseId}" data-track-id="${trackId}">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="9" cy="21" r="1"></circle>
@@ -5918,7 +5885,6 @@ async loadArtistCollectors(artistAddress) {
             </svg>
           </button>
         </div>
-      </div>
       
       <div class="np-bottom-safe"></div>
     `;
@@ -5938,46 +5904,6 @@ async loadArtistCollectors(artistAddress) {
     
     document.getElementById('np-close')?.addEventListener('click', closeNP);
     
-    // Play/Pause
-    document.getElementById('np-play')?.addEventListener('click', () => {
-      Player.togglePlay();
-      const playBtn = document.getElementById('np-play');
-      if (playBtn) {
-        const nowPlaying = !Player.audio.paused;
-        playBtn.innerHTML = nowPlaying ? `
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
-        ` : `
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-        `;
-      }
-    });
-    
-    // Previous / Next
-    document.getElementById('np-prev')?.addEventListener('click', () => {
-      Player.previous();
-      setTimeout(() => this._updateNPDisplay(), 300);
-    });
-    
-    document.getElementById('np-next')?.addEventListener('click', () => {
-      Player.next();
-      setTimeout(() => this._updateNPDisplay(), 300);
-    });
-    
-    // Progress bar seeking
-    document.getElementById('np-progress-bar')?.addEventListener('click', (e) => {
-      const bar = e.currentTarget;
-      const rect = bar.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const seekTime = pct * (Player.audio.duration || 0);
-      if (Player.audio) {
-        Player.audio.currentTime = seekTime;
-      }
-    });
     
     // Buy button -> close NP, open release modal for purchase
     document.getElementById('np-buy')?.addEventListener('click', () => {
@@ -6041,14 +5967,7 @@ async loadArtistCollectors(artistAddress) {
       const dur = audio.duration || 0;
       const pct = dur > 0 ? (ct / dur * 100) : 0;
       
-      const fill = document.getElementById('np-progress-fill');
-      if (fill) fill.style.width = `${pct}%`;
       
-      const timeEl = document.getElementById('np-time-current');
-      if (timeEl && typeof Helpers !== 'undefined') timeEl.textContent = Helpers.formatDuration(ct);
-      
-      const totalEl = document.getElementById('np-time-total');
-      if (totalEl && dur && typeof Helpers !== 'undefined') totalEl.textContent = Helpers.formatDuration(dur);
 // Sync video with audio
       const npVideo = document.getElementById('np-cover-video');
       if (npVideo && audio) {
@@ -6059,25 +5978,7 @@ async loadArtistCollectors(artistAddress) {
           npVideo.currentTime = ct;
         }
       }
-      
-      // Sync play/pause icon with actual audio state
-      const playBtn = document.getElementById('np-play');
-      if (playBtn) {
-        const shouldShowPause = !audio.paused;
-        const currentlyShowsPause = playBtn.innerHTML.includes('rect');
-        if (shouldShowPause !== currentlyShowsPause) {
-          playBtn.innerHTML = shouldShowPause ? `
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16"></rect>
-              <rect x="14" y="4" width="4" height="16"></rect>
-            </svg>
-          ` : `
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          `;
-        }
-      }
+
     }, 250);
     
     // Listen for track changes to auto-update display
