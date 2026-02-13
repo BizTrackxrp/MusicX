@@ -3865,33 +3865,7 @@ const totalPrice = albumPrice;
                   <div class="track-list-upload" id="track-list-upload"></div>
                 </div>
                 
-                <!-- Music Video (Optional) -->
-                <div class="form-group">
-                  <label class="form-label">Music Video <span style="color: var(--text-muted); font-weight: 400;">(Optional)</span></label>
-                  <p class="form-hint" style="margin-bottom: 8px;">Attach an MP4 video that plays instead of cover art in the player</p>
-                  <div class="upload-zone video-zone" id="video-upload-zone">
-                    <input type="file" id="video-input" accept="video/mp4,video/quicktime" hidden>
-                    <div class="upload-placeholder" id="video-placeholder">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                      </svg>
-                      <span>Click to upload music video</span>
-                      <span class="upload-hint">MP4, MOV supported (up to 10GB)</span>
-                    </div>
-                    <div class="upload-preview hidden" id="video-preview">
-                      <video id="video-preview-player" style="width:100%;max-width:320px;border-radius:var(--radius-md);" muted></video>
-                      <div id="video-preview-info" style="font-size:13px;color:var(--text-secondary);margin-top:8px;"></div>
-                      <button type="button" class="upload-remove" id="video-remove">×</button>
-                    </div>
-                  </div>
-                  <div class="video-upload-progress hidden" id="video-upload-progress">
-                    <div class="progress-bar" style="height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden;margin-top:8px;">
-                      <div class="progress-fill" id="video-progress-fill" style="height:100%;background:var(--accent-gradient);border-radius:3px;width:0%;transition:width 300ms;"></div>
-                    </div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="video-progress-text">Uploading video...</div>
-                  </div>
-                </div>
+            
                
                 <div class="mint-fee-preview">
                   <span>Mint Fee:</span>
@@ -4002,6 +3976,11 @@ const totalPrice = albumPrice;
         .track-upload-item .track-status.done { color: var(--success); }
         .track-upload-item .track-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; }
         .track-upload-item .track-remove:hover { color: var(--error); }
+        .track-video-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; border-radius: 4px; transition: all 150ms; }
+        .track-video-btn:hover { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); }
+        .track-video-btn.has-video { color: #8b5cf6; background: rgba(139, 92, 246, 0.15); }
+        .track-video-btn.uploading { color: var(--warning); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
         /* Track list header */
 .track-list-header-row {
@@ -4105,9 +4084,7 @@ const totalPrice = albumPrice;
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
-    let videoFile = null;
-    let videoCid = null;
-    let videoUrl = null;
+   
    // Calculate listing fee: pre-funds future on-demand mints
 // tracks × editions × network fee + buffer for reserves
 function calculateMintFee(editions, trackCount = 1) {
@@ -4253,59 +4230,7 @@ if (editions > 10000) {
       coverZone.classList.remove('has-file');
     });
 
-    // Video upload
-    const videoZone = document.getElementById('video-upload-zone');
-    const videoInput = document.getElementById('video-input');
-    
-    videoZone?.addEventListener('click', (e) => {
-      if (e.target.closest('#video-remove')) return;
-      videoInput?.click();
-    });
-    videoZone?.addEventListener('dragover', (e) => { e.preventDefault(); videoZone.classList.add('dragover'); });
-    videoZone?.addEventListener('dragleave', () => videoZone.classList.remove('dragover'));
-    videoZone?.addEventListener('drop', (e) => {
-      e.preventDefault();
-      videoZone.classList.remove('dragover');
-      if (e.dataTransfer.files[0]) handleVideoFile(e.dataTransfer.files[0]);
-    });
-    
-    videoInput?.addEventListener('change', () => {
-      if (videoInput.files[0]) handleVideoFile(videoInput.files[0]);
-    });
-    
-    document.getElementById('video-remove')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      videoFile = null;
-      videoCid = null;
-      videoUrl = null;
-      document.getElementById('video-placeholder').classList.remove('hidden');
-      document.getElementById('video-preview').classList.add('hidden');
-      videoZone.classList.remove('has-file');
-    });
-    
-    function handleVideoFile(file) {
-      const validTypes = ['video/mp4', 'video/quicktime'];
-      if (!validTypes.includes(file.type)) { 
-        alert('Please upload an MP4 or MOV video file'); 
-        return; 
-      }
-      if (file.size > 10 * 1024 * 1024 * 1024) { 
-        alert('Video too large (max 10GB)'); 
-        return; 
-      }
-      
-      videoFile = file;
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      
-      // Show preview
-      const previewVideo = document.getElementById('video-preview-player');
-      previewVideo.src = URL.createObjectURL(file);
-      document.getElementById('video-preview-info').textContent = `${file.name} (${sizeMB} MB)`;
-      document.getElementById('video-placeholder').classList.add('hidden');
-      document.getElementById('video-preview').classList.remove('hidden');
-      videoZone.classList.add('has-file');
-    }
-    
+   
     function handleCoverFile(file) {
       if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return; }
       if (file.size > 10 * 1024 * 1024) { alert('File too large (max 10MB)'); return; }
@@ -4395,6 +4320,12 @@ if (editions > 10000) {
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
+         <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
       `}).join('');
@@ -4457,7 +4388,50 @@ if (editions > 10000) {
       });
       // Album price editing
       document.getElementById('album-discount-price')?.addEventListener('input', updateAlbumSavings);
-      
+      // Per-track video upload
+      document.querySelectorAll('.track-video-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx);
+          const track = tracks[idx];
+          if (track.videoCid) {
+            // Already has video - remove it
+            if (confirm('Remove video from this track?')) {
+              track.videoCid = null;
+              track.videoUrl = null;
+              updateTrackList();
+            }
+            return;
+          }
+          // Open file picker
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'video/mp4,video/quicktime';
+          input.addEventListener('change', async () => {
+            const file = input.files[0];
+            if (!file) return;
+            if (file.size > 10 * 1024 * 1024 * 1024) {
+              alert('Video too large (max 10GB)');
+              return;
+            }
+            // Show uploading state
+            btn.classList.add('uploading');
+            btn.title = 'Uploading video...';
+            try {
+              const result = await DirectUploader.upload(file, (pct) => {
+                btn.title = `Uploading video... ${pct}%`;
+              });
+              track.videoCid = result.cid;
+              track.videoUrl = result.url;
+              updateTrackList();
+            } catch (err) {
+              console.error('Video upload failed:', err);
+              alert('Video upload failed: ' + err.message);
+              btn.classList.remove('uploading');
+            }
+          });
+          input.click();
+        });
+      });
       document.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           tracks.splice(parseInt(btn.dataset.idx), 1);
@@ -4581,19 +4555,7 @@ if (editions > 10000) {
           });
           updateTrackList();
         }
-        // Step 2.5: Upload video if present
-        if (videoFile) {
-          const videoSizeMB = (videoFile.size / (1024 * 1024)).toFixed(1);
-          showStatus(2, 6, `Uploading music video...`, `${videoSizeMB}MB — uploading directly to IPFS`);
-          
-          const videoResult = await DirectUploader.upload(videoFile, (pct) => {
-            showStatus(2, 6, `Uploading music video... ${pct}%`, `${videoSizeMB}MB — uploading directly to IPFS`);
-          });
-          
-          videoCid = videoResult.cid;
-          videoUrl = videoResult.url;
-          console.log('Video uploaded:', { videoCid, videoUrl });
-        }
+       
         // Step 3: Create metadata JSON(s)
         showStatus(3, 5, 'Creating metadata...', 'Almost ready for Xaman signatures');
         const releaseType = document.getElementById('release-type').value;
@@ -4617,11 +4579,11 @@ if (editions > 10000) {
               { trait_type: 'Track Number', value: i + 1 },
               { trait_type: 'Total Tracks', value: uploadedTracks.length },
             ],
-           properties: {
+          properties: {
               title: track.title,
               duration: track.duration,
               audio: `ipfs://${track.audioCid}`,
-              ...(videoCid ? { video: `ipfs://${videoCid}` } : {}),
+              ...(tracks[i]?.videoCid ? { video: `ipfs://${tracks[i].videoCid}` } : {}),
               albumTitle: releaseTitle,
               trackNumber: i + 1,
             },
@@ -4684,12 +4646,12 @@ const preReleaseData = {
   editionsPerTrack: editions,
   nftTokenIds: [],
   txHash: null,
- tracks: uploadedTracks.map((t, i) => ({
+tracks: uploadedTracks.map((t, i) => ({
     ...t,
     price: tracks[i]?.price || defaultTrackPrice,
     soldEditions: 0,
     availableEditions: editions,
-    ...(videoCid ? { videoCid, videoUrl } : {}),
+    ...(tracks[i]?.videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
   })),
   sellOfferIndex: null,
 };
