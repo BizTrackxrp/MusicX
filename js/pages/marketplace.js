@@ -227,7 +227,7 @@ const MarketplacePage = {
           }
           <span class="rank-badge rank-${rank}">#${rank}</span>
           ${badge}
-          ${showMV ? '<span class="mv-badge">▶ MV</span>' : ''}
+          ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
           <div class="card-overlay">
             <button class="play-btn" data-release-id="${release.id}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -357,7 +357,18 @@ const MarketplacePage = {
         if (release) Modals.showRelease(release);
       });
     });
-    
+    // MV badge clicks - play + open video
+    document.querySelectorAll('.mv-play-btn').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const releaseId = badge.dataset.releaseId;
+        const release = this.releases.find(r => r.id === releaseId);
+        if (release?.tracks?.length > 0) {
+          StreamPage.playRelease(release);
+          setTimeout(() => Modals.showExpandedNowPlaying(), 300);
+        }
+      });
+    });
     document.querySelectorAll('.play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -476,7 +487,9 @@ const MarketplacePage = {
           font-size: 10px; font-weight: 700; letter-spacing: 0.5px; border-radius: 4px;
           background: linear-gradient(135deg, #8b5cf6, #ec4899); color: white;
           z-index: 3; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+          cursor: pointer; transition: transform 150ms, box-shadow 150ms;
         }
+        .mv-badge:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.6); }
         
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         
