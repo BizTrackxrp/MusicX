@@ -2899,7 +2899,7 @@ async processListNFT(nft, price) {
       // Silently fail - this is a nice-to-have
     }
 
-    // "You own this" badge
+   // "You own this" badge
     if (AppState.user?.address) {
       this.fetchOwnedNfts().then(allNfts => {
         const ownedCopies = allNfts.filter(nft => nft.releaseId === release.id);
@@ -2926,22 +2926,22 @@ async processListNFT(nft, price) {
     const hue = Math.abs(hash) % 360;
     return `hsl(${hue}, 40%, 30%)`;
   },
-bindReleaseModalEvents(release) {
-  const trackPrice = parseFloat(release.songPrice) || 0;
-  const trackCount = release.tracks?.length || 1;
-  
-  // Set initial like state for release button
-  const firstTrack = release.tracks?.[0];
-  if (firstTrack) {
-    const trackId = firstTrack.id?.toString();
-    const isLiked = isTrackLiked(trackId);
-    const likeBtn = document.getElementById('like-release-btn');
-    if (likeBtn) {
-      likeBtn.classList.toggle('liked', isLiked);
-      const svg = likeBtn.querySelector('svg');
-      if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+  bindReleaseModalEvents(release) {
+    const trackPrice = parseFloat(release.songPrice) || 0;
+    const trackCount = release.tracks?.length || 1;
+    
+    // Set initial like state for release button
+    const firstTrack = release.tracks?.[0];
+    if (firstTrack) {
+      const trackId = firstTrack.id?.toString();
+      const isLiked = isTrackLiked(trackId);
+      const likeBtn = document.getElementById('like-release-btn');
+      if (likeBtn) {
+        likeBtn.classList.toggle('liked', isLiked);
+        const svg = likeBtn.querySelector('svg');
+        if (svg) svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+      }
     }
-  }
     
     // Play button
     document.getElementById('play-release-btn')?.addEventListener('click', () => {
@@ -2956,21 +2956,6 @@ bindReleaseModalEvents(release) {
       }
     });
 
-  
-        
-        // Click video to pause/show overlay again
-        video.addEventListener('click', () => {
-          if (video.paused) {
-            video.play();
-            if (overlay) overlay.classList.add('playing');
-          } else {
-            video.pause();
-            if (overlay) overlay.classList.remove('playing');
-          }
-        });
-      }
-    });
-    
     // Track row click to play
     document.querySelectorAll('.track-row').forEach(row => {
       row.addEventListener('click', (e) => {
