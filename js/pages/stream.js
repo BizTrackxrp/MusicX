@@ -268,7 +268,7 @@ const StreamPage = {
           }
           <span class="rank-badge rank-${rank}">#${rank}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
-          ${showMV ? '<span class="mv-badge">▶ MV</span>' : ''}
+         ${showMV ? `<span class="mv-badge mv-play-btn" data-top-track-index="${index}">▶ MV</span>` : ''}
           <div class="release-play-overlay">
             <button class="release-play-btn" data-top-track-index="${index}">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -341,7 +341,7 @@ const StreamPage = {
           }
           <span class="release-type-badge ${release.type || 'single'}">${release.type || 'single'}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
-          ${showMV ? '<span class="mv-badge">▶ MV</span>' : ''}
+          ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
           <div class="release-play-overlay">
             <button class="release-play-btn" data-release-id="${release.id}">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -388,7 +388,7 @@ const StreamPage = {
         <div class="track-info">
           <div class="track-title">
             ${track.displayTitle}
-            ${showMV ? '<span class="mv-badge-inline">MV</span>' : ''}
+          ${showMV ? `<span class="mv-badge-inline mv-play-inline" data-track-index="${index}">MV</span>` : ''}
           </div>
           <div class="track-artist">${track.release.artistName || Helpers.truncateAddress(track.release.artistAddress)}</div>
         </div>
@@ -570,7 +570,40 @@ const StreamPage = {
         if (track) this.playTrack(track, allTracks, index);
       });
     });
-    
+    // MV badge clicks - play track + open video
+    document.querySelectorAll('.mv-play-btn').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const releaseId = badge.dataset.releaseId;
+        const topIdx = badge.dataset.topTrackIndex;
+        if (topIdx !== undefined) {
+          const track = this.topTracks[parseInt(topIdx)];
+          if (track) {
+            this.playTrack(track, this.topTracks, parseInt(topIdx));
+            setTimeout(() => Modals.showExpandedNowPlaying(), 300);
+          }
+        } else if (releaseId) {
+          const release = this.releases.find(r => r.id === releaseId);
+          if (release) {
+            this.playRelease(release);
+            setTimeout(() => Modals.showExpandedNowPlaying(), 300);
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('.mv-play-inline').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const index = parseInt(badge.dataset.trackIndex);
+        const allTracks = this.sortTracks(this.getAllTracks());
+        const track = allTracks[index];
+        if (track) {
+          this.playTrack(track, allTracks, index);
+          setTimeout(() => Modals.showExpandedNowPlaying(), 300);
+        }
+      });
+    });
     // Artist cards
     document.querySelectorAll('.artist-card').forEach(card => {
       card.addEventListener('click', () => {
@@ -694,6 +727,8 @@ const StreamPage = {
           position: absolute;
           bottom: 8px;
           right: 8px;
+          cursor: pointer;
+          transition: transform 150ms, box-shadow 150ms;
           padding: 3px 8px;
           font-size: 10px;
           font-weight: 700;
@@ -718,6 +753,9 @@ const StreamPage = {
           margin-left: 6px;
           vertical-align: middle;
         }
+        .mv-badge:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.6); }
+        .mv-badge-inline { cursor: pointer; }
+        .mv-badge-inline:hover { opacity: 0.8; }
         
         /* Play count */
         .release-card-plays {
