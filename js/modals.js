@@ -3979,7 +3979,9 @@ const totalPrice = albumPrice;
         .track-video-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; border-radius: 4px; transition: all 150ms; }
         .track-video-btn:hover { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); }
         .track-video-btn.has-video { color: #8b5cf6; background: rgba(139, 92, 246, 0.15); }
-        .track-video-btn.uploading { color: var(--warning); animation: pulse 1.5s infinite; }
+        .track-video-btn.uploading { color: var(--warning); animation: pulse 1.5s infinite; position: relative; }
+        .video-upload-pct { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--warning); font-weight: 700; white-space: nowrap; }
+        .video-check { position: absolute; top: -4px; right: -4px; font-size: 8px; background: #22c55e; color: white; border-radius: 50%; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; line-height: 1; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
         /* Track list header */
@@ -4150,9 +4152,10 @@ function calculateMintFee(editions, trackCount = 1) {
       document.getElementById('create-step-1').classList.remove('hidden');
     });
     
-    document.getElementById('create-next-2')?.addEventListener('click', () => {
+   document.getElementById('create-next-2')?.addEventListener('click', () => {
       if (!coverFile) { alert('Please upload cover art'); return; }
       if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
+      if (tracks.some(t => t.videoUploading)) { alert('Please wait for video upload to finish'); return; }
       
    // Validate edition limit (10000 max)
 const editions = parseInt(document.getElementById('release-editions').value) || 1;
@@ -4320,11 +4323,13 @@ if (editions > 10000) {
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
-         <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
+        <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''} ${track.videoUploading ? 'uploading' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="23 7 16 12 23 17 23 7"></polygon>
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
             </svg>
+            ${track.videoUploading ? `<span class="video-upload-pct" id="video-pct-${idx}">${track.videoProgress || 0}%</span>` : ''}
+            ${track.videoCid ? '<span class="video-check">✓</span>' : ''}
           </button>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
@@ -4413,20 +4418,25 @@ if (editions > 10000) {
               alert('Video too large (max 10GB)');
               return;
             }
-            // Show uploading state
-            btn.classList.add('uploading');
-            btn.title = 'Uploading video...';
+           // Show uploading state
+            track.videoUploading = true;
+            track.videoProgress = 0;
+            updateTrackList();
             try {
               const result = await DirectUploader.upload(file, (pct) => {
-                btn.title = `Uploading video... ${pct}%`;
+                track.videoProgress = pct;
+                const pctEl = document.getElementById(`video-pct-${idx}`);
+                if (pctEl) pctEl.textContent = pct + '%';
               });
               track.videoCid = result.cid;
               track.videoUrl = result.url;
+              track.videoUploading = false;
               updateTrackList();
             } catch (err) {
               console.error('Video upload failed:', err);
               alert('Video upload failed: ' + err.message);
-              btn.classList.remove('uploading');
+              track.videoUploading = false;
+              updateTrackList();
             }
           });
           input.click();
