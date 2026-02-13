@@ -676,6 +676,8 @@ const Modals = {
               ipfsHash: t.audioCid,
               releaseId: release.id,
               duration: t.duration,
+              videoUrl: t.videoUrl || null,
+              videoCid: t.videoCid || null,
             };
             const queue = release.tracks.map((tr, i) => ({
               id: parseInt(tr.id) || i,
@@ -686,6 +688,8 @@ const Modals = {
               ipfsHash: tr.audioCid,
               releaseId: release.id,
               duration: tr.duration,
+              videoUrl: tr.videoUrl || null,
+              videoCid: tr.videoCid || null,
             }));
             Player.playTrack(playTrack, queue, idx);
             document.querySelectorAll('.np-track-row').forEach((el, i) => {
@@ -2950,7 +2954,7 @@ async processListNFT(nft, price) {
           id: parseInt(t.id) || i, trackId: t.id?.toString(),
           title: release.type === 'single' ? release.title : t.title,
           artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-          cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+          cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
         }));
         Player.playTrack(queue[0], queue, 0);
       }
@@ -2966,7 +2970,7 @@ async processListNFT(nft, price) {
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
           }));
           Player.playTrack(queue[idx], queue, idx);
         }
@@ -2983,7 +2987,7 @@ async processListNFT(nft, price) {
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
-            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration,
+            cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
           }));
           Player.playTrack(queue[idx], queue, idx);
         }
