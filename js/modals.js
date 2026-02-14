@@ -5824,7 +5824,7 @@ async loadArtistCollectors(artistAddress) {
        <div class="np-cover">
           ${track.videoUrl || track.videoCid ? `
             <video class="np-cover-video" id="np-cover-video" 
-              src="${track.videoUrl ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) : '/api/ipfs/' + track.videoCid}" 
+              src="${track.videoUrl || '/api/ipfs/' + track.videoCid}"
               playsinline muted autoplay loop
               poster="${coverUrl}"
               style="width:100%;height:100%;object-fit:cover;border-radius:inherit;"></video>
@@ -5988,7 +5988,7 @@ async loadArtistCollectors(artistAddress) {
         const coverContainer = document.querySelector('.np-cover');
         if (coverContainer) {
           const videoSrc = track.videoUrl 
-            ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) 
+            ? track.videoUrl 
             : '/api/ipfs/' + track.videoCid;
           coverContainer.innerHTML = `<video class="np-cover-video" id="np-cover-video" 
             src="${videoSrc}" playsinline muted autoplay loop
@@ -5997,8 +5997,8 @@ async loadArtistCollectors(artistAddress) {
         }
       } else {
         const videoSrc = track.videoUrl 
-          ? (typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(track.videoUrl) : track.videoUrl) 
-          : '/api/ipfs/' + track.videoCid;
+        ? track.videoUrl 
+            : '/api/ipfs/' + track.videoCid;
         if (npVideo.src !== videoSrc) npVideo.src = videoSrc;
       }
     } else if (npVideo) {
