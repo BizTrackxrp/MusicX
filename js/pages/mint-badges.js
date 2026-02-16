@@ -35,34 +35,31 @@ const MintBadge = {
    * @param {Object} release - Release object with mint_fee_paid, is_minted, created_at, mintFeePaid, isMinted
    * @returns {'og'|'legacy'|'verified'}
    */
-  getType(release) {
-    // Normalize field names (API might use snake_case or camelCase)
+ getType(release) {
     const mintFeePaid = release.mint_fee_paid ?? release.mintFeePaid ?? false;
     const isMinted = release.is_minted ?? release.isMinted ?? false;
-    const status = release.status;
     const createdAt = release.created_at ?? release.createdAt;
 
-    // Is this a lazy mint release?
-    const isLazyMint = mintFeePaid === true || status === 'live';
-
-    if (!isLazyMint) {
-      // Pre-lazy-mint: artist minted directly
+    // Pre-lazy-mint: artist minted directly, mint fee system didn't exist
+    if (isMinted && !mintFeePaid) {
       return 'og';
     }
 
-    // Lazy mint — check if it was created after the Issuer fix
-    if (this.ISSUER_FIX_DATE && createdAt) {
-      const fixDate = new Date(this.ISSUER_FIX_DATE);
-      const releaseDate = new Date(createdAt);
-      if (releaseDate >= fixDate) {
-        return 'verified';
+    // Lazy mint — platform mints on demand
+    if (mintFeePaid) {
+      if (this.ISSUER_FIX_DATE && createdAt) {
+        const fixDate = new Date(this.ISSUER_FIX_DATE);
+        const releaseDate = new Date(createdAt);
+        if (releaseDate >= fixDate) {
+          return 'verified';
+        }
       }
+      return 'legacy';
     }
 
-    // Lazy mint before fix (or fix date not set yet)
-    return 'legacy';
+    // Fallback: neither minted nor mint fee paid (draft/unknown)
+    return 'og';
   },
-
   /**
    * Get tooltip text for a mint type
    */
