@@ -5,6 +5,9 @@
  * - Check if artist has any sales (for sidebar visibility)
  * - Get all sold tracks with buyer details
  * - Analytics summary with XRP earnings breakdown
+ * 
+ * UPDATED FEB 2026: Includes mint provenance fields (mint_fee_paid, is_minted,
+ * status, created_at) in track results so the frontend can display mint badges.
  */
 import { neon } from '@neondatabase/serverless';
 export default async function handler(req, res) {
@@ -45,6 +48,7 @@ export default async function handler(req, res) {
     }
     
     // ACTION: tracks - Get all tracks with sales for this artist
+    // Now includes release-level mint provenance fields for badge display
     if (action === 'tracks') {
       const tracks = await sql`
         SELECT 
@@ -54,12 +58,16 @@ export default async function handler(req, res) {
           r.title as release_title,
           r.cover_url,
           r.type as release_type,
+          r.mint_fee_paid,
+          r.is_minted,
+          r.status,
+          r.created_at,
           COUNT(s.id) as copies_sold
         FROM tracks t
         JOIN releases r ON t.release_id = r.id
         JOIN sales s ON s.track_id = t.id
         WHERE r.artist_address = ${artist}
-        GROUP BY t.id, t.title, r.id, r.title, r.cover_url, r.type
+        GROUP BY t.id, t.title, r.id, r.title, r.cover_url, r.type, r.mint_fee_paid, r.is_minted, r.status, r.created_at
         ORDER BY copies_sold DESC, t.title ASC
       `;
       
