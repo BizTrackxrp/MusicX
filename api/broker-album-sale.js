@@ -1195,13 +1195,14 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   const transferFee = Math.round(royaltyPercent * 1000);
   
   const mintTx = await client.autofill({
-    TransactionType: 'NFTokenMint',
-    Account: platformAddress,
-    URI: uriHex,
-    Flags: 8, // tfTransferable
-    TransferFee: transferFee,
-    NFTokenTaxon: 0,
-  });
+  TransactionType: 'NFTokenMint',
+  Account: platformAddress,
+  Issuer: release.artist_address,  // ← ADD THIS
+  URI: uriHex,
+  Flags: 8,
+  TransferFee: transferFee,
+  NFTokenTaxon: 0,
+});
   
   const signedMint = platformWallet.sign(mintTx);
   const mintResult = await client.submitAndWait(signedMint.tx_blob);
