@@ -7,6 +7,7 @@
  * - All Tracks / All Artists tabbed view
  * - Platform stats
  * - MV badges on cards with music videos
+ * - Mint provenance badges (OG MINT / LEGACY / VERIFIED)
  * - Video data passed through to player queue
  */
 
@@ -73,6 +74,14 @@ const StreamPage = {
               soldEditions: item.release?.soldEditions || 0,
               type: item.release?.type || 'single',
               tracks: item.release?.tracks || [],
+              // Mint provenance fields
+              mintFeePaid: item.release?.mintFeePaid,
+              mint_fee_paid: item.release?.mint_fee_paid,
+              isMinted: item.release?.isMinted,
+              is_minted: item.release?.is_minted,
+              status: item.release?.status,
+              createdAt: item.release?.createdAt,
+              created_at: item.release?.created_at,
             }
           }));
           
@@ -259,6 +268,9 @@ const StreamPage = {
     const coverUrl = this.getImageUrl(release.coverUrl);
     const showMV = this.trackHasVideo(track) || this.hasVideo(release);
     
+    // Mint provenance badge
+    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
+    
     return `
       <div class="release-card top-track-card" data-top-track-index="${index}">
         <div class="release-card-cover">
@@ -269,6 +281,7 @@ const StreamPage = {
           <span class="rank-badge rank-${rank}">#${rank}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
          ${showMV ? `<span class="mv-badge mv-play-btn" data-top-track-index="${index}">▶ MV</span>` : ''}
+          ${mintBadge}
           <div class="release-play-overlay">
             <button class="release-play-btn" data-top-track-index="${index}">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -332,6 +345,9 @@ const StreamPage = {
     const coverUrl = this.getImageUrl(release.coverUrl);
     const showMV = this.hasVideo(release);
     
+    // Mint provenance badge
+    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
+    
     return `
       <div class="release-card" data-release-id="${release.id}">
         <div class="release-card-cover">
@@ -342,6 +358,7 @@ const StreamPage = {
           <span class="release-type-badge ${release.type || 'single'}">${release.type || 'single'}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
           ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
+          ${mintBadge}
           <div class="release-play-overlay">
             <button class="release-play-btn" data-release-id="${release.id}">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -756,6 +773,15 @@ const StreamPage = {
         .mv-badge:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.6); }
         .mv-badge-inline { cursor: pointer; }
         .mv-badge-inline:hover { opacity: 0.8; }
+        
+        /* Mint badge positioning in release-card-cover */
+        .release-card-cover .mint-badge {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          top: auto;
+          right: auto;
+        }
         
         /* Play count */
         .release-card-plays {
