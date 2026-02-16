@@ -2180,11 +2180,14 @@ async processListNFT(nft, price) {
     // Check if full album is available (all tracks have stock)
     const canBuyFullAlbum = isAlbum && available >= trackCount;
     
-    // Calculate total duration
+   // Calculate total duration
     const totalDuration = release.tracks?.reduce((sum, t) => sum + (t.duration || 0), 0) || 0;
     const durationText = totalDuration > 3600 
       ? `${Math.floor(totalDuration / 3600)} hr ${Math.floor((totalDuration % 3600) / 60)} min`
       : `${Math.floor(totalDuration / 60)} min ${totalDuration % 60} sec`;
+    
+    // Mint provenance badge
+    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release, { size: 'md' }) : '';
     
     const html = `
       <div class="modal-overlay release-modal-overlay">
@@ -2208,7 +2211,10 @@ async processListNFT(nft, price) {
                 
               </div>
               <div class="release-header-info">
-                <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
+                <div class="release-modal-badge-row">
+                  <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
+                  ${mintBadge}
+                </div>
                 <h1 class="release-title-large">${release.title}</h1>
                 <div class="release-meta">
                  <button class="artist-chip" data-artist="${release.artistAddress}">
@@ -2447,6 +2453,14 @@ async processListNFT(nft, price) {
           font-weight: 600;
           text-transform: uppercase;
           color: var(--text-primary);
+        }
+        .release-modal-badge-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .release-modal-badge-row .mint-badge {
+          position: static;
         }
         .release-title-large {
           font-size: 36px;
@@ -2695,6 +2709,7 @@ async processListNFT(nft, price) {
             padding-bottom: 20px;
             align-items: flex-start;
           }
+          .release-modal-badge-row { justify-content: center; }
           .release-modal {
             max-height: calc(100vh - 40px);
             max-height: calc(100dvh - 40px);
