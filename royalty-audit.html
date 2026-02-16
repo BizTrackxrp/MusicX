@@ -680,11 +680,41 @@
     }
 
     // ── Wallet Detection ──
-    function detectWallet() {
-      // Try to get wallet from localStorage (set by Xaman auth in main app)
-      const stored = localStorage.getItem('xaman_address') 
-        || localStorage.getItem('walletAddress')
-        || localStorage.getItem('connectedWallet');
+   function detectWallet() {
+      // Read from sessionStorage where Xaman auth stores the session
+      let stored = null;
+      try {
+        const session = sessionStorage.getItem('xrpmusic_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          stored = parsed.address || null;
+        }
+      } catch (e) {}
+      
+      // Also check URL param for direct linking
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramWallet = urlParams.get('wallet');
+      
+      currentWallet = paramWallet || stored || null;
+      
+      const pill = document.getElementById('walletPill');
+      const addrEl = document.getElementById('walletAddr');
+      const toggle = document.getElementById('viewToggle');
+      
+      if (currentWallet) {
+        pill.classList.remove('disconnected');
+        addrEl.textContent = truncAddr(currentWallet);
+        toggle.style.display = 'flex';
+        currentView = 'personal';
+        toggle.querySelectorAll('button')[0].classList.add('active');
+        toggle.querySelectorAll('button')[1].classList.remove('active');
+      } else {
+        pill.classList.add('disconnected');
+        addrEl.textContent = 'Not connected';
+        toggle.style.display = 'none';
+        currentView = 'global';
+      }
+    }
       
       // Also check URL param for direct linking
       const urlParams = new URLSearchParams(window.location.search);
