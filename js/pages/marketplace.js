@@ -9,6 +9,7 @@
  * 
  * FEATURES:
  * - MV badges on releases with music videos
+ * - Mint provenance badges (OG MINT / LEGACY / VERIFIED)
  * - Primary market (from artists) and Secondary market (resale)
  * - View All navigates to Analytics page
  */
@@ -206,6 +207,9 @@ const MarketplacePage = {
     const soldPercent = Math.round((release.soldEditions / release.totalEditions) * 100);
     const showMV = this.hasVideo(release);
     
+    // Mint provenance badge
+    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
+    
     let badge = '';
     if (type === 'sales') {
       badge = `<span class="card-badge sales">${release.soldEditions} sold</span>`;
@@ -228,6 +232,7 @@ const MarketplacePage = {
           <span class="rank-badge rank-${rank}">#${rank}</span>
           ${badge}
           ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
+          ${mintBadge}
           <div class="card-overlay">
             <button class="play-btn" data-release-id="${release.id}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -461,6 +466,15 @@ const MarketplacePage = {
         .featured-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
         .featured-card-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
         .featured-card-cover img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Mint badge positioning inside featured cards */
+        .featured-card-cover .mint-badge {
+          position: absolute;
+          bottom: 8px;
+          left: 8px;
+          top: auto;
+          right: auto;
+        }
         
         .rank-badge {
           position: absolute; top: 8px; left: 8px; padding: 4px 10px;
