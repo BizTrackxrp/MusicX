@@ -2326,11 +2326,14 @@ getUniqueArtists(grouped) {
   // RELEASE CARD (unchanged)
   // ============================================
   
-  renderReleaseCard(release) {
+renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
     const isOwner = AppState.user?.address === release.artistAddress;
     const coverUrl = this.getImageUrl(release.coverUrl);
+    
+    // Mint provenance badge
+    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
     
     // Determine listing status - NOW RECOGNIZES LAZY MINT!
     let statusClass = '';
@@ -2380,6 +2383,7 @@ getUniqueArtists(grouped) {
           <span class="release-type-badge ${release.type}">${release.type}</span>
           <span class="release-availability">${available} left</span>
           ${statusBadge}
+          ${mintBadge}
           ${statusOverlay}
         </div>
         <div class="release-card-info">
@@ -2393,7 +2397,6 @@ getUniqueArtists(grouped) {
       </div>
     `;
   },
-  
   // ============================================
   // ERROR & EVENTS (unchanged)
   // ============================================
