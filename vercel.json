@@ -15,7 +15,9 @@
     { "source": "/playlists", "destination": "/app.html" },
     { "source": "/purchase", "destination": "/app.html" },
     { "source": "/genres", "destination": "/app.html" },
-    { "source": "/genre/:id", "destination": "/app.html" }
+    { "source": "/genre/:id", "destination": "/app.html" },
+    { "source": "/transparency", "destination": "/app.html" },
+    { "source": "/sales", "destination": "/app.html" }
   ],
   "functions": {
     "api/batch-mint.js": {
