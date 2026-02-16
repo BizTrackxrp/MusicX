@@ -17,8 +17,11 @@ const SecondarySalesPage = {
 
     try {
       const wallet = AppState.user?.address;
-      const walletParam = wallet ? `&wallet=${wallet}` : '';
-      this.currentView = wallet ? 'personal' : 'global';
+      const walletParam = (wallet && this.currentView === 'personal') ? `&wallet=${wallet}` : '';
+      // Only default to personal on first load, not when switching views
+      if (!this.cachedData) {
+        this.currentView = wallet ? 'personal' : 'global';
+      }
 
       const [summary, secondary] = await Promise.all([
         fetch(`/api/royalty-audit?action=summary${walletParam}`).then(r => r.json()),
