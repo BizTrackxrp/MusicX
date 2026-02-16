@@ -53,17 +53,18 @@
       </button>
 
       <button id="sales-nav-item" class="nav-item hidden" data-page="sales">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-  </svg>
-  <span>Sales</span>
-</button>
-      <a href="/royalty-audit.html" class="nav-item" style="text-decoration:none;color:inherit;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+        <span>Sales</span>
+      </button>
+
+      <button class="nav-item" data-page="transparency">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
         <span>Transparency</span>
-      </a>
+      </button>
 
       <!-- Create Button (shown when logged in) -->
       <button id="create-btn" class="create-btn hidden">
@@ -108,16 +109,16 @@
           </button>
 
           <button class="nav-item" data-page="genres">
-  <div class="playlist-icon browse" style="background: linear-gradient(135deg, #f97316, #ec4899);">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <rect x="3" y="3" width="7" height="7"></rect>
-      <rect x="14" y="3" width="7" height="7"></rect>
-      <rect x="14" y="14" width="7" height="7"></rect>
-      <rect x="3" y="14" width="7" height="7"></rect>
-    </svg>
-  </div>
-  <span>Browse Genres</span>
-</button>
+            <div class="playlist-icon browse" style="background: linear-gradient(135deg, #f97316, #ec4899);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </div>
+            <span>Browse Genres</span>
+          </button>
 
           <button class="nav-item" id="create-playlist-btn">
             <div class="playlist-icon">
@@ -539,7 +540,7 @@
   <div id="modals"></div>
 
   <!-- Scripts -->
-    <script src="/js/ipfs-helper.js"></script>
+  <script src="/js/ipfs-helper.js"></script>
   <script src="/js/state.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/xaman.js"></script>
@@ -555,19 +556,19 @@
   <script src="/js/pages/direct-uploader.js"></script>
   <script src="/js/share-utils.js"></script>
   <script src="/js/browse-playlists.js"></script>
-  
   <script src="/js/playlist-picker.js"></script>
   <script src="/js/pages/liked.js"></script>
   <script src="/js/modals.js"></script>
   <script src="/js/pages/artist-sales.js"></script>
+  <script src="/js/pages/transparency.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/mint-notifications.js"></script>
   <script src="/js/edit-price-modal.js"></script>
   <script src="/js/genres.js"></script>
   <script src="/js/edit-genres-modal.js"></script>
-<script src="/js/genre-playlists.js"></script>
-<script src="/js/genre-page.js"></script>
-<script src="/js/browse-genres.js"></script>
-<script src="/js/genre-selector-modal.js"></script>
+  <script src="/js/genre-playlists.js"></script>
+  <script src="/js/genre-page.js"></script>
+  <script src="/js/browse-genres.js"></script>
+  <script src="/js/genre-selector-modal.js"></script>
 </body>
 </html>
