@@ -1194,15 +1194,27 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   const royaltyPercent = release.royalty_percent || 5;
   const transferFee = Math.round(royaltyPercent * 1000);
   
+  // Check if artist has authorized platform as NFTokenMinter
+  let useIssuer = false;
+  try {
+    const acctInfo = await client.request({
+      command: 'account_info',
+      account: release.artist_address,
+    });
+    useIssuer = acctInfo.result.account_data?.NFTokenMinter === platformAddress;
+  } catch (e) {
+    console.warn('Could not check NFTokenMinter for', release.artist_address);
+  }
+
   const mintTx = await client.autofill({
-  TransactionType: 'NFTokenMint',
-  Account: platformAddress,
-  Issuer: release.artist_address,  // ← ADD THIS
-  URI: uriHex,
-  Flags: 8,
-  TransferFee: transferFee,
-  NFTokenTaxon: 0,
-});
+    TransactionType: 'NFTokenMint',
+    Account: platformAddress,
+    ...(useIssuer ? { Issuer: release.artist_address } : {}),
+    URI: uriHex,
+    Flags: 8,
+    TransferFee: transferFee,
+    NFTokenTaxon: 0,
+  });
   
   const signedMint = platformWallet.sign(mintTx);
   const mintResult = await client.submitAndWait(signedMint.tx_blob);
@@ -1257,7 +1269,6 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
     nftRecordId: finalNftId,
   };
 }
-
 /**
  * Extract NFT Token ID from mint transaction metadata
  */
