@@ -28,7 +28,7 @@ const MintBadge = {
 
   // ⚠️ UPDATE THIS DATE when you deploy the Issuer fix!
   // Set to null until the fix is live. Once deployed, set to the ISO date string.
-  ISSUER_FIX_DATE: null, // e.g. '2026-02-17T00:00:00Z'
+  ISSUER_FIX_DATE: '2026-02-16T00:00:00Z',
 
   /**
    * Determine mint type for a release
