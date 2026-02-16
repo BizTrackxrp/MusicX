@@ -41,7 +41,6 @@ export default async function handler(req, res) {
           r.title AS release_title,
           r.cover_cid,
           r.type AS release_type,
-          r.transfer_fee,
           r.mint_fee_paid,
           r.is_minted,
           t.title AS track_title,
@@ -84,7 +83,6 @@ export default async function handler(req, res) {
           r.title AS release_title,
           r.cover_cid,
           r.type AS release_type,
-          r.transfer_fee,
           r.mint_fee_paid,
           r.is_minted,
           t.title AS track_title,
@@ -143,7 +141,6 @@ function formatResult(row) {
     ownerAddress: row.owner_address,
     isAlbum: row.release_type === 'album',
     coverCid: row.cover_cid,
-    transferFee: row.transfer_fee,
     mintType,
     coverUrl: row.cover_cid ? `https://gateway.lighthouse.storage/ipfs/${row.cover_cid}` : null,
   };
