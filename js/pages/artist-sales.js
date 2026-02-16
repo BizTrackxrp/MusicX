@@ -1,6 +1,11 @@
 /**
  * XRP Music - Artist Sales Page
  * Shows artists their sold tracks, buyer details, and earnings analytics
+ * 
+ * UPDATED FEB 2026:
+ * - Mint provenance badges on all track cards (OG MINT / LEGACY / VERIFIED)
+ * - Royalty Audit section below Earnings Overview (admin visibility)
+ * - Mint type breakdown showing pre-lazy-mint vs lazy-mint releases
  */
 
 const ArtistSalesPage = {
@@ -27,10 +32,14 @@ const ArtistSalesPage = {
     UI.showLoading();
 
     try {
-      // Fetch tracks and analytics in parallel
-      const [trackData, analyticsData] = await Promise.all([
+      // Fetch tracks, analytics, and royalty audit in parallel
+      const [trackData, analyticsData, auditData] = await Promise.all([
         API.getArtistSoldTracks(AppState.user.address),
-        API.getArtistAnalytics(AppState.user.address)
+        API.getArtistAnalytics(AppState.user.address),
+        this.fetchRoyaltyAudit().catch(err => {
+          console.warn('Royalty audit fetch failed (endpoint may not be deployed yet):', err.message);
+          return null;
+        })
       ]);
       
       const tracks = trackData.tracks || [];
@@ -72,453 +81,11 @@ const ArtistSalesPage = {
           </div>
 
           ${analytics.totals ? this.renderAnalytics(analytics) : ''}
+
+          ${auditData ? this.renderRoyaltyAudit(auditData) : ''}
         </div>
         
-        <style>
-          .sales-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 8px;
-          }
-          
-          .sales-summary {
-            display: flex;
-            gap: 16px;
-          }
-          
-          .sales-stat {
-            background: var(--bg-tertiary);
-            padding: 8px 16px;
-            border-radius: var(--radius-lg);
-            font-size: 14px;
-            color: var(--text-secondary);
-          }
-          
-          .sales-subtitle {
-            color: var(--text-muted);
-            font-size: 14px;
-            margin-bottom: 24px;
-          }
-          
-          .copies-sold-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: var(--accent);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            margin-top: 8px;
-          }
-          
-          .copies-sold-badge svg {
-            width: 14px;
-            height: 14px;
-          }
-          
-          .release-card {
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-          }
-          
-          .release-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-          }
-
-          /* ===== Analytics Dashboard ===== */
-          .analytics-section {
-            margin-top: 48px;
-            padding-top: 32px;
-            border-top: 1px solid var(--border-color);
-          }
-
-          .analytics-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-
-          .analytics-title svg {
-            color: var(--accent);
-          }
-
-          /* Top-level stat cards */
-          .analytics-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
-          }
-
-          .analytics-card {
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-xl);
-            padding: 20px;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .analytics-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-          }
-
-          .analytics-card.card-nfts::before { background: var(--accent); }
-          .analytics-card.card-gross::before { background: #10b981; }
-          .analytics-card.card-fees::before { background: #f59e0b; }
-          .analytics-card.card-net::before { background: #8b5cf6; }
-          .analytics-card.card-buyers::before { background: #ec4899; }
-
-          .analytics-card-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-          }
-
-          .analytics-card-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1;
-          }
-
-          .analytics-card-value.xrp::after {
-            content: ' XRP';
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-muted);
-          }
-
-          /* Release breakdown table */
-          .analytics-breakdown {
-            margin-bottom: 32px;
-          }
-
-          .analytics-breakdown-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 16px;
-          }
-
-          .breakdown-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-          }
-
-          .breakdown-table th {
-            text-align: left;
-            padding: 10px 16px;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border-color);
-          }
-
-          .breakdown-table th:not(:first-child) {
-            text-align: right;
-          }
-
-          .breakdown-table td {
-            padding: 14px 16px;
-            font-size: 14px;
-            color: var(--text-secondary);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-          }
-
-          .breakdown-table td:not(:first-child) {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-          }
-
-          .breakdown-table tr:last-child td {
-            border-bottom: none;
-          }
-
-          .breakdown-table .release-name {
-            color: var(--text-primary);
-            font-weight: 500;
-          }
-
-          .breakdown-table .release-type-pill {
-            display: inline-block;
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            background: rgba(139, 92, 246, 0.15);
-            color: #a78bfa;
-            margin-left: 8px;
-            vertical-align: middle;
-          }
-
-          .breakdown-table .xrp-value {
-            color: #10b981;
-            font-weight: 500;
-          }
-
-          /* Recent sales */
-          .recent-sales-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-          }
-
-          .recent-sale-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-lg);
-          }
-
-          .recent-sale-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #10b981, #059669);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-          }
-
-          .recent-sale-icon svg {
-            width: 16px;
-            height: 16px;
-            color: white;
-          }
-
-          .recent-sale-info {
-            flex: 1;
-            min-width: 0;
-          }
-
-          .recent-sale-track {
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          .recent-sale-meta {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-top: 2px;
-          }
-
-          .recent-sale-amount {
-            font-size: 15px;
-            font-weight: 600;
-            color: #10b981;
-            white-space: nowrap;
-          }
-
-          .recent-sale-amount span {
-            font-size: 12px;
-            font-weight: 400;
-            color: var(--text-muted);
-          }
-
-          /* Mobile adjustments */
-          @media (max-width: 600px) {
-            .analytics-stats {
-              grid-template-columns: repeat(2, 1fr);
-            }
-            .analytics-card-value {
-              font-size: 22px;
-            }
-            .breakdown-table {
-              font-size: 13px;
-            }
-            .breakdown-table th,
-            .breakdown-table td {
-              padding: 10px 10px;
-            }
-          }
-          
-          /* Buyers Modal Styles */
-          .buyers-modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-          }
-          
-          .buyers-modal {
-            background: var(--bg-secondary);
-            border-radius: var(--radius-xl);
-            max-width: 500px;
-            width: 100%;
-            max-height: 80vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-          }
-          
-          .buyers-modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border-color);
-          }
-          
-          .buyers-modal-header h3 {
-            font-size: 18px;
-            font-weight: 600;
-            margin: 0;
-          }
-          
-          .buyers-modal-close {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          
-          .buyers-modal-close:hover {
-            color: var(--text-primary);
-          }
-          
-          .buyers-modal-content {
-            padding: 16px 24px 24px;
-            overflow-y: auto;
-          }
-          
-          .buyers-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          }
-          
-          .buyer-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-lg);
-          }
-          
-          .buyer-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), #8b5cf6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: 600;
-            color: white;
-            flex-shrink: 0;
-            overflow: hidden;
-          }
-          
-          .buyer-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-          }
-          
-          .buyer-info {
-            flex: 1;
-            min-width: 0;
-          }
-          
-          .buyer-name {
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 2px;
-          }
-          
-          .buyer-address-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-          
-          .buyer-address {
-            font-size: 13px;
-            color: var(--text-muted);
-            font-family: monospace;
-          }
-          
-          .copy-btn {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: all 0.2s;
-          }
-          
-          .copy-btn:hover {
-            color: var(--accent);
-            background: rgba(59, 130, 246, 0.1);
-          }
-          
-          .copy-btn.copied {
-            color: var(--success);
-          }
-          
-          .buyer-copies {
-            font-size: 13px;
-            color: var(--accent);
-            font-weight: 500;
-            white-space: nowrap;
-          }
-          
-          .buyers-loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-          }
-          
-          .buyers-empty {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-muted);
-          }
-        </style>
+        ${this.getStyles()}
       `);
 
       // Bind click events to cards
@@ -541,6 +108,25 @@ const ArtistSalesPage = {
         </div>
       `);
     }
+  },
+
+  /**
+   * Fetch royalty audit data
+   */
+  async fetchRoyaltyAudit() {
+    const [summaryRes, auditRes] = await Promise.all([
+      fetch('/api/royalty-audit?action=summary'),
+      fetch('/api/royalty-audit?action=mint-audit'),
+    ]);
+    
+    if (!summaryRes.ok || !auditRes.ok) {
+      throw new Error('Royalty audit API not available');
+    }
+    
+    const summary = await summaryRes.json();
+    const audit = await auditRes.json();
+    
+    return { summary, audit };
   },
 
   /**
@@ -590,6 +176,141 @@ const ArtistSalesPage = {
 
         ${data.releases && data.releases.length > 0 ? this.renderBreakdownTable(data.releases) : ''}
         ${data.recent && data.recent.length > 0 ? this.renderRecentSales(data.recent) : ''}
+      </div>
+    `;
+  },
+
+  /**
+   * Render royalty audit section (below Earnings Overview)
+   */
+  renderRoyaltyAudit(data) {
+    const { summary, audit } = data;
+    const s = summary;
+    const hasIssue = s.royaltyIssue?.affectedSalesCount > 0;
+
+    const preLazy = audit.releases?.preLazyMint || [];
+    const lazyPre = audit.releases?.lazyMintPreFix || [];
+
+    return `
+      <div class="analytics-section" id="royalty-audit-section">
+        <div class="analytics-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          Mint Provenance &amp; Royalty Audit
+        </div>
+
+        ${hasIssue ? `
+          <div class="audit-alert">
+            <div class="audit-alert-icon">⚠️</div>
+            <div class="audit-alert-text">
+              <strong>${s.royaltyIssue.affectedSalesCount} secondary sale(s)</strong> on lazy-minted NFTs detected.
+              Estimated <strong>${parseFloat(s.royaltyIssue.estimatedRoyaltyOwed).toFixed(2)} XRP</strong> in royalties
+              may need manual forwarding to <strong>${s.royaltyIssue.affectedArtists} artist(s)</strong>.
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Mint Type Summary Cards -->
+        <div class="audit-stats">
+          <div class="audit-stat-card">
+            <div class="audit-stat-badge"><span class="mint-badge mint-badge-sm mint-badge-og"><span class="mint-badge-icon">⛏</span>OG MINT</span></div>
+            <div class="audit-stat-value">${s.releases?.preMint || 0}</div>
+            <div class="audit-stat-label">Pre-Lazy-Mint Releases</div>
+            <div class="audit-stat-sub">Artist = on-chain issuer ✓</div>
+          </div>
+          <div class="audit-stat-card">
+            <div class="audit-stat-badge"><span class="mint-badge mint-badge-sm mint-badge-legacy"><span class="mint-badge-icon">⚠</span>LEGACY</span></div>
+            <div class="audit-stat-value">${s.releases?.lazyMint || 0}</div>
+            <div class="audit-stat-label">Lazy-Mint (Pre-Fix)</div>
+            <div class="audit-stat-sub">Platform = on-chain issuer</div>
+          </div>
+          <div class="audit-stat-card">
+            <div class="audit-stat-badge"><span class="mint-badge mint-badge-sm mint-badge-verified"><span class="mint-badge-icon">✓</span>VERIFIED</span></div>
+            <div class="audit-stat-value">—</div>
+            <div class="audit-stat-label">Lazy-Mint (Post-Fix)</div>
+            <div class="audit-stat-sub">Fix not yet deployed</div>
+          </div>
+          <div class="audit-stat-card">
+            <div class="audit-stat-badge" style="font-size: 16px;">📊</div>
+            <div class="audit-stat-value">${s.secondarySales?.count || 0}</div>
+            <div class="audit-stat-label">Secondary Sales</div>
+            <div class="audit-stat-sub">${parseFloat(s.secondarySales?.volume || 0).toFixed(2)} XRP volume</div>
+          </div>
+        </div>
+
+        <!-- Release Breakdown Tables -->
+        ${preLazy.length > 0 ? `
+          <div class="audit-table-section">
+            <div class="audit-table-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              <span class="mint-badge mint-badge-sm mint-badge-og"><span class="mint-badge-icon">⛏</span>OG MINT</span>
+              <span class="audit-table-title">Pre-Lazy-Mint Releases (${preLazy.length})</span>
+              <span class="audit-table-toggle">▾</span>
+            </div>
+            <div class="audit-table-body">
+              <table class="breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Release</th>
+                    <th>Artist</th>
+                    <th>Tracks</th>
+                    <th>Sold</th>
+                    <th>Royalty</th>
+                    <th>Issuer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${preLazy.map(r => `
+                    <tr>
+                      <td><span class="release-name">${r.title}</span><span class="release-type-pill">${r.type || 'single'}</span></td>
+                      <td>${r.artist_name || '—'}</td>
+                      <td>${r.trackCount || 0}</td>
+                      <td>${r.sold_editions || 0} / ${r.total_editions || '∞'}</td>
+                      <td>${r.royalty_percent || 5}%</td>
+                      <td><span style="color: #4ade80;">Artist ✓</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
+
+        ${lazyPre.length > 0 ? `
+          <div class="audit-table-section">
+            <div class="audit-table-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              <span class="mint-badge mint-badge-sm mint-badge-legacy"><span class="mint-badge-icon">⚠</span>LEGACY</span>
+              <span class="audit-table-title">Lazy-Mint Pre-Fix Releases (${lazyPre.length})</span>
+              <span class="audit-table-toggle">▾</span>
+            </div>
+            <div class="audit-table-body">
+              <table class="breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Release</th>
+                    <th>Artist</th>
+                    <th>Tracks</th>
+                    <th>Sold</th>
+                    <th>Royalty</th>
+                    <th>Issuer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${lazyPre.map(r => `
+                    <tr>
+                      <td><span class="release-name">${r.title}</span><span class="release-type-pill">${r.type || 'single'}</span></td>
+                      <td>${r.artist_name || '—'}</td>
+                      <td>${r.trackCount || 0}</td>
+                      <td>${r.sold_editions || 0} / ${r.total_editions || '∞'}</td>
+                      <td>${r.royalty_percent || 5}%</td>
+                      <td><span style="color: #fbbf24;">Platform ✗</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
   },
@@ -686,7 +407,7 @@ const ArtistSalesPage = {
   },
 
   /**
-   * Render a track card
+   * Render a track card (with mint badge)
    */
   renderTrackCard(track) {
     const coverUrl = track.cover_url ? 
@@ -694,12 +415,26 @@ const ArtistSalesPage = {
       '/placeholder.png';
     
     const copiesSold = parseInt(track.copies_sold || 0);
+
+    // Build mint badge if MintBadge is available
+    let mintBadgeHTML = '';
+    if (typeof MintBadge !== 'undefined') {
+      // Build a pseudo-release object from the track data
+      // The key fields are mint_fee_paid, is_minted, created_at
+      mintBadgeHTML = MintBadge.getHTML({
+        mint_fee_paid: track.mint_fee_paid,
+        is_minted: track.is_minted,
+        status: track.status,
+        created_at: track.created_at,
+      });
+    }
     
     return `
       <div class="release-card" data-track-id="${track.track_id}">
         <div class="release-card-cover">
           <img src="${coverUrl}" alt="${track.track_title}" onerror="this.src='/placeholder.png'">
           <span class="release-type-badge ${track.release_type || 'single'}">${track.release_type || 'single'}</span>
+          ${mintBadgeHTML}
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${track.track_title}</div>
@@ -847,5 +582,574 @@ const ArtistSalesPage = {
         <div class="buyer-copies">${copies}x</div>
       </div>
     `;
-  }
+  },
+
+  /**
+   * Get all page-specific styles
+   */
+  getStyles() {
+    return `
+      <style>
+        .sales-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 16px;
+          margin-bottom: 8px;
+        }
+        
+        .sales-summary {
+          display: flex;
+          gap: 16px;
+        }
+        
+        .sales-stat {
+          background: var(--bg-tertiary);
+          padding: 8px 16px;
+          border-radius: var(--radius-lg);
+          font-size: 14px;
+          color: var(--text-secondary);
+        }
+        
+        .sales-subtitle {
+          color: var(--text-muted);
+          font-size: 14px;
+          margin-bottom: 24px;
+        }
+        
+        .copies-sold-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: var(--accent);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 500;
+          margin-top: 8px;
+        }
+        
+        .copies-sold-badge svg {
+          width: 14px;
+          height: 14px;
+        }
+        
+        .release-card {
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .release-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        /* ===== Analytics Dashboard ===== */
+        .analytics-section {
+          margin-top: 48px;
+          padding-top: 32px;
+          border-top: 1px solid var(--border-color);
+        }
+
+        .analytics-title {
+          font-size: 20px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 24px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .analytics-title svg {
+          color: var(--accent);
+        }
+
+        .analytics-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 16px;
+          margin-bottom: 32px;
+        }
+
+        .analytics-card {
+          background: var(--bg-tertiary);
+          border-radius: var(--radius-xl);
+          padding: 20px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .analytics-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        }
+
+        .analytics-card.card-nfts::before { background: var(--accent); }
+        .analytics-card.card-gross::before { background: #10b981; }
+        .analytics-card.card-fees::before { background: #f59e0b; }
+        .analytics-card.card-net::before { background: #8b5cf6; }
+        .analytics-card.card-buyers::before { background: #ec4899; }
+
+        .analytics-card-label {
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+        }
+
+        .analytics-card-value {
+          font-size: 28px;
+          font-weight: 700;
+          color: var(--text-primary);
+          line-height: 1;
+        }
+
+        .analytics-card-value.xrp::after {
+          content: ' XRP';
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-muted);
+        }
+
+        .analytics-breakdown {
+          margin-bottom: 32px;
+        }
+
+        .analytics-breakdown-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 16px;
+        }
+
+        .breakdown-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+
+        .breakdown-table th {
+          text-align: left;
+          padding: 10px 16px;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-muted);
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .breakdown-table th:not(:first-child) {
+          text-align: right;
+        }
+
+        .breakdown-table td {
+          padding: 14px 16px;
+          font-size: 14px;
+          color: var(--text-secondary);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .breakdown-table td:not(:first-child) {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .breakdown-table tr:last-child td {
+          border-bottom: none;
+        }
+
+        .breakdown-table .release-name {
+          color: var(--text-primary);
+          font-weight: 500;
+        }
+
+        .breakdown-table .release-type-pill {
+          display: inline-block;
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 10px;
+          background: rgba(139, 92, 246, 0.15);
+          color: #a78bfa;
+          margin-left: 8px;
+          vertical-align: middle;
+        }
+
+        .breakdown-table .xrp-value {
+          color: #10b981;
+          font-weight: 500;
+        }
+
+        .recent-sales-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .recent-sale-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          background: var(--bg-tertiary);
+          border-radius: var(--radius-lg);
+        }
+
+        .recent-sale-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #10b981, #059669);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .recent-sale-icon svg {
+          width: 16px;
+          height: 16px;
+          color: white;
+        }
+
+        .recent-sale-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .recent-sale-track {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .recent-sale-meta {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
+
+        .recent-sale-amount {
+          font-size: 15px;
+          font-weight: 600;
+          color: #10b981;
+          white-space: nowrap;
+        }
+
+        .recent-sale-amount span {
+          font-size: 12px;
+          font-weight: 400;
+          color: var(--text-muted);
+        }
+
+        /* ===== Royalty Audit Section ===== */
+        .audit-alert {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 16px 20px;
+          background: rgba(245, 158, 11, 0.08);
+          border: 1px solid rgba(245, 158, 11, 0.25);
+          border-radius: var(--radius-xl);
+          margin-bottom: 24px;
+        }
+
+        .audit-alert-icon { font-size: 20px; flex-shrink: 0; }
+        
+        .audit-alert-text {
+          font-size: 14px;
+          line-height: 1.5;
+          color: var(--text-secondary);
+        }
+
+        .audit-alert-text strong {
+          color: #fbbf24;
+        }
+
+        .audit-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 16px;
+          margin-bottom: 32px;
+        }
+
+        .audit-stat-card {
+          background: var(--bg-tertiary);
+          border-radius: var(--radius-xl);
+          padding: 20px;
+          text-align: center;
+        }
+
+        .audit-stat-badge {
+          margin-bottom: 12px;
+          display: flex;
+          justify-content: center;
+        }
+
+        .audit-stat-value {
+          font-size: 32px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+
+        .audit-stat-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 4px;
+        }
+
+        .audit-stat-sub {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+
+        /* Collapsible audit tables */
+        .audit-table-section {
+          background: var(--bg-tertiary);
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+          margin-bottom: 16px;
+        }
+
+        .audit-table-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+
+        .audit-table-header:hover {
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .audit-table-title {
+          flex: 1;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .audit-table-toggle {
+          color: var(--text-muted);
+          transition: transform 0.2s;
+        }
+
+        .audit-table-section.collapsed .audit-table-body {
+          display: none;
+        }
+
+        .audit-table-section.collapsed .audit-table-toggle {
+          transform: rotate(-90deg);
+        }
+
+        .audit-table-body {
+          border-top: 1px solid var(--border-color);
+        }
+
+        .audit-table-body .breakdown-table th:not(:first-child),
+        .audit-table-body .breakdown-table td:not(:first-child) {
+          text-align: center;
+        }
+
+        /* Buyers Modal */
+        .buyers-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+        
+        .buyers-modal {
+          background: var(--bg-secondary);
+          border-radius: var(--radius-xl);
+          max-width: 500px;
+          width: 100%;
+          max-height: 80vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .buyers-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 24px;
+          border-bottom: 1px solid var(--border-color);
+        }
+        
+        .buyers-modal-header h3 {
+          font-size: 18px;
+          font-weight: 600;
+          margin: 0;
+        }
+        
+        .buyers-modal-close {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .buyers-modal-close:hover {
+          color: var(--text-primary);
+        }
+        
+        .buyers-modal-content {
+          padding: 16px 24px 24px;
+          overflow-y: auto;
+        }
+        
+        .buyers-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        
+        .buyer-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          background: var(--bg-tertiary);
+          border-radius: var(--radius-lg);
+        }
+        
+        .buyer-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, var(--accent), #8b5cf6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          font-weight: 600;
+          color: white;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+        
+        .buyer-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        
+        .buyer-info {
+          flex: 1;
+          min-width: 0;
+        }
+        
+        .buyer-name {
+          font-weight: 500;
+          color: var(--text-primary);
+          margin-bottom: 2px;
+        }
+        
+        .buyer-address-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .buyer-address {
+          font-size: 13px;
+          color: var(--text-muted);
+          font-family: monospace;
+        }
+        
+        .copy-btn {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+          color: var(--accent);
+          background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .copy-btn.copied {
+          color: var(--success);
+        }
+        
+        .buyer-copies {
+          font-size: 13px;
+          color: var(--accent);
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        
+        .buyers-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 40px;
+        }
+        
+        .buyers-empty {
+          text-align: center;
+          padding: 40px;
+          color: var(--text-muted);
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 600px) {
+          .analytics-stats {
+            grid-template-columns: repeat(2, 1fr);
+          }
+          .analytics-card-value {
+            font-size: 22px;
+          }
+          .audit-stats {
+            grid-template-columns: repeat(2, 1fr);
+          }
+          .audit-stat-value {
+            font-size: 24px;
+          }
+          .breakdown-table {
+            font-size: 13px;
+          }
+          .breakdown-table th,
+          .breakdown-table td {
+            padding: 10px 10px;
+          }
+        }
+      </style>
+    `;
+  },
 };
