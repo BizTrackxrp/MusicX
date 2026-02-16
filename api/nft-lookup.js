@@ -1,175 +1,155 @@
-import pg from 'pg';
-const { Pool } = pg;
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-
+const BASE_URL = 'https://xrpmusic.io';
 const PLATFORM_WALLET = 'rBvqEKtZXZk95VarHPCYWRYc6YTnLWKtkp';
 
-// ─── CORS headers for public API access ───
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+async function findTestNFTs() {
+  console.log('🔍 Finding legacy lazy-minted NFTs to test...\n');
 
-export default async function handler(req, res) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).setHeader('Access-Control-Allow-Origin', '*')
-      .setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      .setHeader('Access-Control-Allow-Headers', 'Content-Type')
-      .end();
+  const relRes = await fetch(`${BASE_URL}/api/releases`);
+  const releases = await relRes.json();
+
+  const lazyReleases = releases.filter(r => r.mint_fee_paid === true);
+  console.log(`Found ${lazyReleases.length} lazy-minted releases out of ${releases.length} total`);
+
+  if (lazyReleases.length === 0) {
+    console.log('⚠️  No lazy-minted releases found. Nothing to test.');
+    return [];
   }
 
-  // Set CORS headers on all responses
-  Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
-
-  try {
-    // ─── GET: Single NFT lookup ───
-    if (req.method === 'GET') {
-      const { nft_id, token_id } = req.query;
-      const id = nft_id || token_id;
-
-      if (!id) {
-        return res.status(400).json({ error: 'Missing nft_id or token_id parameter' });
-      }
-
-      const result = await lookupNFT(id);
-      if (!result) {
-        return res.status(404).json({ error: 'NFT not found', nft_id: id });
-      }
-
-      return res.status(200).json(result);
-    }
-
-    // ─── POST: Batch NFT lookup ───
-    if (req.method === 'POST') {
-      const { nft_ids } = req.body || {};
-
-      if (!nft_ids || !Array.isArray(nft_ids) || nft_ids.length === 0) {
-        return res.status(400).json({ error: 'Missing or empty nft_ids array in request body' });
-      }
-
-      if (nft_ids.length > 100) {
-        return res.status(400).json({ error: 'Maximum 100 NFT IDs per batch request' });
-      }
-
-      const results = await lookupBatch(nft_ids);
-      return res.status(200).json({
-        results,
-        found: results.filter(r => r.found).length,
-        not_found: results.filter(r => !r.found).length,
-      });
-    }
-
-    return res.status(405).json({ error: 'Method not allowed. Use GET for single lookup or POST for batch.' });
-  } catch (err) {
-    console.error('nft-lookup error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-}
-
-// ─── Single NFT lookup ───
-async function lookupNFT(nftId) {
-  const { rows } = await pool.query(`
-    SELECT 
-      n.nft_token_id,
-      n.release_id,
-      n.track_id,
-      n.owner_address,
-      n.edition_number,
-      r.artist_address,
-      r.artist_name,
-      r.title AS release_title,
-      r.cover_cid,
-      r.is_album,
-      r.transfer_fee,
-      r.mint_fee_paid,
-      r.is_minted,
-      t.title AS track_title,
-      t.track_number
-    FROM nfts n
-    JOIN releases r ON n.release_id = r.id
-    LEFT JOIN tracks t ON n.track_id = t.id
-    WHERE n.nft_token_id = $1
-    LIMIT 1
-  `, [nftId]);
-
-  if (rows.length === 0) return null;
-
-  const row = rows[0];
-  return formatResult(row);
-}
-
-// ─── Batch NFT lookup ───
-async function lookupBatch(nftIds) {
-  const { rows } = await pool.query(`
-    SELECT 
-      n.nft_token_id,
-      n.release_id,
-      n.track_id,
-      n.owner_address,
-      n.edition_number,
-      r.artist_address,
-      r.artist_name,
-      r.title AS release_title,
-      r.cover_cid,
-      r.is_album,
-      r.transfer_fee,
-      r.mint_fee_paid,
-      r.is_minted,
-      t.title AS track_title,
-      t.track_number
-    FROM nfts n
-    JOIN releases r ON n.release_id = r.id
-    LEFT JOIN tracks t ON n.track_id = t.id
-    WHERE n.nft_token_id = ANY($1)
-  `, [nftIds]);
-
-  // Build a map for fast lookup
-  const resultMap = {};
-  for (const row of rows) {
-    resultMap[row.nft_token_id] = formatResult(row);
-  }
-
-  // Return results in the same order as input, marking missing ones
-  return nftIds.map(id => {
-    if (resultMap[id]) return resultMap[id];
-    return { nft_id: id, found: false };
+  lazyReleases.forEach(r => {
+    console.log(`  Release #${r.id}: "${r.title}" by ${r.artist_name} (${r.artist_address})`);
   });
-}
 
-// ─── Format a DB row into the API response ───
-function formatResult(row) {
-  // Determine mint type for SpaceBar's grouping logic
-  let mintType;
-  if (row.is_minted && !row.mint_fee_paid) {
-    mintType = 'og';           // Pre-lazy-mint, artist is on-chain issuer
-  } else if (row.mint_fee_paid) {
-    // Could further distinguish legacy vs verified using ISSUER_FIX_DATE
-    // but for SpaceBar's purposes, the artistAddress is the key info
-    mintType = 'lazy';
-  } else {
-    mintType = 'unknown';
+  const testCases = [];
+  for (const rel of lazyReleases.slice(0, 5)) {
+    try {
+      const colRes = await fetch(`${BASE_URL}/api/collectors?release_id=${rel.id}`);
+      const collectors = await colRes.json();
+      if (collectors.length > 0 && collectors[0].nft_token_id) {
+        testCases.push({
+          nft_token_id: collectors[0].nft_token_id,
+          expected_artist_address: rel.artist_address,
+          expected_artist_name: rel.artist_name,
+          release_title: rel.title,
+          release_id: rel.id,
+        });
+      }
+    } catch (e) {}
   }
 
-  return {
-    found: true,
-    nft_id: row.nft_token_id,
-    artistAddress: row.artist_address,
-    artistName: row.artist_name,
-    releaseTitle: row.release_title,
-    trackTitle: row.track_title || row.release_title,
-    releaseId: row.release_id,
-    trackId: row.track_id,
-    trackNumber: row.track_number,
-    editionNumber: row.edition_number,
-    ownerAddress: row.owner_address,
-    isAlbum: row.is_album,
-    coverCid: row.cover_cid,
-    transferFee: row.transfer_fee,
-    mintType,
-    // Convenience: IPFS gateway URL for cover art
-    coverUrl: row.cover_cid ? `https://gateway.lighthouse.storage/ipfs/${row.cover_cid}` : null,
-  };
+  console.log(`\nFound ${testCases.length} NFTs to test against\n`);
+  return testCases;
 }
+
+async function testSingleLookup(nftId, expected) {
+  const res = await fetch(`${BASE_URL}/api/nft-lookup?nft_id=${nftId}`);
+  const data = await res.json();
+
+  const checks = {
+    found: data.found === true,
+    artistAddress: data.artistAddress === expected.expected_artist_address,
+    notPlatformWallet: data.artistAddress !== PLATFORM_WALLET,
+    artistName: data.artistName === expected.expected_artist_name,
+    hasReleaseTitle: !!data.releaseTitle,
+    hasTrackTitle: !!data.trackTitle,
+  };
+
+  const allPassed = Object.values(checks).every(v => v);
+  const icon = allPassed ? '✅' : '❌';
+
+  console.log(`${icon} "${expected.release_title}" — NFT ${nftId.slice(0, 16)}...`);
+
+  if (!checks.artistAddress) {
+    console.log(`   ❌ artistAddress MISMATCH: got "${data.artistAddress}", expected "${expected.expected_artist_address}"`);
+  }
+  if (!checks.notPlatformWallet) {
+    console.log(`   ❌ CRITICAL: artistAddress is the PLATFORM WALLET — this is the bug we're preventing!`);
+  }
+  if (!checks.found) {
+    console.log(`   ❌ NFT not found in lookup API`);
+  }
+
+  return { nftId, checks, allPassed, data };
+}
+
+async function testBatchLookup(testCases) {
+  if (testCases.length < 2) {
+    console.log('⏭️  Skipping batch test (need 2+ NFTs)\n');
+    return;
+  }
+
+  const nftIds = testCases.map(t => t.nft_token_id);
+  const res = await fetch(`${BASE_URL}/api/nft-lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nft_ids: nftIds }),
+  });
+  const data = await res.json();
+
+  console.log(`\n📦 Batch lookup: ${data.found} found, ${data.not_found} not found`);
+
+  let allGood = true;
+  for (const result of data.results) {
+    if (!result.found) {
+      console.log(`   ❌ ${result.nft_id} — not found`);
+      allGood = false;
+      continue;
+    }
+
+    const expected = testCases.find(t => t.nft_token_id === result.nft_id);
+    if (expected && result.artistAddress !== expected.expected_artist_address) {
+      console.log(`   ❌ ${result.nft_id.slice(0, 16)}... — wrong artist: ${result.artistAddress}`);
+      allGood = false;
+    } else if (result.artistAddress === PLATFORM_WALLET) {
+      console.log(`   ❌ ${result.nft_id.slice(0, 16)}... — RETURNED PLATFORM WALLET!`);
+      allGood = false;
+    }
+  }
+
+  if (allGood) console.log('   ✅ All batch results correct');
+}
+
+async function testEdgeCases() {
+  console.log('\n🧪 Edge case tests:');
+
+  const fakeRes = await fetch(`${BASE_URL}/api/nft-lookup?nft_id=FAKE_TOKEN_12345`);
+  console.log(`   ${fakeRes.status === 404 ? '✅' : '❌'} Fake NFT returns 404: status=${fakeRes.status}`);
+
+  const noParamRes = await fetch(`${BASE_URL}/api/nft-lookup`);
+  console.log(`   ${noParamRes.status === 400 ? '✅' : '❌'} Missing param returns 400: status=${noParamRes.status}`);
+
+  const emptyRes = await fetch(`${BASE_URL}/api/nft-lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nft_ids: [] }),
+  });
+  console.log(`   ${emptyRes.status === 400 ? '✅' : '❌'} Empty batch returns 400: status=${emptyRes.status}`);
+}
+
+async function runAllTests() {
+  console.log('═══════════════════════════════════════════');
+  console.log(' NFT Lookup API — Legacy Track Test Suite  ');
+  console.log('═══════════════════════════════════════════\n');
+
+  const testCases = await findTestNFTs();
+
+  if (testCases.length > 0) {
+    console.log('── Single Lookup Tests ──');
+    let passed = 0;
+    for (const tc of testCases) {
+      const result = await testSingleLookup(tc.nft_token_id, tc);
+      if (result.allPassed) passed++;
+    }
+    console.log(`\n${passed}/${testCases.length} single lookups passed`);
+  }
+
+  console.log('\n── Batch Lookup Test ──');
+  await testBatchLookup(testCases);
+
+  await testEdgeCases();
+
+  console.log('\n═══════════════════════════════════════════');
+  console.log(' Tests complete');
+  console.log('═══════════════════════════════════════════');
+}
+
+runAllTests();
