@@ -172,7 +172,6 @@ export default async function handler(req, res) {
             price,
             platform_fee,
             tx_hash,
-            sale_type,
             created_at
           ) VALUES (
             ${saleId},
@@ -185,7 +184,6 @@ export default async function handler(req, res) {
             ${price},
             ${platformFee},
             ${txHash || null},
-            'secondary',
             NOW()
           )
         `;
