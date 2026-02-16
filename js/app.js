@@ -58,6 +58,9 @@ const Router = {
     if (page === 'sales') {
       return '/sales';
     }
+    if (page === 'transparency') {
+      return '/transparency';
+    }
     return `/${page === 'stream' ? '' : page}`;
   },
   
@@ -144,6 +147,11 @@ const Router = {
       return { page: 'sales', params: {} };
     }
     
+    // Transparency page
+    if (path === '/transparency') {
+      return { page: 'transparency', params: {} };
+    }
+    
     // Other pages
     const pageName = path.replace('/', '') || 'stream';
     return { page: pageName, params: {} };
@@ -222,6 +230,14 @@ const Router = {
         }
         break;
       // ===================================
+      case 'transparency':
+        if (typeof TransparencyPage !== 'undefined') {
+          TransparencyPage.render();
+        } else {
+          console.error('TransparencyPage not loaded');
+          StreamPage.render();
+        }
+        break;
       default:
         StreamPage.render();
     }
