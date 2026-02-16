@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
@@ -135,6 +135,67 @@ export default async function handler(req, res) {
       `;
       
       return res.json({ success: true, listingId });
+    }
+    
+    if (req.method === 'PUT') {
+      // Record a completed secondary sale in the sales table
+      const { action } = req.body;
+      
+      if (action === 'record-sale') {
+        const {
+          releaseId,
+          trackId,
+          buyerAddress,
+          sellerAddress,
+          nftTokenId,
+          editionNumber,
+          price,
+          txHash,
+        } = req.body;
+        
+        if (!buyerAddress || !sellerAddress || !price) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const saleId = `sale_secondary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const platformFee = (parseFloat(price) * 0.02).toFixed(4);
+        
+        await sql`
+          INSERT INTO sales (
+            id,
+            release_id,
+            track_id,
+            buyer_address,
+            seller_address,
+            nft_token_id,
+            edition_number,
+            price,
+            platform_fee,
+            tx_hash,
+            sale_type,
+            created_at
+          ) VALUES (
+            ${saleId},
+            ${releaseId || null},
+            ${trackId || null},
+            ${buyerAddress},
+            ${sellerAddress},
+            ${nftTokenId || null},
+            ${editionNumber || null},
+            ${price},
+            ${platformFee},
+            ${txHash || null},
+            'secondary',
+            NOW()
+          )
+        `;
+        
+        console.log(`Secondary sale recorded: ${saleId} - ${sellerAddress} -> ${buyerAddress} for ${price} XRP`);
+        
+        return res.json({ success: true, saleId });
+      }
+      
+      return res.status(400).json({ error: 'Unknown action' });
     }
     
     if (req.method === 'DELETE') {
