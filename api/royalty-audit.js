@@ -54,7 +54,7 @@ async function getSecondarySales(req, res, sql, wallet) {
       SELECT s.id, s.release_id, s.track_id, s.buyer_address, s.seller_address,
         s.nft_token_id, s.edition_number, s.price, s.platform_fee, s.tx_hash, s.created_at,
         r.title as release_title, r.artist_name, r.artist_address,
-        r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_art_url,
+        r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_url,
         t.title as track_title
       FROM sales s
       JOIN releases r ON r.id = s.release_id
@@ -69,7 +69,7 @@ async function getSecondarySales(req, res, sql, wallet) {
       SELECT s.id, s.release_id, s.track_id, s.buyer_address, s.seller_address,
         s.nft_token_id, s.edition_number, s.price, s.platform_fee, s.tx_hash, s.created_at,
         r.title as release_title, r.artist_name, r.artist_address,
-        r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_art_url,
+        r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_url,
         t.title as track_title
       FROM sales s
       JOIN releases r ON r.id = s.release_id
@@ -113,7 +113,7 @@ async function getSaleDetail(req, res, sql) {
   
   const sale = await sql`
     SELECT s.*, r.title as release_title, r.artist_name, r.artist_address,
-      r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_art_url,
+      r.mint_fee_paid, r.is_minted, r.royalty_percent, r.cover_url,
       t.title as track_title
     FROM sales s
     JOIN releases r ON r.id = s.release_id
@@ -146,7 +146,7 @@ async function getMintAudit(req, res, sql, wallet) {
     SELECT r.id, r.title, r.artist_name, r.artist_address, r.type,
       r.total_editions, r.sold_editions, r.minted_editions,
       r.mint_fee_paid, r.is_minted, r.status, r.royalty_percent,
-      r.created_at, r.song_price, r.album_price, r.cover_art_url,
+      r.created_at, r.song_price, r.album_price, r.cover_url,
       (SELECT COUNT(*) FROM tracks t WHERE t.release_id = r.id) as track_count,
       (SELECT COUNT(*) FROM sales s WHERE s.release_id = r.id) as total_sales
     FROM releases r
@@ -197,7 +197,7 @@ async function getRoyaltyLiability(req, res, sql, wallet) {
     SELECT s.id as sale_id, s.price, s.tx_hash, s.created_at as sale_date,
       s.nft_token_id, s.buyer_address, s.seller_address,
       r.title as release_title, r.artist_name, r.artist_address,
-      r.royalty_percent, r.cover_art_url, t.title as track_title
+      r.royalty_percent, r.cover_url, t.title as track_title
     FROM sales s
     JOIN releases r ON r.id = s.release_id
     LEFT JOIN tracks t ON t.id = s.track_id
