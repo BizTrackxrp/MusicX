@@ -815,7 +815,7 @@ const EditVideoModal = {
       xhr.addEventListener('error', () => reject(new Error('Upload failed — network error')));
       xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
       
-      xhr.open('POST', 'https://node.lighthouse.storage/api/v0/add');
+     xhr.open('POST', 'https://upload.lighthouse.storage/api/v0/add');
       xhr.setRequestHeader('Authorization', `Bearer ${this.lighthouseApiKey}`);
       xhr.send(formData);
     });
