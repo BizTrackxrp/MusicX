@@ -28,7 +28,7 @@ const EditVideoModal = {
       try {
         const configResponse = await fetch('/api/upload-config');
         const config = await configResponse.json();
-        this.lighthouseApiKey = config.lighthouseApiKey;
+        this.lighthouseApiKey = config.lighthouseApiKey || config.key;
       } catch (e) {
         console.error('Failed to get upload config:', e);
       }
