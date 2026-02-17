@@ -1,6 +1,10 @@
 /**
  * XRP Music - Share Utilities
  * Handles sharing releases and artist profiles with a nice modal UI
+ * 
+ * UPDATED: Handles external NFTs (bought on XRP Cafe, etc.)
+ *          - External NFTs get XRPL explorer links instead of /release/null
+ *          - Also supports sharing by NFT token ID
  */
 
 const ShareUtils = {
@@ -9,7 +13,18 @@ const ShareUtils = {
    * Get shareable URL for a release
    */
   getReleaseUrl(releaseId) {
+    if (!releaseId || releaseId === 'null' || releaseId === 'undefined') {
+      return null;
+    }
     return `${window.location.origin}/release/${releaseId}`;
+  },
+  
+  /**
+   * Get XRPL explorer URL for an NFT
+   */
+  getNFTExplorerUrl(nftTokenId) {
+    if (!nftTokenId) return null;
+    return `https://livenet.xrpl.org/nft/${nftTokenId}`;
   },
   
   /**
@@ -21,10 +36,36 @@ const ShareUtils = {
   
   /**
    * Show share modal with link and copy button
+   * Now handles external NFTs gracefully
    */
   shareRelease(release) {
-    const url = this.getReleaseUrl(release.id);
-    const title = release.title;
+    // Check if this is an external NFT (no valid release ID)
+    const isExternal = !release.id || release.id === 'null' || release.id === 'undefined' 
+      || release.isExternal || (release.id && release.id.startsWith('ext_'));
+    
+    let url;
+    let shareTitle;
+    let shareText;
+    
+    if (isExternal && release.nftTokenId) {
+      // External NFT — share XRPL explorer link
+      url = this.getNFTExplorerUrl(release.nftTokenId);
+      shareTitle = release.title || 'Music NFT';
+      const artist = release.artistName || 'Unknown Artist';
+      shareText = `Check out "${shareTitle}" by ${artist} — Music NFT on the XRP Ledger!`;
+    } else {
+      // Platform release — share XRP Music link
+      url = this.getReleaseUrl(release.id);
+      if (!url) {
+        console.warn('Cannot share: no valid release ID or NFT token ID');
+        return;
+      }
+      shareTitle = release.title;
+      const artist = release.artistName || 'Unknown Artist';
+      shareText = `Check out "${shareTitle}" by ${artist} on XRP Music!`;
+    }
+    
+    const title = release.title || 'Music NFT';
     const artist = release.artistName || 'Unknown Artist';
     
     // Create modal overlay
@@ -33,7 +74,7 @@ const ShareUtils = {
     overlay.innerHTML = `
       <div class="share-modal">
         <div class="share-modal-header">
-          <h3>Share Release</h3>
+          <h3>Share ${isExternal ? 'NFT' : 'Release'}</h3>
           <button class="share-modal-close" id="share-modal-close">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -46,13 +87,25 @@ const ShareUtils = {
           <!-- Release preview -->
           <div class="share-preview">
             <div class="share-preview-cover">
-              ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${title}">` : '<div class="share-cover-placeholder">🎵</div>'}
+              ${release.coverUrl ? `<img src="${release.coverUrl}" alt="${title}" onerror="this.parentElement.innerHTML='<div class=\\'share-cover-placeholder\\'>🎵</div>'">` : '<div class="share-cover-placeholder">🎵</div>'}
             </div>
             <div class="share-preview-info">
               <div class="share-preview-title">${title}</div>
               <div class="share-preview-artist">${artist}</div>
+              ${isExternal ? '<div class="share-preview-external">External NFT</div>' : ''}
             </div>
           </div>
+          
+          ${isExternal ? `
+            <div class="share-external-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>This NFT was minted on another platform. Sharing links to the XRPL explorer.</span>
+            </div>
+          ` : ''}
           
           <!-- Link input with copy button -->
           <div class="share-link-container">
@@ -94,7 +147,7 @@ const ShareUtils = {
     
     this._addShareModalStyles();
     document.body.appendChild(overlay);
-    this._bindShareModalEvents(overlay, url, `${title} by ${artist}`, `Check out "${title}" by ${artist} on XRP Music!`);
+    this._bindShareModalEvents(overlay, url, shareTitle, shareText);
   },
   
   /**
@@ -310,6 +363,29 @@ const ShareUtils = {
         color: var(--text-secondary);
         margin-top: 2px;
       }
+      .share-preview-external {
+        font-size: 11px;
+        color: var(--accent);
+        margin-top: 2px;
+        font-weight: 500;
+      }
+      .share-external-note {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: rgba(139, 92, 246, 0.08);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: var(--radius-md);
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 16px;
+        line-height: 1.4;
+      }
+      .share-external-note svg {
+        flex-shrink: 0;
+        color: var(--accent);
+      }
       .share-link-container {
         display: flex;
         gap: 8px;
@@ -490,6 +566,12 @@ const ShareUtils = {
    * Share by release ID (fetches release if needed)
    */
   async shareReleaseById(releaseId) {
+    // Don't try to fetch null/undefined release IDs
+    if (!releaseId || releaseId === 'null' || releaseId === 'undefined') {
+      console.warn('Cannot share: invalid release ID');
+      return;
+    }
+    
     let release = AppState.releases?.find(r => r.id === releaseId);
     
     if (!release) {
