@@ -1120,6 +1120,9 @@ const PurchasePage = {
       throw new Error('No NFTs were transferred');
     }
     
+    // Refresh ownership cache so Buy buttons update to "Owned"
+    if (typeof OwnershipHelper !== 'undefined') OwnershipHelper.refresh();
+    
     setTimeout(() => {
       if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
