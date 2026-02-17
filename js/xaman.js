@@ -286,8 +286,13 @@ const XamanWallet = {
       const playlists = await API.getPlaylists(address);
       setPlaylists(playlists);
 
-      // Scan for external music NFTs (runs in background, doesn't block)
+     // Scan for external music NFTs (runs in background, doesn't block)
       scanExternalMusicNfts(address);
+
+      // Load ownership data for Buy/Owned/Edit button logic
+      if (typeof OwnershipHelper !== 'undefined') {
+        OwnershipHelper.init();
+      }
       
     } catch (error) {
       console.error('Failed to load user data:', error);
