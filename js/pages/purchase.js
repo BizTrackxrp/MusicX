@@ -895,6 +895,9 @@ const PurchasePage = {
     
     updateStatus('Purchase Complete! 🎉', 'NFT is now in your wallet', 'success');
     
+    // Refresh ownership cache so Buy button updates to "Owned"
+    if (typeof OwnershipHelper !== 'undefined') OwnershipHelper.refresh();
+    
     setTimeout(() => {
       if (typeof ProfilePage !== 'undefined') ProfilePage.markNeedsRefresh();
       Router.navigate('profile');
