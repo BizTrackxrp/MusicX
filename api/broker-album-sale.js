@@ -1,18 +1,24 @@
 /**
  * XRP Music - Album Purchase API (Sequential Flow)
  * 
- * NEW FLOW: Mint and transfer one track at a time
- * - No timeout issues - each step is quick
- * - User sees progress and signs after each NFT
- * - If something fails mid-way, they at least have some NFTs
+ * XAMAN 5.0 FIX: Uses priced sell offers instead of 1-drop offers.
+ * Album price is split proportionally across tracks so XRP flows
+ * through the NFTokenAcceptOffer transactions. No separate payment needed.
  * 
- * Actions:
- * - 'check': Check availability for all tracks
- * - 'init': Initialize purchase, take payment, return track count
- * - 'mint-single': Mint/find one NFT and create offer (called per track)
- * - 'confirm-single': Confirm single track sale after buyer accepts
- * - 'verify-transfer': Verify NFT actually transferred on-chain
- * - 'finalize': Pay artist after all tracks transferred
+ * NEW FLOW (no separate payment):
+ * 1. 'check'  - Verify all tracks available
+ * 2. 'init'   - Initialize session, calculate per-track offer prices
+ * 3. 'mint-single' - Mint NFT + create PRICED sell offer (per track)
+ * 4. Buyer signs NFTokenAcceptOffer (pays proportional XRP + gets NFT)
+ * 5. 'confirm-single' - Record sale after buyer accepts
+ * 6. 'verify-transfer' - Verify NFT transferred on-chain
+ * 7. 'finalize' - Pay artist 98% of total collected
+ * 
+ * OLD FLOW (deprecated):
+ * 1. Buyer signs Payment for full album price
+ * 2. Per track: mint + create 1-drop offer + buyer accepts
+ * 3. Finalize pays artist
+ * Problem: Xaman 5.0 crashes on 1-drop/0-drop NFTokenAcceptOffer
  * 
  * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
  * that doesn't match any track in the release, we fall back by index or
@@ -436,8 +442,11 @@ async function handleAvailabilityCheck(req, res, sql) {
 }
 
 /**
- * Initialize album purchase - validates and returns track info
- * Payment has already been made by the buyer
+ * Initialize album purchase - validates and returns track info + per-track offer prices
+ * 
+ * XAMAN 5.0 FIX: Now calculates perTrackOfferPrices so each track's sell offer
+ * has a real XRP amount. The album price is split proportionally across tracks.
+ * No separate payment signature needed — XRP flows through the accept offers.
  */
 async function handleInitPurchase(req, res, sql) {
   try {
@@ -493,10 +502,38 @@ async function handleInitPurchase(req, res, sql) {
     const albumPrice = release.album_price ? parseFloat(release.album_price) : individualTotal;
     const totalPrice = albumPrice;
     
+    // XAMAN 5.0 FIX: Calculate per-track offer prices
+    // Split album price proportionally based on individual track prices
+    const perTrackOfferPrices = [];
+    if (individualTotal > 0) {
+      let allocated = 0;
+      for (let i = 0; i < tracks.length; i++) {
+        if (i === tracks.length - 1) {
+          // Last track gets remainder to avoid rounding issues
+          perTrackOfferPrices.push(parseFloat((albumPrice - allocated).toFixed(6)));
+        } else {
+          const proportion = trackPrices[i] / individualTotal;
+          const trackShare = parseFloat((albumPrice * proportion).toFixed(6));
+          perTrackOfferPrices.push(trackShare);
+          allocated += trackShare;
+        }
+      }
+    } else {
+      // Equal split if no individual prices set
+      const perTrack = parseFloat((albumPrice / tracks.length).toFixed(6));
+      for (let i = 0; i < tracks.length; i++) {
+        if (i === tracks.length - 1) {
+          perTrackOfferPrices.push(parseFloat((albumPrice - perTrack * (tracks.length - 1)).toFixed(6)));
+        } else {
+          perTrackOfferPrices.push(perTrack);
+        }
+      }
+    }
+    
     // Create a purchase session to track progress
     const sessionId = `album_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    console.log('🎵 Album purchase initialized:', sessionId, 'Tracks:', tracks.length, 'Album price:', totalPrice, 'Individual total:', individualTotal);
+    console.log('🎵 Album purchase initialized:', sessionId, 'Tracks:', tracks.length, 'Album price:', totalPrice, 'Per-track offers:', perTrackOfferPrices);
     
     return res.json({
       success: true,
@@ -510,11 +547,13 @@ async function handleInitPurchase(req, res, sql) {
       trackCount: tracks.length,
       totalPrice,
       individualTotal,
+      perTrackOfferPrices,
       tracks: tracks.map((t, i) => ({
         index: i,
         id: t.id,
         title: t.title,
         price: trackPrices[i],
+        offerPrice: perTrackOfferPrices[i],
       })),
       useLazyMint: isLazyMintRelease(release),
     });
@@ -526,8 +565,12 @@ async function handleInitPurchase(req, res, sql) {
 }
 
 /**
- * Mint/find a single NFT and create sell offer
+ * Mint/find a single NFT and create PRICED sell offer
  * Called once per track in the album
+ * 
+ * XAMAN 5.0 FIX: Uses offerPrice (proportional share of album price) as the
+ * sell offer Amount instead of 1 drop. This embeds the XRP payment into the
+ * NFTokenAcceptOffer, avoiding the Xaman 5.0 crash on 0/1-drop offers.
  * 
  * FEB 2026 FIX: Uses connectXRPL() with fallback nodes and ensureConnected()
  * before each XRPL operation to prevent DisconnectedError on later tracks.
@@ -536,7 +579,7 @@ async function handleMintSingle(req, res, sql) {
   let client = null;
   
   try {
-    const { releaseId, trackId, trackIndex, buyerAddress, sessionId } = req.body;
+    const { releaseId, trackId, trackIndex, buyerAddress, sessionId, offerPrice } = req.body;
     
     if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -590,8 +633,12 @@ async function handleMintSingle(req, res, sql) {
     
     const useLazyMint = isLazyMintRelease(release);
     
-    // Use per-track price, fall back to release song_price
+    // Use per-track price for sale recording
     const trackPrice = parseFloat(track.price) || parseFloat(release.song_price) || 0;
+    
+    // XAMAN 5.0 FIX: Use the offerPrice from init (proportional album share)
+    // Falls back to trackPrice if offerPrice not provided (backwards compat)
+    const sellOfferAmount = offerPrice || trackPrice;
     
     // Check availability
     if (useLazyMint) {
@@ -763,17 +810,21 @@ async function handleMintSingle(req, res, sql) {
         // No existing offers, that's fine
       }
       
-      // STEP 5: Create sell offer for buyer (with retry on timeout)
+      // STEP 5: Create PRICED sell offer for buyer
+      // XAMAN 5.0 FIX: Use real XRP amount instead of 1 drop
+      // The buyer's NFTokenAcceptOffer will pay this amount AND receive the NFT
+      const priceInDrops = xrpl.xrpToDrops(sellOfferAmount.toFixed(6));
+      
       let offerResult = null;
       for (let offerAttempt = 0; offerAttempt < 3; offerAttempt++) {
         try {
           client = await ensureConnected(client);
-          console.log(`📝 Creating sell offer (attempt ${offerAttempt + 1})...`);
+          console.log(`📝 Creating priced sell offer (attempt ${offerAttempt + 1}): ${sellOfferAmount} XRP for "${track.title}"...`);
           const createOfferTx = await client.autofill({
             TransactionType: 'NFTokenCreateOffer',
             Account: platformAddress,
             NFTokenID: nftTokenId,
-            Amount: '1', // 1 drop (buyer already paid)
+            Amount: priceInDrops,
             Flags: 1, // tfSellNFToken
             Destination: buyerAddress,
           });
@@ -814,7 +865,7 @@ async function handleMintSingle(req, res, sql) {
       
       const platformFee = trackPrice * (PLATFORM_FEE_PERCENT / 100);
       
-      console.log('✅ Offer created for track:', track.title, 'Price:', trackPrice, 'Offer:', offerIndex);
+      console.log('✅ Priced offer created for track:', track.title, 'Offer amount:', sellOfferAmount, 'XRP, Offer:', offerIndex);
       
       return res.json({
         success: true,
@@ -824,6 +875,7 @@ async function handleMintSingle(req, res, sql) {
         nftTokenId,
         editionNumber,
         offerIndex,
+        offerPrice: sellOfferAmount,
         didLazyMint,
         pendingSale: {
           releaseId,
@@ -985,6 +1037,10 @@ async function handleVerifyTransfer(req, res, sql) {
 
 /**
  * Finalize album purchase - pay artist after all tracks transferred
+ * 
+ * XRP has already been collected through the priced sell offers.
+ * This step pays the artist 98% of the total album price.
+ * 
  * 🎉 This is where we send the Discord notification for album purchases!
  */
 async function handleFinalize(req, res, sql) {
@@ -1269,6 +1325,7 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
     nftRecordId: finalNftId,
   };
 }
+
 /**
  * Extract NFT Token ID from mint transaction metadata
  */
