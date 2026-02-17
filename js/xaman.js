@@ -8,6 +8,11 @@
  * 
  * MINTING: Uses Railway worker queue - no timeout limits!
  * Max 10,000 NFTs per batch. User can close page after signing.
+ * 
+ * XAMAN 5.0 WORKAROUND: Added Memos to NFTokenAcceptOffer payloads
+ * to prevent "Text Strings must be rendered within a <Text> component"
+ * crash in Xaman 5.0's new NFT offer detail screen. Can be removed
+ * once Xaman 5.1 is widely adopted.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -348,6 +353,44 @@ const XamanWallet = {
   },
   
   /**
+   * Helper: Convert string to hex (used for Memos)
+   */
+  stringToHex(str) {
+    let hex = '';
+    for (let i = 0; i < str.length; i++) {
+      hex += str.charCodeAt(i).toString(16).padStart(2, '0');
+    }
+    return hex.toUpperCase();
+  },
+  
+  /**
+   * Convert XRP to drops
+   */
+  xrpToDrops(xrp) {
+    return Math.floor(xrp * 1_000_000).toString();
+  },
+  
+  /**
+   * Convert drops to XRP
+   */
+  dropsToXrp(drops) {
+    return Number(drops) / 1_000_000;
+  },
+  
+  /**
+   * Build a Memo array for transactions.
+   * Xaman 5.0 workaround: explicit memos prevent null-string render crash.
+   */
+  buildMemo(text) {
+    return [{
+      Memo: {
+        MemoType: this.stringToHex('text/plain'),
+        MemoData: this.stringToHex(text || 'XRP Music'),
+      }
+    }];
+  },
+  
+  /**
    * Mint NFT - Fire and Forget!
    * 
    * After user signs the 2 transactions (pay + authorize), the job is queued
@@ -434,6 +477,7 @@ const XamanWallet = {
             TransactionType: 'Payment',
             Destination: platformAddress,
             Amount: mintFeeDrops,
+            Memos: this.buildMemo(`Mint fee for ${totalNFTs} NFT editions`),
           },
           custom_meta: {
             instruction: `Pay ${mintFee.toFixed(6)} XRP mint fee for ${totalNFTs} NFT editions`,
@@ -643,31 +687,6 @@ const XamanWallet = {
   },
   
   /**
-   * Convert string to hex
-   */
-  stringToHex(str) {
-    let hex = '';
-    for (let i = 0; i < str.length; i++) {
-      hex += str.charCodeAt(i).toString(16).padStart(2, '0');
-    }
-    return hex.toUpperCase();
-  },
-  
-  /**
-   * Convert XRP to drops
-   */
-  xrpToDrops(xrp) {
-    return Math.floor(xrp * 1_000_000).toString();
-  },
-  
-  /**
-   * Convert drops to XRP
-   */
-  dropsToXrp(drops) {
-    return Number(drops) / 1_000_000;
-  },
-  
-  /**
    * Send XRP payment to an address
    */
   async sendPayment(destination, amountXRP, memo = '') {
@@ -680,16 +699,8 @@ const XamanWallet = {
       TransactionType: 'Payment',
       Destination: destination,
       Amount: this.xrpToDrops(amountXRP),
+      Memos: this.buildMemo(memo || `XRP Music payment: ${amountXRP} XRP`),
     };
-    
-    if (memo) {
-      txJson.Memos = [{
-        Memo: {
-          MemoType: this.stringToHex('text/plain'),
-          MemoData: this.stringToHex(memo),
-        }
-      }];
-    }
     
     let payload;
     try {
@@ -739,6 +750,7 @@ const XamanWallet = {
           Amount: '0',
           Flags: 1,
           Destination: destination,
+          Memos: this.buildMemo('XRP Music NFT listing transfer'),
         },
         custom_meta: {
           instruction: 'Sign to transfer your NFT to XRP Music for listing',
@@ -784,6 +796,12 @@ const XamanWallet = {
   
   /**
    * Accept a sell offer to receive an NFT
+   * 
+   * XAMAN 5.0 WORKAROUND: Added explicit Memos to prevent the
+   * "Text Strings must be rendered within a <Text> component" crash.
+   * Xaman 5.0 added NFT offer detail lookup on the sign request screen
+   * which crashes when certain fields resolve to null/undefined strings.
+   * Providing explicit memo data gives the renderer something safe to display.
    */
   async acceptSellOffer(offerIndex) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -797,9 +815,14 @@ const XamanWallet = {
         txjson: {
           TransactionType: 'NFTokenAcceptOffer',
           NFTokenSellOffer: offerIndex,
+          Memos: this.buildMemo('XRP Music NFT purchase'),
         },
         custom_meta: {
           instruction: 'Sign to receive your music NFT',
+          blob: {
+            purpose: 'NFT Transfer',
+            platform: 'XRP Music',
+          },
         },
       });
     } catch (payloadError) {
@@ -842,6 +865,7 @@ const XamanWallet = {
           NFTokenID: nftTokenId,
           Amount: amountInDrops,
           Flags: 1,
+          Memos: this.buildMemo(`XRP Music listing: ${price} XRP`),
         },
         custom_meta: {
           instruction: `List your NFT for sale at ${price} XRP`,
@@ -910,6 +934,7 @@ const XamanWallet = {
         txjson: {
           TransactionType: 'NFTokenCancelOffer',
           NFTokenOffers: [offerIndex],
+          Memos: this.buildMemo('XRP Music cancel listing'),
         },
         custom_meta: {
           instruction: 'Cancel your NFT listing',
