@@ -2288,6 +2288,9 @@ const Modals = {
   <button class="btn btn-sm btn-secondary" id="gift-track-btn" style="font-size: 13px; padding: 6px 12px;">
     🎁 Gift
   </button>
+  <button class="btn btn-sm btn-secondary" id="edit-video-btn" style="font-size: 13px; padding: 6px 12px;">
+                🎬 Video
+              </button>
 ` : ''}
             <div style="flex: 1;"></div>
             ${canBuyFullAlbum ? `
@@ -3144,6 +3147,14 @@ document.getElementById('edit-price-btn')?.addEventListener('click', () => {
         this.showToast('Genre editor loading...');
       }
     });
+    // Edit Video button (only visible to artist)
+      document.getElementById('edit-video-btn')?.addEventListener('click', () => {
+        if (typeof EditVideoModal !== 'undefined') {
+          EditVideoModal.show(release);
+        } else {
+          this.showToast('Video editor loading...');
+        }
+      });
     // Gift button (only visible to artist)
     document.getElementById('gift-track-btn')?.addEventListener('click', () => {
       this.showGiftTrack(release);
