@@ -207,8 +207,6 @@ const MarketplacePage = {
     const soldPercent = Math.round((release.soldEditions / release.totalEditions) * 100);
     const showMV = this.hasVideo(release);
     
-    // Mint provenance badge
-    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
     
     let badge = '';
     if (type === 'sales') {
@@ -232,7 +230,7 @@ const MarketplacePage = {
           <span class="rank-badge rank-${rank}">#${rank}</span>
           ${badge}
           ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
-          ${mintBadge}
+          
           <div class="card-overlay">
             <button class="play-btn" data-release-id="${release.id}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
