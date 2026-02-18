@@ -268,8 +268,7 @@ const StreamPage = {
     const coverUrl = this.getImageUrl(release.coverUrl);
     const showMV = this.trackHasVideo(track) || this.hasVideo(release);
     
-    // Mint provenance badge
-    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
+  
     
     return `
       <div class="release-card top-track-card" data-top-track-index="${index}">
@@ -281,7 +280,7 @@ const StreamPage = {
           <span class="rank-badge rank-${rank}">#${rank}</span>
           <span class="release-availability ${isSoldOut ? 'sold-out' : ''}">${isSoldOut ? 'Sold Out' : `${available} left`}</span>
          ${showMV ? `<span class="mv-badge mv-play-btn" data-top-track-index="${index}">▶ MV</span>` : ''}
-          ${mintBadge}
+          
           <div class="release-play-overlay">
             <button class="release-play-btn" data-top-track-index="${index}">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
