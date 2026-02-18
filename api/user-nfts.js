@@ -191,13 +191,23 @@ export default async function handler(req, res) {
     const client = await connectXRPL();
     
     try {
-      const nftsResponse = await client.request({
-        command: 'account_nfts',
-        account: address,
-        limit: 400,
-      });
+    // Paginate to get ALL NFTs (not just first 400)
+      let userNFTs = [];
+      let marker = undefined;
       
-      const userNFTs = nftsResponse.result.account_nfts || [];
+      do {
+        const request = {
+          command: 'account_nfts',
+          account: address,
+          limit: 400,
+        };
+        if (marker) request.marker = marker;
+        
+        const nftsResponse = await client.request(request);
+        const page = nftsResponse.result.account_nfts || [];
+        userNFTs = userNFTs.concat(page);
+        marker = nftsResponse.result.marker;
+      } while (marker);
       
       if (userNFTs.length === 0) {
         return res.json({ nfts: [], external: [], totalOnChain: 0, matchedCount: 0 });
