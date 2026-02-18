@@ -189,7 +189,11 @@
       </button>
 
       <!-- Legal Links -->
-      <button class="tos-link" onclick="Modals.showTermsOfService()">Terms of Service</button>
+      <div class="legal-links">
+        <button class="tos-link" onclick="Modals.showTermsOfService()">Terms of Service</button>
+        <span style="color: var(--text-muted); margin: 0 4px;">·</span>
+        <button class="tos-link" onclick="Modals.showPrivacyPolicy()">Privacy Policy</button>
+      </div>
 
       <!-- Auth Section -->
       <div id="auth-section">
