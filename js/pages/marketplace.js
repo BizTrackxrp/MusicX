@@ -3,15 +3,16 @@
  * NFT marketplace with featured sections
  * 
  * SECTIONS:
- * 1. Top Selling - Most sales in last 7 days
+ * 1. Top Selling - Most sales
  * 2. Newest Drops - Most recently released
- * 3. Get Them Before They're Gone - Fewest copies remaining
+ * 3. Top Artists - Artists with most total sales
+ * 4. Emerging Artists - Least sales but 20+ XRP volume
  * 
  * FEATURES:
  * - MV badges on releases with music videos
- * - Mint provenance badges (OG MINT / LEGACY / VERIFIED)
  * - Primary market (from artists) and Secondary market (resale)
  * - View All navigates to Analytics page
+ * - Artist cards link to artist profiles
  */
 
 const MarketplacePage = {
@@ -73,12 +74,65 @@ const MarketplacePage = {
       .slice(0, limit);
   },
   
-  getScarceReleases(limit = 5) {
-    return [...this.getAvailableReleases()]
-      .map(r => ({ ...r, remaining: r.totalEditions - r.soldEditions }))
-      .sort((a, b) => a.remaining - b.remaining)
+  /**
+   * Aggregate artist data from all releases
+   */
+  _buildArtistMap() {
+    const artistMap = {};
+    this.releases.forEach(r => {
+      const key = r.artistAddress;
+      if (!key) return;
+      if (!artistMap[key]) {
+        artistMap[key] = {
+          name: r.artistName || (typeof Helpers !== 'undefined' ? Helpers.truncateAddress(r.artistAddress) : r.artistAddress),
+          address: r.artistAddress,
+          avatar: r.artistAvatar || null,
+          coverUrl: r.coverUrl,
+          totalSold: 0,
+          totalVolume: 0,
+          releaseCount: 0,
+          trackCount: 0,
+        };
+      }
+      const a = artistMap[key];
+      a.totalSold += r.soldEditions || 0;
+      a.totalVolume += (r.soldEditions || 0) * (parseFloat(r.songPrice) || 0);
+      a.releaseCount++;
+      a.trackCount += r.tracks?.length || 0;
+      // Keep the most recent cover
+      if (r.coverUrl) a.coverUrl = r.coverUrl;
+      if (r.artistAvatar) a.avatar = r.artistAvatar;
+    });
+    return artistMap;
+  },
+  
+  /**
+   * Top Artists — most total sales across all releases
+   */
+  getTopArtists(limit = 5) {
+    const artistMap = this._buildArtistMap();
+    return Object.values(artistMap)
+      .filter(a => a.totalSold > 0)
+      .sort((a, b) => b.totalSold - a.totalSold)
       .slice(0, limit);
   },
+  
+  /**
+   * Emerging Artists — least sales but minimum 20 XRP total volume
+   * Excludes artists already in Top Artists to avoid overlap
+   */
+  getEmergingArtists(limit = 5) {
+    const artistMap = this._buildArtistMap();
+    const topAddresses = new Set(
+      this.getTopArtists(5).map(a => a.address)
+    );
+    return Object.values(artistMap)
+      .filter(a => a.totalVolume >= 20 && !topAddresses.has(a.address))
+      .sort((a, b) => a.totalSold - b.totalSold)
+      .slice(0, limit);
+  },
+  
+  // ─── Render ────────────────────────────────────────────────
   
   renderContent() {
     const available = this.getAvailableReleases();
@@ -123,9 +177,11 @@ const MarketplacePage = {
   renderPrimaryMarket() {
     const topSelling = this.getTopSelling(5);
     const newestDrops = this.getNewestDrops(5);
-    const scarce = this.getScarceReleases(5);
+    const topArtists = this.getTopArtists(5);
+    const emergingArtists = this.getEmergingArtists(5);
     
     return `
+      <!-- Top Selling -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
@@ -145,11 +201,12 @@ const MarketplacePage = {
         <div class="featured-grid">
           ${topSelling.length > 0 
             ? topSelling.map((r, i) => this.renderFeaturedCard(r, i + 1, 'sales')).join('')
-            : '<div class="empty-section">No sales yet - be the first to buy!</div>'
+            : '<div class="empty-section">No sales yet — be the first to buy!</div>'
           }
         </div>
       </section>
       
+      <!-- Newest Drops -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
@@ -174,31 +231,47 @@ const MarketplacePage = {
         </div>
       </section>
       
+      <!-- Top Artists -->
       <section class="featured-section">
         <div class="section-header">
           <div class="section-title-group">
-            <div class="section-icon scarce">⚡</div>
+            <div class="section-icon" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">👑</div>
             <div>
-              <h3 class="section-name">Get Them Before They're Gone</h3>
-              <p class="section-subtitle">Limited copies remaining</p>
+              <h3 class="section-name">Top Artists</h3>
+              <p class="section-subtitle">Most collected artists on the platform</p>
             </div>
           </div>
-          <button class="view-all-btn" data-sort="scarce">
-            View All
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
         </div>
         <div class="featured-grid">
-          ${scarce.length > 0 
-            ? scarce.map((r, i) => this.renderFeaturedCard(r, i + 1, 'scarce')).join('')
-            : '<div class="empty-section">All releases have plenty of copies</div>'
+          ${topArtists.length > 0
+            ? topArtists.map((a, i) => this.renderArtistCard(a, i + 1, 'top')).join('')
+            : '<div class="empty-section">No artist data yet</div>'
+          }
+        </div>
+      </section>
+      
+      <!-- Emerging Artists -->
+      <section class="featured-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <div class="section-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">🌱</div>
+            <div>
+              <h3 class="section-name">Emerging Artists</h3>
+              <p class="section-subtitle">Rising talent with 20+ XRP in sales volume</p>
+            </div>
+          </div>
+        </div>
+        <div class="featured-grid">
+          ${emergingArtists.length > 0
+            ? emergingArtists.map((a, i) => this.renderArtistCard(a, i + 1, 'emerging')).join('')
+            : '<div class="empty-section">Artists need 20+ XRP in sales volume to appear here</div>'
           }
         </div>
       </section>
     `;
   },
+  
+  // ─── Card Renderers ────────────────────────────────────────
   
   renderFeaturedCard(release, rank, type) {
     const available = release.totalEditions - release.soldEditions;
@@ -207,7 +280,6 @@ const MarketplacePage = {
     const soldPercent = Math.round((release.soldEditions / release.totalEditions) * 100);
     const showMV = this.hasVideo(release);
     
-    
     let badge = '';
     if (type === 'sales') {
       badge = `<span class="card-badge sales">${release.soldEditions} sold</span>`;
@@ -215,9 +287,6 @@ const MarketplacePage = {
       const date = new Date(release.createdAt);
       const isNew = (Date.now() - date.getTime()) < 7 * 24 * 60 * 60 * 1000;
       badge = `<span class="card-badge date ${isNew ? 'new' : ''}">${isNew ? 'NEW' : this.formatDate(date)}</span>`;
-    } else if (type === 'scarce') {
-      const urgency = available <= 5 ? 'critical' : available <= 20 ? 'low' : '';
-      badge = `<span class="card-badge scarce ${urgency}">${available} left</span>`;
     }
     
     return `
@@ -230,7 +299,6 @@ const MarketplacePage = {
           <span class="rank-badge rank-${rank}">#${rank}</span>
           ${badge}
           ${showMV ? `<span class="mv-badge mv-play-btn" data-release-id="${release.id}">▶ MV</span>` : ''}
-          
           <div class="card-overlay">
             <button class="play-btn" data-release-id="${release.id}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -255,6 +323,37 @@ const MarketplacePage = {
       </div>
     `;
   },
+  
+  renderArtistCard(artist, rank, type) {
+    const coverUrl = this.getImageUrl(artist.avatar || artist.coverUrl);
+    const isTop = type === 'top';
+    const statLabel = isTop
+      ? `${artist.totalSold} NFTs sold`
+      : `${artist.totalVolume.toFixed(0)} XRP volume`;
+    
+    return `
+      <div class="featured-card artist-feature-card" data-artist-address="${artist.address}">
+        <div class="featured-card-cover">
+          ${(artist.avatar || artist.coverUrl)
+            ? `<img src="${coverUrl}" alt="${artist.name}" onerror="this.src='/placeholder.png'">`
+            : `<div class="placeholder" style="font-size:48px;">🎤</div>`
+          }
+          <span class="rank-badge rank-${rank}">#${rank}</span>
+          <span class="card-badge ${isTop ? 'sales' : 'emerging'}">${statLabel}</span>
+        </div>
+        <div class="featured-card-info">
+          <div class="card-title">${artist.name}</div>
+          <div class="card-artist">${artist.releaseCount} release${artist.releaseCount !== 1 ? 's' : ''} · ${artist.trackCount} track${artist.trackCount !== 1 ? 's' : ''}</div>
+          <div class="card-footer">
+            <span class="card-price">${artist.totalVolume.toFixed(1)} XRP</span>
+            <span class="card-volume-label">total volume</span>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+  
+  // ─── Secondary Market ──────────────────────────────────────
   
   renderSecondaryMarket() {
     return `
@@ -295,6 +394,8 @@ const MarketplacePage = {
       </div>
     `;
   },
+  
+  // ─── Helpers ───────────────────────────────────────────────
   
   formatDate(date) {
     const now = new Date();
@@ -337,7 +438,10 @@ const MarketplacePage = {
     `);
   },
   
+  // ─── Events ────────────────────────────────────────────────
+  
   bindEvents() {
+    // Market type toggle
     document.querySelectorAll('.market-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.marketType = btn.dataset.market;
@@ -345,6 +449,7 @@ const MarketplacePage = {
       });
     });
     
+    // View All buttons
     document.querySelectorAll('.view-all-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const sort = btn.dataset.sort;
@@ -352,7 +457,8 @@ const MarketplacePage = {
       });
     });
     
-    document.querySelectorAll('.featured-card').forEach(card => {
+    // Release cards → open release modal
+    document.querySelectorAll('.featured-card:not(.artist-feature-card)').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.play-btn')) return;
         const releaseId = card.dataset.releaseId;
@@ -360,7 +466,16 @@ const MarketplacePage = {
         if (release) Modals.showRelease(release);
       });
     });
-    // MV badge clicks - play + open video
+    
+    // Artist cards → navigate to artist profile
+    document.querySelectorAll('.artist-feature-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const address = card.dataset.artistAddress;
+        if (address) Router.navigate('artist', { address });
+      });
+    });
+    
+    // MV badge clicks — play + open video
     document.querySelectorAll('.mv-play-btn').forEach(badge => {
       badge.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -372,6 +487,8 @@ const MarketplacePage = {
         }
       });
     });
+    
+    // Play buttons on release cards
     document.querySelectorAll('.play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -383,6 +500,7 @@ const MarketplacePage = {
       });
     });
     
+    // Secondary market buy buttons
     document.querySelectorAll('.secondary-buy-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -391,6 +509,7 @@ const MarketplacePage = {
       });
     });
     
+    // Secondary search
     document.getElementById('secondary-search')?.addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase();
       document.querySelectorAll('.secondary-listing-card').forEach(card => {
@@ -400,6 +519,8 @@ const MarketplacePage = {
       });
     });
   },
+  
+  // ─── Styles ────────────────────────────────────────────────
   
   getStyles() {
     return `
@@ -441,7 +562,6 @@ const MarketplacePage = {
         }
         .section-icon.hot { background: linear-gradient(135deg, #f97316, #ef4444); }
         .section-icon.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
-        .section-icon.scarce { background: linear-gradient(135deg, #eab308, #f59e0b); }
         .section-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
         .section-subtitle { font-size: 13px; color: var(--text-muted); margin: 2px 0 0 0; }
         .view-all-btn {
@@ -465,15 +585,6 @@ const MarketplacePage = {
         .featured-card-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
         .featured-card-cover img { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Mint badge positioning inside featured cards */
-        .featured-card-cover .mint-badge {
-          position: absolute;
-          bottom: 8px;
-          left: 8px;
-          top: auto;
-          right: auto;
-        }
-        
         .rank-badge {
           position: absolute; top: 8px; left: 8px; padding: 4px 10px;
           font-size: 12px; font-weight: 800; border-radius: 6px; color: white; z-index: 2;
@@ -490,9 +601,7 @@ const MarketplacePage = {
         .card-badge.sales { background: linear-gradient(135deg, #22c55e, #16a34a); }
         .card-badge.date { background: rgba(139, 92, 246, 0.9); }
         .card-badge.date.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); animation: pulse 2s infinite; }
-        .card-badge.scarce { background: rgba(234, 179, 8, 0.9); }
-        .card-badge.scarce.low { background: linear-gradient(135deg, #f59e0b, #d97706); }
-        .card-badge.scarce.critical { background: linear-gradient(135deg, #ef4444, #dc2626); animation: pulse 1.5s infinite; }
+        .card-badge.emerging { background: linear-gradient(135deg, #22c55e, #059669); }
         
         .mv-badge {
           position: absolute; bottom: 8px; right: 8px; padding: 3px 8px;
@@ -529,6 +638,7 @@ const MarketplacePage = {
         }
         .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .card-price { font-size: 14px; font-weight: 700; color: var(--success); }
+        .card-volume-label { font-size: 11px; color: var(--text-muted); }
         .card-progress { display: flex; align-items: center; gap: 6px; flex: 1; max-width: 80px; }
         .progress-bar { flex: 1; height: 4px; background: var(--bg-hover); border-radius: 2px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
@@ -539,6 +649,7 @@ const MarketplacePage = {
           background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-lg);
         }
         
+        /* Secondary Market */
         .secondary-listing-card {
           background: var(--bg-card); border: 1px solid var(--border-color);
           border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: all 150ms ease;
@@ -561,6 +672,13 @@ const MarketplacePage = {
         .secondary-artist { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
         .secondary-seller { font-size: 11px; color: var(--text-muted); }
         .secondary-buy-btn { width: 100%; margin-top: 8px; }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+          .marketplace-header { flex-direction: column; align-items: stretch; }
+          .market-type-tabs { width: 100%; }
+          .market-type-btn { flex: 1; justify-content: center; font-size: 13px; padding: 10px 12px; }
+        }
       </style>
     `;
   },
