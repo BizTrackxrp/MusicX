@@ -5342,7 +5342,7 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
     });
   },
 
-  showTermsOfService() {
+ showTermsOfService() {
     this.activeModal = 'terms';
     const html = `
       <div class="modal-overlay tos-modal-overlay">
@@ -5357,52 +5357,175 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
             </button>
           </div>
           <div class="modal-body tos-content">
-            <p class="tos-effective"><em>Effective Date: January 19, 2026</em></p>
-            <p>Welcome to XRP Music. By accessing or using our platform, you agree to be bound by these Terms of Service.</p>
+            <p class="tos-effective"><em>Effective Date: February 18, 2026</em></p>
             
-            <h3>1. Platform Description</h3>
-            <p>XRP Music operates as a marketplace facilitating the minting, buying, and selling of music NFTs on the XRP Ledger (XRPL). We act as an intermediary platform connecting artists and collectors. We do not take custody of, control, or have the ability to reverse any transactions conducted on the XRPL blockchain.</p>
+            <h3>1. Introduction</h3>
+            <p>These Terms of Service ("Terms") govern your access to and use of the website located at xrpmusic.io and related services (collectively, the "Platform"). The Platform is owned and operated by Aventra LLC, a Delaware limited liability company ("XRP Music," "we," "us," or "our"). By accessing or using the Platform, you agree to be bound by these Terms. If you do not agree, you must not use the Platform.</p>
+            <p><strong>These Terms include a binding arbitration provision and class action waiver in Section 18.</strong></p>
             
-            <h3>2. Copyright and Content Restrictions</h3>
-            <p><strong>You represent and warrant that you will not upload, mint, or sell any music or content through our platform unless you own the copyright or have obtained all necessary rights, licenses, and permissions to do so.</strong></p>
-            <p>Uploading, minting, or selling copyrighted material that you do not own or have rights to is strictly prohibited and constitutes a material breach of these Terms. Violators may have their content removed and their accounts suspended or terminated without notice.</p>
+            <h3>2. Platform Description</h3>
+            <p>The Platform facilitates the minting, listing, buying, selling, and reselling of music-related non-fungible tokens ("NFTs") recorded on the XRP Ledger ("XRPL"). XRP Music is not a wallet provider, broker, dealer, exchange, financial institution, or money services business. XRP Music does not custody user funds, does not control blockchain transactions, and is not a party to NFT sales except to collect the Platform Fee.</p>
             
-            <h3>3. Intellectual Property Rights and NFT Ownership</h3>
-            <p>Purchasing an NFT on XRP Music grants you ownership of the unique digital token recorded on the XRPL blockchain. Unless explicitly stated otherwise by the artist at the point of sale, purchasing an NFT does <strong>not</strong> transfer any intellectual property rights, including but not limited to:</p>
-            <ul>
-              <li>Copyright in the underlying music, artwork, or other content</li>
-              <li>Rights to reproduce, distribute, or create derivative works</li>
-              <li>Commercial use rights or licensing rights</li>
-              <li>Trademark or publicity rights</li>
-            </ul>
-            <p>You receive only the right to own, hold, transfer, and resell the NFT itself.</p>
+            <h3>3. Eligibility</h3>
+            <p>You must be at least 18 years old and legally capable of entering into binding contracts. You are responsible for maintaining the security of your wallet, protecting your private keys, and all activity conducted through your wallet.</p>
             
-            <h3>4. Account Access and Platform Use</h3>
-            <p>XRP Music reserves the right to condition, restrict, suspend, or terminate your access to the platform at any time, for any reason or no reason, in its sole discretion.</p>
+            <h3>4. Intellectual Property & NFTs</h3>
+            <p><strong>4.1 NFT Ownership</strong> — Purchasing an NFT transfers ownership of the blockchain token only. It does not transfer copyright, public performance rights, distribution rights, or other commercial exploitation rights unless expressly granted by the Artist in separate written terms.</p>
+            <p><strong>4.2 Limited License</strong> — Unless otherwise specified by the Artist, purchasers receive a limited, non-exclusive, non-transferable license to display associated content for personal, non-commercial purposes.</p>
+            <p><strong>4.3 Artist Content License</strong> — By minting, uploading, listing, or making available any music, artwork, metadata, or other content ("Artist Content") on the Platform, the Artist grants to XRP Music a worldwide, non-exclusive, royalty-free, sublicensable license to host, reproduce, distribute, publicly display, publicly perform, transmit, stream, and otherwise make available the Artist Content on or through the Platform and in connection with the operation, marketing, promotion, and improvement of the Platform. This license includes the right to allow end users to stream or preview Artist Content for free or for a fee, including through any future paid streaming or subscription features. The Artist retains all intellectual property rights in the Artist Content, subject to this license.</p>
             
-            <h3>5. Platform Fee</h3>
-            <p>XRP Music collects a platform fee of two percent (2%) on all NFT sales conducted through the platform. This fee is automatically deducted at the time of each transaction. XRP Music reserves the right to modify the platform fee percentage at any time.</p>
+            <h3>5. Creator Royalties & Platform Fees</h3>
+            <p>XRP Music collects a 2% Platform Fee on initial NFT sales conducted through the Platform. XRP Music does not collect a fee on resales. Artists may set a creator royalty percentage applicable to secondary sales. Royalties and fees are automatically deducted and transferred through smart contract functionality.</p>
             
-            <h3>6. Dispute Resolution and Governing Law</h3>
-            <p>These Terms shall be governed by and construed in accordance with the laws of the State of Washington. Any dispute arising out of these Terms shall be brought exclusively in the state or federal courts located in King County, Washington.</p>
+            <h3>6. Taxes</h3>
+            <p><strong>6.1</strong> Each Artist is solely responsible for determining, reporting, and paying any and all taxes arising from minting, listing, selling, or reselling NFTs; receiving primary sale proceeds; receiving secondary sale royalties; or any other compensation received through the Platform.</p>
+            <p><strong>6.2</strong> Collectors are solely responsible for determining, reporting, and paying any taxes arising from purchasing, holding, or reselling NFTs, including capital gains taxes and use taxes.</p>
+            <p><strong>6.3</strong> XRP Music is not responsible for determining the tax classification of any User, whether any transaction is taxable, calculating or withholding taxes, filing tax returns, or advising any User regarding tax obligations.</p>
+            <p><strong>6.4</strong> Nothing in these Terms shall be construed to create any agency, partnership, joint venture, or employment relationship. To the extent XRP Music is required by law to collect and remit sales tax as a marketplace facilitator, its responsibility is strictly limited to collecting and remitting such tax as required by statute.</p>
+            <p><strong>6.5</strong> Each User agrees to indemnify and hold harmless XRP Music from any tax liabilities, penalties, interest, assessments, audits, claims, or governmental actions arising from that User's failure to properly report or pay taxes.</p>
+            <p><strong>6.6</strong> XRP Music acts solely as a technology service provider and does not act as an agent, broker, intermediary, trustee, escrow agent, advisor, or fiduciary for any User. Each User acknowledges that XRP Music owes no fiduciary duties of any kind.</p>
             
-            <h3>7. Class Action Waiver</h3>
-            <p><strong>YOU AGREE THAT ANY CLAIMS AGAINST XRP MUSIC MUST BE BROUGHT IN YOUR INDIVIDUAL CAPACITY AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS, COLLECTIVE, OR REPRESENTATIVE ACTION.</strong></p>
+            <h3>7. Content and NFT Disclaimers</h3>
+            <p>XRP Music does not review, pre-screen, verify, monitor, endorse, guarantee, or assume responsibility for any NFT, Artist Content, metadata, artwork, music, or other content on the Platform. XRP Music makes no representations or warranties regarding authenticity, identity, legality, accuracy, ownership, enforceability of licenses or royalties, or market value. All transactions occur directly between Users via blockchain technology. You assume all risk associated with interacting with other Users and acquiring, holding, or transferring NFTs.</p>
             
-            <h3>8. Limitation of Liability</h3>
-            <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL XRP MUSIC BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.</p>
-            <p><strong>Damages Cap:</strong> THE TOTAL CUMULATIVE LIABILITY OF XRP MUSIC SHALL NOT EXCEED ONE HUNDRED UNITED STATES DOLLARS ($100.00).</p>
+            <h3>8. No Reliance</h3>
+            <p>You acknowledge that you have not relied on any statement, representation, warranty, or guarantee not expressly set forth in these Terms. No oral or written information or advice provided by XRP Music shall create any warranty or obligation not stated in these Terms.</p>
             
             <h3>9. Assumption of Risk</h3>
-            <p>You acknowledge and accept the inherent risks associated with blockchain technology and digital assets, including price volatility, regulatory uncertainty, technological vulnerabilities, and the potential for total loss of value.</p>
+            <p>You acknowledge risks including price volatility, regulatory changes, smart contract vulnerabilities, blockchain irreversibility, loss of wallet credentials, NFTs becoming unsellable, markets collapsing, royalty enforcement limitations, smart contract bugs, blockchain forks, third-party wallet failures, and XRP Music discontinuing the Platform at any time. NFTs exist independently on the blockchain and XRP Music is not responsible for maintaining ongoing access to the Platform interface.</p>
             
-            <h3>10. Modifications to Terms</h3>
-            <p>We reserve the right to modify these Terms at any time. Changes will be effective upon posting to the platform.</p>
+            <h3>10. No Investment or Securities Offering</h3>
+            <p>NFTs on the Platform are collectible digital assets. They are not securities, investment contracts, or financial instruments. XRP Music does not market NFTs as investments and makes no representation of profit potential. Nothing on the Platform constitutes investment, financial, legal, or tax advice.</p>
             
-            <h3>11. Contact Information</h3>
-            <p>For questions about these Terms of Service, please contact us through the platform.</p>
+            <h3>11. Disclaimers</h3>
+            <p>The Platform is provided "AS IS" and "AS AVAILABLE." XRP Music disclaims all warranties to the fullest extent permitted by law.</p>
+            
+            <h3>12. Limitation of Liability</h3>
+            <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, XRP MUSIC SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, PUNITIVE, OR SPECULATIVE DAMAGES. XRP MUSIC'S TOTAL CUMULATIVE LIABILITY SHALL NOT EXCEED $100 USD. This limitation applies whether the claim is based in contract, tort, strict liability, statute, equity, or otherwise.</p>
+            
+            <h3>13. Limitation Period</h3>
+            <p>Any claim arising out of the Platform or these Terms must be filed within one (1) year after the claim arose or it is permanently barred.</p>
+            
+            <h3>14. Indemnification</h3>
+            <p>You agree to indemnify, defend, and hold harmless XRP Music from any claims, damages, liabilities, costs, and expenses (including attorneys' fees) arising from your use of the Platform; any NFT or content you mint, list, sell, or transfer; disputes between Users; intellectual property violations; your violation of applicable law; or your tax obligations.</p>
+            
+            <h3>15. DMCA Policy</h3>
+            <p>XRP Music complies with the Digital Millennium Copyright Act. Designated DMCA Agent: Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:dmca@xrpmusic.io" style="color:var(--accent);">dmca@xrpmusic.io</a></p>
+            
+            <h3>16. Right to Discontinue</h3>
+            <p>XRP Music reserves the right to suspend, restrict, modify, or permanently discontinue the Platform or any feature at any time, without liability.</p>
+            
+            <h3>17. Governing Law</h3>
+            <p>These Terms are governed by the laws of the State of Washington.</p>
+            
+            <h3>18. Dispute Resolution</h3>
+            <p><strong>18.1 Binding Arbitration</strong> — All disputes shall be resolved by binding arbitration administered by JAMS in King County, Washington.</p>
+            <p><strong>18.2 Class Action Waiver</strong> — Disputes must be brought individually.</p>
+            <p><strong>18.3 Jury Trial Waiver</strong> — Both parties waive the right to a jury trial.</p>
+            
+            <h3>19. Modifications</h3>
+            <p>XRP Music may modify these Terms at any time. Modifications are effective immediately upon posting. Continued use constitutes acceptance. Modifications will not alter terms applicable to completed blockchain transactions executed prior to the effective date.</p>
+            
+            <h3>20. Contact</h3>
+            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:legal@xrpmusic.io" style="color:var(--accent);">legal@xrpmusic.io</a></p>
             
             <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.</em></p>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .tos-modal { max-width: 600px; max-height: 80vh; }
+        .tos-content { 
+          overflow-y: auto; 
+          max-height: 60vh; 
+          padding-right: 8px;
+          font-size: 14px;
+          line-height: 1.6;
+          color: var(--text-secondary);
+        }
+        .tos-content h3 { 
+          font-size: 15px; 
+          font-weight: 600; 
+          color: var(--text-primary); 
+          margin: 20px 0 8px 0; 
+        }
+        .tos-content p { margin: 8px 0; }
+        .tos-content ul { margin: 8px 0 8px 20px; }
+        .tos-content li { margin: 4px 0; }
+        .tos-effective { color: var(--text-muted); margin-bottom: 16px; }
+        .tos-agreement { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+        .tos-content::-webkit-scrollbar { width: 6px; }
+        .tos-content::-webkit-scrollbar-track { background: var(--bg-hover); border-radius: 3px; }
+        .tos-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+      </style>
+    `;
+    this.show(html);
+  },
+
+  showPrivacyPolicy() {
+    this.activeModal = 'privacy';
+    const html = `
+      <div class="modal-overlay tos-modal-overlay">
+        <div class="modal tos-modal">
+          <div class="modal-header">
+            <div class="modal-title">Privacy Policy</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body tos-content">
+            <p class="tos-effective"><em>Effective Date: February 18, 2026</em></p>
+            
+            <h3>1. Introduction</h3>
+            <p>Aventra LLC, a Delaware limited liability company ("XRP Music," "we," "us," or "our"), operates the Platform located at xrpmusic.io. This Privacy Policy describes how we collect, use, and disclose personal information.</p>
+            
+            <h3>2. Information We Collect</h3>
+            <p>We may collect the following information:</p>
+            <ul>
+              <li>Wallet addresses</li>
+              <li>Email addresses (if you choose to provide them)</li>
+              <li>Transaction data related to your interactions with the Platform</li>
+              <li>IP addresses</li>
+              <li>Device information</li>
+              <li>Usage analytics</li>
+            </ul>
+            <p>We do not require account registration and we do not collect government-issued identification or other formal identity verification information. Blockchain transactions are public and permanent.</p>
+            
+            <h3>3. How We Use Information</h3>
+            <p>We use information to operate the Platform, process transactions, provide support, comply with legal obligations, prevent fraud, and improve services.</p>
+            
+            <h3>4. Sharing Information</h3>
+            <p>We may share information with service providers who assist us in operating the Platform, tax authorities to the extent required by law, law enforcement or governmental authorities when required by law, and successor entities in the event of a business transfer. We do not sell personal information for monetary consideration.</p>
+            
+            <h3>5. Data Retention</h3>
+            <p>We retain information as long as necessary for legal compliance, tax obligations, and dispute resolution. Blockchain data cannot be deleted.</p>
+            
+            <h3>6. Data Security</h3>
+            <p>We implement reasonable security measures to protect information. In the event of a data breach involving personal information, we will provide notice as required by law.</p>
+            
+            <h3>7. Cookies</h3>
+            <p>We use essential and analytics cookies. Users may manage cookies through browser settings.</p>
+            
+            <h3>8. Your Rights</h3>
+            <p>Depending on your state of residence, you may have rights to access, correct, delete, or opt out of certain data uses. Contact <a href="mailto:privacy@xrpmusic.io" style="color:var(--accent);">privacy@xrpmusic.io</a> to exercise rights.</p>
+            
+            <h3>9. Children</h3>
+            <p>The Platform is not directed to individuals under 18.</p>
+            
+            <h3>10. International Users</h3>
+            <p>Information may be transferred to and processed in the United States.</p>
+            
+            <h3>11. Changes</h3>
+            <p>We may update this Privacy Policy at any time. The date of the last update appears at the top of this document.</p>
+            
+            <h3>12. Contact</h3>
+            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:privacy@xrpmusic.io" style="color:var(--accent);">privacy@xrpmusic.io</a></p>
+            
+            <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read and understood this Privacy Policy.</em></p>
           </div>
         </div>
       </div>
