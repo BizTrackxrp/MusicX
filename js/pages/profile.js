@@ -1263,11 +1263,17 @@ const ProfilePage = {
       this._collectionRawNfts = allNfts;
       this._activeCollectionFilter = 'all';
       
-      container.innerHTML = `
-        <div class="collection-filter-bar">
-          <button class="collection-filter-btn active" data-filter="all">All</button>
-          <button class="collection-filter-btn" data-filter="by-artist">By Artist</button>
-          <button class="collection-filter-btn" data-filter="by-songs">By Songs</button>
+     container.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+          <div class="collection-filter-bar" style="margin-bottom:0;">
+            <button class="collection-filter-btn active" data-filter="all">All</button>
+            <button class="collection-filter-btn" data-filter="by-artist">By Artist</button>
+            <button class="collection-filter-btn" data-filter="by-songs">By Songs</button>
+          </div>
+          <button class="btn btn-primary btn-sm" id="play-collection-btn" style="display:flex;align-items:center;gap:6px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Play Collection
+          </button>
         </div>
         <div class="collected-grid" id="collectionGrid"></div>
       `;
@@ -1295,6 +1301,57 @@ const ProfilePage = {
         });
       });
       
+      // Play Collection — unique tracks only, no duplicate weighting
+      document.getElementById('play-collection-btn')?.addEventListener('click', () => {
+        const seen = new Set();
+        const queue = [];
+        
+        for (const item of this._collectionGrouped) {
+          if (item.isAlbum && item.tracksArray) {
+            for (const track of item.tracksArray) {
+              const key = track.trackId || track.trackTitle;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              if (track.audioUrl) {
+                queue.push({
+                  id: track.trackId,
+                  trackId: track.trackId,
+                  title: track.trackTitle,
+                  artist: item.artist,
+                  cover: this.getImageUrl(item.coverUrl),
+                  coverUrl: this.getImageUrl(item.coverUrl),
+                  audioUrl: track.audioUrl,
+                  ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(track.audioUrl) : null,
+                  releaseId: item.releaseId,
+                });
+              }
+            }
+          } else {
+            const key = item.trackId || item.releaseId;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (item.audioUrl) {
+              queue.push({
+                id: item.trackId || item.releaseId,
+                trackId: item.trackId || item.releaseId,
+                title: item.releaseTitle,
+                artist: item.artist,
+                cover: this.getImageUrl(item.coverUrl),
+                coverUrl: this.getImageUrl(item.coverUrl),
+                audioUrl: item.audioUrl,
+                ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(item.audioUrl) : null,
+                releaseId: item.releaseId,
+                isExternal: item.copies[0]?._raw?.isExternal || false,
+              });
+            }
+          }
+        }
+        
+        if (queue.length > 0) {
+          Player.playTrack(queue[0], queue, 0);
+        }
+      });
+      
       // Initial render
       this.renderAllCards(grouped, document.getElementById('collectionGrid'));
       
@@ -1314,7 +1371,6 @@ const ProfilePage = {
       `;
     }
   },
-  
   // ============================================
   // COLLECTION DATA PROCESSING (NEW)
   // ============================================
