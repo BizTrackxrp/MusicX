@@ -7,6 +7,7 @@
  * 2. Newest Drops - Most recently released
  * 3. Top Artists - Artists with most total sales
  * 4. Emerging Artists - Least sales but 20+ XRP volume
+ * 5. Get Them Before They're Gone - Scarcest releases, 1 per artist
  * 
  * FEATURES:
  * - MV badges on releases with music videos
@@ -56,6 +57,8 @@ const MarketplacePage = {
     }
   },
   
+  // ─── Data Methods ──────────────────────────────────────────
+  
   getAvailableReleases() {
     return this.releases.filter(r => 
       this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0
@@ -72,6 +75,25 @@ const MarketplacePage = {
     return [...this.getAvailableReleases()]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, limit);
+  },
+  
+  /**
+   * Scarcest releases — fewest copies remaining, 1 per artist max
+   */
+  getScarceReleases(limit = 5) {
+    const available = [...this.getAvailableReleases()]
+      .map(r => ({ ...r, remaining: r.totalEditions - r.soldEditions }))
+      .sort((a, b) => a.remaining - b.remaining);
+    
+    const seen = new Set();
+    const result = [];
+    for (const r of available) {
+      if (seen.has(r.artistAddress)) continue;
+      seen.add(r.artistAddress);
+      result.push(r);
+      if (result.length >= limit) break;
+    }
+    return result;
   },
   
   /**
@@ -99,7 +121,6 @@ const MarketplacePage = {
       a.totalVolume += (r.soldEditions || 0) * (parseFloat(r.songPrice) || 0);
       a.releaseCount++;
       a.trackCount += r.tracks?.length || 0;
-      // Keep the most recent cover
       if (r.coverUrl) a.coverUrl = r.coverUrl;
       if (r.artistAvatar) a.avatar = r.artistAvatar;
     });
@@ -179,6 +200,7 @@ const MarketplacePage = {
     const newestDrops = this.getNewestDrops(5);
     const topArtists = this.getTopArtists(5);
     const emergingArtists = this.getEmergingArtists(5);
+    const scarce = this.getScarceReleases(5);
     
     return `
       <!-- Top Selling -->
@@ -268,6 +290,25 @@ const MarketplacePage = {
           }
         </div>
       </section>
+      
+      <!-- Get Them Before They're Gone -->
+      <section class="featured-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <div class="section-icon scarce">⚡</div>
+            <div>
+              <h3 class="section-name">Get Them Before They're Gone</h3>
+              <p class="section-subtitle">Limited copies remaining · 1 per artist</p>
+            </div>
+          </div>
+        </div>
+        <div class="featured-grid">
+          ${scarce.length > 0
+            ? scarce.map((r, i) => this.renderFeaturedCard(r, i + 1, 'scarce')).join('')
+            : '<div class="empty-section">All releases have plenty of copies</div>'
+          }
+        </div>
+      </section>
     `;
   },
   
@@ -287,6 +328,9 @@ const MarketplacePage = {
       const date = new Date(release.createdAt);
       const isNew = (Date.now() - date.getTime()) < 7 * 24 * 60 * 60 * 1000;
       badge = `<span class="card-badge date ${isNew ? 'new' : ''}">${isNew ? 'NEW' : this.formatDate(date)}</span>`;
+    } else if (type === 'scarce') {
+      const urgency = available <= 5 ? 'critical' : available <= 20 ? 'low' : '';
+      badge = `<span class="card-badge scarce ${urgency}">${available} left</span>`;
     }
     
     return `
@@ -329,7 +373,7 @@ const MarketplacePage = {
     const isTop = type === 'top';
     const statLabel = isTop
       ? `${artist.totalSold} NFTs sold`
-      : `${artist.totalVolume.toFixed(0)} XRP volume`;
+      : `${artist.totalVolume.toFixed(0)} XRP vol`;
     
     return `
       <div class="featured-card artist-feature-card" data-artist-address="${artist.address}">
@@ -562,6 +606,7 @@ const MarketplacePage = {
         }
         .section-icon.hot { background: linear-gradient(135deg, #f97316, #ef4444); }
         .section-icon.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
+        .section-icon.scarce { background: linear-gradient(135deg, #eab308, #f59e0b); }
         .section-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
         .section-subtitle { font-size: 13px; color: var(--text-muted); margin: 2px 0 0 0; }
         .view-all-btn {
@@ -602,6 +647,9 @@ const MarketplacePage = {
         .card-badge.date { background: rgba(139, 92, 246, 0.9); }
         .card-badge.date.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); animation: pulse 2s infinite; }
         .card-badge.emerging { background: linear-gradient(135deg, #22c55e, #059669); }
+        .card-badge.scarce { background: rgba(234, 179, 8, 0.9); }
+        .card-badge.scarce.low { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .card-badge.scarce.critical { background: linear-gradient(135deg, #ef4444, #dc2626); animation: pulse 1.5s infinite; }
         
         .mv-badge {
           position: absolute; bottom: 8px; right: 8px; padding: 3px 8px;
