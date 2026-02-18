@@ -251,19 +251,7 @@ const PurchasePage = {
                 ` : ''}
               </div>
               
-              <!-- Album Progress (hidden initially) -->
-              ${isAlbum ? `
-              <div class="album-progress" id="album-progress" style="display: none;">
-                <div class="progress-header">
-                  <span id="progress-label">Preparing...</span>
-                  <span id="progress-count">0/${trackCount}</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-                </div>
-                <div class="progress-track" id="progress-track"></div>
-              </div>
-              ` : ''}
+          
               
               <!-- Status Area (hidden initially) -->
               <div class="purchase-status" id="purchase-status" style="display: none;">
