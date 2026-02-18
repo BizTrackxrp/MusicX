@@ -97,7 +97,17 @@ const Player = {
     
     // Set initial volume
     this.audio.volume = AppState.player.volume / 100;
-    
+    // Create persistent background video element
+    if (!document.getElementById('persistent-mv')) {
+      const vid = document.createElement('video');
+      vid.id = 'persistent-mv';
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.loop = true;
+      vid.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+      document.body.appendChild(vid);
+    }
+    this.persistentVideo = document.getElementById('persistent-mv');
     // SHUFFLE IS NOW DEFAULT - always on
     if (!AppState.player.isShuffled) {
       updatePlayer({ isShuffled: true });
@@ -117,6 +127,8 @@ const Player = {
     
     // Initialize repeat button state
     this.updateRepeatButton();
+    // Start persistent video sync (always running)
+    this._startVideoSync();
   },
   
   /**
@@ -669,7 +681,8 @@ const Player = {
     
     // Dispatch track change event for external listeners (e.g., Now Playing view, desktop drawer)
     document.dispatchEvent(new CustomEvent('player:trackchange', { detail: { track } }));
-    
+    // Auto-load music video if track has one
+    this._loadPersistentVideo(track);
     // Notify QueueManager to update sidebar
     if (typeof QueueManager !== 'undefined') {
       QueueManager.renderSidebar();
@@ -1094,7 +1107,29 @@ const Player = {
     }
     return '';
   },
+/**
+   * Load video into persistent background element
+   * Always ready so any viewer can instantly show it
+   */
+  _loadPersistentVideo(track) {
+    const vid = this.persistentVideo;
+    if (!vid) return;
 
+    const hasVideo = !!(track?.videoUrl || track?.videoCid);
+    if (!hasVideo) {
+      vid.removeAttribute('src');
+      vid.load();
+      return;
+    }
+
+    const videoSrc = this._getVideoSrc(track);
+    if (vid.src !== videoSrc && videoSrc) {
+      vid.src = videoSrc;
+      vid.load();
+      vid.play().catch(() => {});
+      console.log('🎬 Persistent MV loaded:', track.title);
+    }
+  },
   /**
    * Create fullscreen video viewer
    * Takes over main content area with video + transport controls
@@ -1502,14 +1537,27 @@ const Player = {
    * Start syncing video element with audio player
    */
   _startVideoSync() {
+    this._cleanupVideoSync();
     this._videoSyncInterval = setInterval(() => {
-      // Sync video in either mode
-      const video = document.getElementById('vvf-video') || document.getElementById('dnp-video');
-      if (video && this.audio) {
-        if (!this.audio.paused && video.paused) video.play().catch(() => {});
-        if (this.audio.paused && !video.paused) video.pause();
-        if (Math.abs(video.currentTime - this.audio.currentTime) > 0.5) {
-          video.currentTime = this.audio.currentTime;
+      // Sync persistent background video with audio
+      const pv = this.persistentVideo;
+      if (pv && pv.src && this.audio) {
+        if (!this.audio.paused && pv.paused) pv.play().catch(() => {});
+        if (this.audio.paused && !pv.paused) pv.pause();
+        if (Math.abs(pv.currentTime - this.audio.currentTime) > 0.5) {
+          pv.currentTime = this.audio.currentTime;
+        }
+      }
+
+      // Also sync any visible video elements (fullscreen or mini viewer)
+      const visibleVideo = document.getElementById('vvf-video') || document.getElementById('dnp-video');
+      if (visibleVideo && pv && pv.src) {
+        // Mirror persistent video to visible element
+        if (visibleVideo.src !== pv.src) visibleVideo.src = pv.src;
+        if (!this.audio.paused && visibleVideo.paused) visibleVideo.play().catch(() => {});
+        if (this.audio.paused && !visibleVideo.paused) visibleVideo.pause();
+        if (Math.abs(visibleVideo.currentTime - this.audio.currentTime) > 0.5) {
+          visibleVideo.currentTime = this.audio.currentTime;
         }
       }
 
@@ -1534,7 +1582,6 @@ const Player = {
       }
     }, 200);
   },
-
   /**
    * Bind seek on fullscreen progress bar
    */
@@ -1650,14 +1697,16 @@ const Player = {
     }
   },
   
-  onPlay() {
-    // Track started playing - tracking is already started in playTrack()
+ onPlay() {
     console.log('▶️ Playback started');
+    const pv = this.persistentVideo;
+    if (pv && pv.src) pv.play().catch(() => {});
   },
   
   onPause() {
-    // Track paused - we don't reset tracking, just pause the counter
     console.log('⏸️ Playback paused');
+    const pv = this.persistentVideo;
+    if (pv && pv.src) pv.pause();
   },
   
   onEnded() {
