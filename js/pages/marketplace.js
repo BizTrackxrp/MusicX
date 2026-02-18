@@ -134,7 +134,7 @@ const MarketplacePage = {
     const artistMap = this._buildArtistMap();
     return Object.values(artistMap)
       .filter(a => a.totalSold > 0)
-      .sort((a, b) => b.totalSold - a.totalSold)
+      .sort((a, b) => b.totalVolume - a.totalVolume)
       .slice(0, limit);
   },
   
@@ -371,9 +371,7 @@ const MarketplacePage = {
   renderArtistCard(artist, rank, type) {
     const coverUrl = this.getImageUrl(artist.avatar || artist.coverUrl);
     const isTop = type === 'top';
-    const statLabel = isTop
-      ? `${artist.totalSold} NFTs sold`
-      : `${artist.totalVolume.toFixed(0)} XRP vol`;
+   const statLabel = `${artist.totalVolume.toFixed(0)} XRP vol`;
     
     return `
       <div class="featured-card artist-feature-card" data-artist-address="${artist.address}">
