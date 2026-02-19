@@ -5511,7 +5511,7 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
             <p>We use essential and analytics cookies. Users may manage cookies through browser settings.</p>
             
             <h3>8. Your Rights</h3>
-            <p>Depending on your state of residence, you may have rights to access, correct, delete, or opt out of certain data uses. Contact <a href="mailto:privacy@xrpmusic.io" style="color:var(--accent);">privacy@xrpmusic.io</a> to exercise rights.</p>
+            <p>Depending on your state of residence, you may have rights to access, correct, delete, or opt out of certain data uses. Contact <a href="mailto:support@xrpmusic.io" style="color:var(--accent);">support@xrpmusic.io</a> to exercise rights.</p>
             
             <h3>9. Children</h3>
             <p>The Platform is not directed to individuals under 18.</p>
@@ -5523,7 +5523,7 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
             <p>We may update this Privacy Policy at any time. The date of the last update appears at the top of this document.</p>
             
             <h3>12. Contact</h3>
-            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:privacy@xrpmusic.io" style="color:var(--accent);">privacy@xrpmusic.io</a></p>
+            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:support@xrpmusic.io" style="color:var(--accent);">support@xrpmusic.io</a></p>
             
             <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read and understood this Privacy Policy.</em></p>
           </div>
