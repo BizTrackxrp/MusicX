@@ -438,6 +438,18 @@ const UnlockableTab = {
     const logoZone = document.getElementById('ut-reward-logo-zone');
     const logoInput = document.getElementById('ut-reward-logo-input');
     logoZone?.addEventListener('click', () => logoInput?.click());
+    // Drag & drop support for logo
+    logoZone?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); logoZone.style.borderColor = 'var(--accent)'; logoZone.style.background = 'rgba(139,92,246,0.08)'; });
+    logoZone?.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); logoZone.style.borderColor = ''; logoZone.style.background = ''; });
+    logoZone?.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation(); logoZone.style.borderColor = ''; logoZone.style.background = '';
+      const file = e.dataTransfer?.files?.[0];
+      if (!file || !file.type.startsWith('image/')) return;
+      logoZone.innerHTML = '<div class="spinner"></div> Uploading...';
+      const url = await this.uploadFile(file);
+      if (url) { this._rewardLogoUrl = url; logoZone.innerHTML = `<img src="${url}" class="ut-upload-preview" />`; }
+      else { logoZone.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><span style="color:var(--error);">Upload failed — tap to retry</span><input type="file" id="ut-reward-logo-input" accept="image/*" style="display:none" />`; }
+    });
     logoInput?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -455,9 +467,20 @@ const UnlockableTab = {
       }
     });
 
-    // Media add
-    document.getElementById('ut-reward-media-add')?.addEventListener('click', () => {
-      document.getElementById('ut-reward-media-input')?.click();
+    // Media add (click + drag & drop)
+    const mediaAdd = document.getElementById('ut-reward-media-add');
+    mediaAdd?.addEventListener('click', () => { document.getElementById('ut-reward-media-input')?.click(); });
+    mediaAdd?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); mediaAdd.style.borderColor = 'var(--accent)'; mediaAdd.style.background = 'rgba(139,92,246,0.08)'; });
+    mediaAdd?.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); mediaAdd.style.borderColor = ''; mediaAdd.style.background = ''; });
+    mediaAdd?.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation(); mediaAdd.style.borderColor = ''; mediaAdd.style.background = '';
+      const files = Array.from(e.dataTransfer?.files || []);
+      for (const file of files.slice(0, 5 - this._rewardMediaUrls.length)) {
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
+        const url = await this.uploadFile(file);
+        if (url) this._rewardMediaUrls.push(url);
+      }
+      this.refreshMediaGrid('ut-reward-media-grid', this._rewardMediaUrls, 'reward');
     });
     document.getElementById('ut-reward-media-input')?.addEventListener('change', async (e) => {
       const files = Array.from(e.target.files || []);
@@ -1161,9 +1184,20 @@ const UnlockableTab = {
     overlay.querySelector('#ut-post-cancel')?.addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-    // Media add
-    overlay.querySelector('#ut-post-media-add')?.addEventListener('click', () => {
-      overlay.querySelector('#ut-post-media-input')?.click();
+    // Media add (click + drag & drop)
+    const postMediaAdd = overlay.querySelector('#ut-post-media-add');
+    postMediaAdd?.addEventListener('click', () => { overlay.querySelector('#ut-post-media-input')?.click(); });
+    postMediaAdd?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); postMediaAdd.style.borderColor = 'var(--accent)'; postMediaAdd.style.background = 'rgba(139,92,246,0.08)'; });
+    postMediaAdd?.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); postMediaAdd.style.borderColor = ''; postMediaAdd.style.background = ''; });
+    postMediaAdd?.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation(); postMediaAdd.style.borderColor = ''; postMediaAdd.style.background = '';
+      const files = Array.from(e.dataTransfer?.files || []);
+      for (const file of files.slice(0, 10 - this._postMediaUrls.length)) {
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
+        const url = await this.uploadFile(file);
+        if (url) this._postMediaUrls.push(url);
+      }
+      this.refreshMediaGrid('ut-post-media-grid', this._postMediaUrls, 'post');
     });
     overlay.querySelector('#ut-post-media-input')?.addEventListener('change', async (e) => {
       const files = Array.from(e.target.files || []);
@@ -1515,7 +1549,7 @@ const UnlockableTab = {
       .ut-empty-sm { color:var(--text-muted); font-size:13px; padding:12px 0; }
 
       /* Dashboard */
-      .ut-dashboard { max-width:800px; margin:0 auto; }
+      .ut-dashboard { max-width:100%; }
       .ut-setup-banner {
         display:flex; align-items:center; gap:20px; padding:24px;
         background:linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.1));
@@ -1608,7 +1642,7 @@ const UnlockableTab = {
       .ut-input-sm { padding:8px 10px; font-size:13px; }
 
       /* Forms */
-      .ut-page { max-width:680px; margin:0 auto; }
+      .ut-page { max-width:100%; }
       .ut-page-header { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
       .ut-page-title { font-size:22px; font-weight:700; flex:1; }
       .ut-back-btn {
@@ -1782,7 +1816,7 @@ const UnlockableTab = {
       .ut-reward-card-meta { font-size:12px; color:var(--text-muted); }
 
       /* Holder View */
-      .ut-holder-page { max-width:680px; margin:0 auto; }
+      .ut-holder-page { max-width:100%; }
       .ut-welcome-msg {
         padding:16px 20px; background:linear-gradient(135deg, rgba(139,92,246,0.1), rgba(59,130,246,0.05));
         border:1px solid rgba(139,92,246,0.2); border-radius:12px;
@@ -1805,7 +1839,7 @@ const UnlockableTab = {
       .ut-locked-stats { display:flex; gap:16px; justify-content:center; margin-bottom:24px; font-size:13px; color:var(--text-muted); }
 
       /* Page layout */
-      .ut-page-wide { max-width:800px; }
+      .ut-page-wide { max-width:100%; }
       .ut-header-actions { display:flex; gap:8px; align-items:center; flex-shrink:0; }
 
       /* Gear button */
