@@ -104,9 +104,9 @@ async function handleGet(req, res, sql) {
     let comments = [];
     if (postIds.length > 0) {
       comments = await sql`
-        SELECT c.*, p.display_name as commenter_name
+        SELECT c.*, p.name as commenter_name
         FROM private_post_comments c
-        LEFT JOIN profiles p ON p.address = c.commenter_address
+        LEFT JOIN profiles p ON p.wallet_address = c.commenter_address
         WHERE c.post_id = ANY(${postIds})
         ORDER BY c.created_at ASC
       `;
