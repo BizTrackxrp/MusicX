@@ -1,11 +1,12 @@
 /**
- * API Route: /api/unlockables
+ * API Route: /api/unlockables  (v2)
  * 
  * Artist unlockable settings + private page posts
+ * Supports: multi-media posts, per-post access keys, pinned posts
  * 
  * GET:
  *   ?artist=ADDRESS                    → get artist unlockable config
- *   ?artist=ADDRESS&posts=true         → get private posts (if user has access)
+ *   ?artist=ADDRESS&posts=true         → get private posts
  *   ?artist=ADDRESS&check=ADDRESS      → check if user has access
  * 
  * POST:
@@ -13,7 +14,7 @@
  *   action: 'create_post'  → artist creates a private page post
  *   action: 'update_post'  → artist updates a post
  *   action: 'delete_post'  → artist deletes a post
- *   action: 'comment'      → user comments on a post (must have access)
+ *   action: 'comment'      → user comments on a post
  */
 import { neon } from '@neondatabase/serverless';
 
@@ -47,55 +48,30 @@ async function handleGet(req, res, sql) {
     return res.status(400).json({ error: 'artist parameter required' });
   }
 
-  // Check if a user has access to this artist's unlockable content
+  // Check access
   if (check) {
     const config = await getArtistConfig(sql, artist);
     if (!config || !config.tab_setup_complete) {
       return res.json({ hasAccess: false, reason: 'not_setup' });
     }
-
-    // Artist always has access to their own page
     if (check.toLowerCase() === artist.toLowerCase()) {
       return res.json({ hasAccess: true, isOwner: true });
     }
-
     const hasAccess = await checkNftAccess(sql, check, {
       artist_address: artist,
       access_type: config.private_page_access_type || 'any_nft',
       required_release_id: config.private_page_release_id,
     });
-
     return res.json({ hasAccess, isOwner: false });
   }
 
-  // Get private posts (gated)
+  // Get private posts
   if (posts === 'true') {
-    // Must pass viewer to check access
-    if (!viewer) {
-      return res.status(400).json({ error: 'viewer parameter required for posts' });
-    }
-
-    const config = await getArtistConfig(sql, artist);
-    const isOwner = viewer.toLowerCase() === artist.toLowerCase();
-
-    if (!isOwner) {
-      const hasAccess = await checkNftAccess(sql, viewer, {
-        artist_address: artist,
-        access_type: config?.private_page_access_type || 'any_nft',
-        required_release_id: config?.private_page_release_id,
-      });
-
-      if (!hasAccess) {
-        return res.status(403).json({ error: 'No access', hasAccess: false });
-      }
-    }
-
     const postRows = await sql`
-      SELECT pp.*,
-        (SELECT COUNT(*) FROM private_post_comments c WHERE c.post_id = pp.id) as comment_count
+      SELECT pp.*
       FROM private_posts pp
       WHERE pp.artist_address = ${artist}
-      ORDER BY pp.created_at DESC
+      ORDER BY pp.pinned DESC, pp.created_at DESC
       LIMIT 50
     `;
 
@@ -112,7 +88,6 @@ async function handleGet(req, res, sql) {
       `;
     }
 
-    // Attach comments to posts
     const commentsByPost = {};
     for (const c of comments) {
       if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
@@ -121,22 +96,20 @@ async function handleGet(req, res, sql) {
 
     const postsWithComments = postRows.map(p => ({
       ...p,
+      media_urls: p.media_urls || [],
       comments: commentsByPost[p.id] || [],
     }));
 
-    return res.json({ posts: postsWithComments, hasAccess: true });
+    return res.json({ posts: postsWithComments });
   }
 
-  // Get artist unlockable config (public — just settings, not gated content)
+  // Get config + counts
   const config = await getArtistConfig(sql, artist);
 
-  // Also get reward count for this artist
   const rewardCount = await sql`
     SELECT COUNT(*) as count FROM rewards
     WHERE artist_address = ${artist} AND status = 'active'
   `;
-
-  // Get post count
   const postCount = await sql`
     SELECT COUNT(*) as count FROM private_posts
     WHERE artist_address = ${artist}
@@ -168,16 +141,17 @@ async function handlePost(req, res, sql) {
 }
 
 async function setupUnlockable(req, res, sql) {
-  const {
-    artistAddress,
-    privatePageEnabled,
-    privatePageTitle,
-    privatePageDescription,
-    privatePageAccessType,
-    privatePageReleaseId,
-  } = req.body;
+  // Accept both camelCase and snake_case field names from frontend
+  const artist = req.body.artist || req.body.artistAddress;
+  const enabled = req.body.private_page_enabled ?? req.body.privatePageEnabled ?? false;
+  const title = req.body.private_page_title ?? req.body.privatePageTitle ?? null;
+  const description = req.body.private_page_description ?? req.body.privatePageDescription ?? null;
+  const accessType = req.body.private_page_access_type ?? req.body.privatePageAccessType ?? 'any_nft';
+  const releaseId = req.body.private_page_release_id ?? req.body.privatePageReleaseId ?? null;
+  const welcomeMsg = req.body.welcome_message ?? null;
+  const tabComplete = req.body.tab_setup_complete ?? true;
 
-  if (!artistAddress) {
+  if (!artist) {
     return res.status(400).json({ error: 'Artist address required' });
   }
 
@@ -185,52 +159,52 @@ async function setupUnlockable(req, res, sql) {
     INSERT INTO artist_unlockables (
       artist_address, private_page_enabled, private_page_title,
       private_page_description, private_page_access_type,
-      private_page_release_id, tab_setup_complete, updated_at
+      private_page_release_id, welcome_message, tab_setup_complete, updated_at
     ) VALUES (
-      ${artistAddress},
-      ${privatePageEnabled || false},
-      ${privatePageTitle || null},
-      ${privatePageDescription || null},
-      ${privatePageAccessType || 'any_nft'},
-      ${privatePageReleaseId || null},
-      true, NOW()
+      ${artist}, ${enabled}, ${title}, ${description},
+      ${accessType}, ${releaseId}, ${welcomeMsg}, ${tabComplete}, NOW()
     )
     ON CONFLICT (artist_address) DO UPDATE SET
-      private_page_enabled = ${privatePageEnabled || false},
-      private_page_title = ${privatePageTitle || null},
-      private_page_description = ${privatePageDescription || null},
-      private_page_access_type = ${privatePageAccessType || 'any_nft'},
-      private_page_release_id = ${privatePageReleaseId || null},
-      tab_setup_complete = true,
+      private_page_enabled = ${enabled},
+      private_page_title = COALESCE(${title}, artist_unlockables.private_page_title),
+      private_page_description = ${description},
+      private_page_access_type = ${accessType},
+      private_page_release_id = ${releaseId},
+      welcome_message = ${welcomeMsg},
+      tab_setup_complete = ${tabComplete},
       updated_at = NOW()
   `;
 
-  console.log(`✅ Unlockable setup saved for ${artistAddress}`);
+  console.log(`✅ Unlockable setup saved for ${artist}`);
   return res.json({ success: true });
 }
 
 async function createPost(req, res, sql) {
-  const { artistAddress, content, imageUrl, videoUrl } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const { content, image_url, media_urls, access_type, required_release_id, pinned } = req.body;
 
-  if (!artistAddress) {
-    return res.status(400).json({ error: 'Artist address required' });
-  }
-
-  if (!content && !imageUrl && !videoUrl) {
-    return res.status(400).json({ error: 'Post must have content, image, or video' });
+  if (!artist) return res.status(400).json({ error: 'Artist address required' });
+  if (!content && (!media_urls || media_urls.length === 0) && !image_url) {
+    return res.status(400).json({ error: 'Post must have content or media' });
   }
 
   const id = `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   await sql`
-    INSERT INTO private_posts (id, artist_address, content, image_url, video_url, created_at)
-    VALUES (${id}, ${artistAddress}, ${content || null}, ${imageUrl || null}, ${videoUrl || null}, NOW())
+    INSERT INTO private_posts (
+      id, artist_address, content, image_url,
+      media_urls, access_type, required_release_id, pinned, created_at
+    ) VALUES (
+      ${id}, ${artist}, ${content || null}, ${image_url || null},
+      ${JSON.stringify(media_urls || [])}, ${access_type || 'page_default'},
+      ${required_release_id || null}, ${pinned || false}, NOW()
+    )
   `;
 
   // Ensure tab is set up
   await sql`
     INSERT INTO artist_unlockables (artist_address, private_page_enabled, tab_setup_complete, updated_at)
-    VALUES (${artistAddress}, true, true, NOW())
+    VALUES (${artist}, true, true, NOW())
     ON CONFLICT (artist_address)
     DO UPDATE SET private_page_enabled = true, tab_setup_complete = true, updated_at = NOW()
   `;
@@ -240,24 +214,24 @@ async function createPost(req, res, sql) {
 }
 
 async function updatePost(req, res, sql) {
-  const { id, artistAddress, content, imageUrl, videoUrl } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const { id, content, image_url, media_urls, access_type, required_release_id, pinned } = req.body;
 
-  if (!id || !artistAddress) {
-    return res.status(400).json({ error: 'Post ID and artist address required' });
-  }
+  if (!id || !artist) return res.status(400).json({ error: 'Post ID and artist address required' });
 
   const existing = await sql`
-    SELECT id FROM private_posts WHERE id = ${id} AND artist_address = ${artistAddress}
+    SELECT id FROM private_posts WHERE id = ${id} AND artist_address = ${artist}
   `;
-  if (existing.length === 0) {
-    return res.status(403).json({ error: 'Not your post' });
-  }
+  if (existing.length === 0) return res.status(403).json({ error: 'Not your post' });
 
   await sql`
     UPDATE private_posts SET
-      content = COALESCE(${content}, content),
-      image_url = ${imageUrl !== undefined ? imageUrl : null},
-      video_url = ${videoUrl !== undefined ? videoUrl : null},
+      content = ${content ?? null},
+      image_url = ${image_url ?? null},
+      media_urls = ${JSON.stringify(media_urls || [])},
+      access_type = ${access_type || 'page_default'},
+      required_release_id = ${required_release_id || null},
+      pinned = ${pinned ?? false},
       updated_at = NOW()
     WHERE id = ${id}
   `;
@@ -266,63 +240,39 @@ async function updatePost(req, res, sql) {
 }
 
 async function deletePost(req, res, sql) {
-  const { id, artistAddress } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const { id } = req.body;
 
-  if (!id || !artistAddress) {
-    return res.status(400).json({ error: 'Post ID and artist address required' });
-  }
+  if (!id || !artist) return res.status(400).json({ error: 'Post ID and artist address required' });
 
   const existing = await sql`
-    SELECT id FROM private_posts WHERE id = ${id} AND artist_address = ${artistAddress}
+    SELECT id FROM private_posts WHERE id = ${id} AND artist_address = ${artist}
   `;
-  if (existing.length === 0) {
-    return res.status(403).json({ error: 'Not your post' });
-  }
+  if (existing.length === 0) return res.status(403).json({ error: 'Not your post' });
 
   await sql`DELETE FROM private_posts WHERE id = ${id}`;
   return res.json({ success: true });
 }
 
 async function addComment(req, res, sql) {
-  const { postId, commenterAddress, content } = req.body;
+  const { post_id, commenter_address, content } = req.body;
 
-  if (!postId || !commenterAddress || !content) {
+  if (!post_id || !commenter_address || !content) {
     return res.status(400).json({ error: 'Post ID, commenter address, and content required' });
   }
 
-  // Get the post to find artist
-  const posts = await sql`
-    SELECT artist_address FROM private_posts WHERE id = ${postId}
-  `;
-  if (posts.length === 0) {
-    return res.status(404).json({ error: 'Post not found' });
-  }
-
-  const artistAddress = posts[0].artist_address;
-
-  // Check access (artist can always comment, others need NFT)
-  if (commenterAddress.toLowerCase() !== artistAddress.toLowerCase()) {
-    const config = await getArtistConfig(sql, artistAddress);
-    const hasAccess = await checkNftAccess(sql, commenterAddress, {
-      artist_address: artistAddress,
-      access_type: config?.private_page_access_type || 'any_nft',
-      required_release_id: config?.private_page_release_id,
-    });
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'No access' });
-    }
-  }
+  const posts = await sql`SELECT artist_address FROM private_posts WHERE id = ${post_id}`;
+  if (posts.length === 0) return res.status(404).json({ error: 'Post not found' });
 
   const id = `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  // Get commenter name
   const profiles = await sql`
-    SELECT display_name FROM profiles WHERE address = ${commenterAddress}
+    SELECT name FROM profiles WHERE wallet_address = ${commenter_address}
   `;
 
   await sql`
     INSERT INTO private_post_comments (id, post_id, commenter_address, commenter_name, content, created_at)
-    VALUES (${id}, ${postId}, ${commenterAddress}, ${profiles[0]?.display_name || null}, ${content}, NOW())
+    VALUES (${id}, ${post_id}, ${commenter_address}, ${profiles[0]?.name || null}, ${content}, NOW())
   `;
 
   return res.json({ success: true, id });
@@ -356,7 +306,6 @@ async function checkNftAccess(sql, userAddress, config) {
     return nfts.length > 0;
   }
 
-  // Default: own any NFT by this artist
   const nfts = await sql`
     SELECT n.id FROM nfts n
     JOIN tracks t ON t.id = n.track_id
