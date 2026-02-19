@@ -154,13 +154,22 @@ async function handlePost(req, res, sql) {
 }
 
 async function createReward(req, res, sql) {
-  const {
-    artistAddress, title, description, imageUrl, videoUrl,
-    rewardType, accessType, requiredReleaseId,
-    expiresAt, maxClaims
-  } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const title = req.body.title;
+  const description = req.body.description || null;
+  const image_url = req.body.image_url || req.body.imageUrl || null;
+  const video_url = req.body.video_url || req.body.videoUrl || null;
+  const media_urls = req.body.media_urls || [];
+  const reward_type = req.body.reward_type || req.body.rewardType || 'physical';
+  const access_type = req.body.access_type || req.body.accessType || 'any_nft';
+  const required_release_id = req.body.required_release_id || req.body.requiredReleaseId || null;
+  const required_release_ids = req.body.required_release_ids || [];
+  const requirements_text = req.body.requirements_text || null;
+  const expires_at = req.body.expires_at || req.body.expiresAt || null;
+  const max_claims = req.body.max_claims || req.body.maxClaims || null;
+  const status = req.body.status || 'active';
 
-  if (!artistAddress || !title) {
+  if (!artist || !title) {
     return res.status(400).json({ error: 'Artist address and title required' });
   }
 
@@ -169,15 +178,17 @@ async function createReward(req, res, sql) {
   await sql`
     INSERT INTO rewards (
       id, artist_address, title, description, image_url, video_url,
-      reward_type, access_type, required_release_id,
+      media_urls, reward_type, access_type, required_release_id,
+      required_release_ids, requirements_text,
       expires_at, max_claims, status, created_at, updated_at
     ) VALUES (
-      ${id}, ${artistAddress}, ${title}, ${description || null},
-      ${imageUrl || null}, ${videoUrl || null},
-      ${rewardType || 'physical'}, ${accessType || 'any_nft'},
-      ${requiredReleaseId || null},
-      ${expiresAt || null}, ${maxClaims || null},
-      'active', NOW(), NOW()
+      ${id}, ${artist}, ${title}, ${description},
+      ${image_url}, ${video_url},
+      ${JSON.stringify(media_urls)}, ${reward_type}, ${access_type},
+      ${required_release_id},
+      ${JSON.stringify(required_release_ids)}, ${requirements_text},
+      ${expires_at}, ${max_claims || null},
+      ${status}, NOW(), NOW()
     )
   `;
 
@@ -195,35 +206,49 @@ async function createReward(req, res, sql) {
 }
 
 async function updateReward(req, res, sql) {
-  const {
-    id, artistAddress, title, description, imageUrl, videoUrl,
-    rewardType, accessType, requiredReleaseId,
-    expiresAt, maxClaims
-  } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const id = req.body.id;
 
-  if (!id || !artistAddress) {
+  if (!id || !artist) {
     return res.status(400).json({ error: 'Reward ID and artist address required' });
   }
 
-  // Verify ownership
   const existing = await sql`
-    SELECT id FROM rewards WHERE id = ${id} AND artist_address = ${artistAddress}
+    SELECT id FROM rewards WHERE id = ${id} AND artist_address = ${artist}
   `;
   if (existing.length === 0) {
     return res.status(403).json({ error: 'Not your reward' });
   }
 
+  const title = req.body.title;
+  const description = req.body.description;
+  const image_url = req.body.image_url || req.body.imageUrl;
+  const video_url = req.body.video_url || req.body.videoUrl;
+  const media_urls = req.body.media_urls;
+  const reward_type = req.body.reward_type || req.body.rewardType;
+  const access_type = req.body.access_type || req.body.accessType;
+  const required_release_id = req.body.required_release_id || req.body.requiredReleaseId;
+  const required_release_ids = req.body.required_release_ids;
+  const requirements_text = req.body.requirements_text;
+  const expires_at = req.body.expires_at || req.body.expiresAt;
+  const max_claims = req.body.max_claims || req.body.maxClaims;
+  const status = req.body.status;
+
   await sql`
     UPDATE rewards SET
-      title = COALESCE(${title}, title),
-      description = COALESCE(${description}, description),
-      image_url = COALESCE(${imageUrl}, image_url),
-      video_url = COALESCE(${videoUrl}, video_url),
-      reward_type = COALESCE(${rewardType}, reward_type),
-      access_type = COALESCE(${accessType}, access_type),
-      required_release_id = ${requiredReleaseId || null},
-      expires_at = ${expiresAt || null},
-      max_claims = ${maxClaims || null},
+      title = COALESCE(${title || null}, title),
+      description = COALESCE(${description || null}, description),
+      image_url = COALESCE(${image_url || null}, image_url),
+      video_url = COALESCE(${video_url || null}, video_url),
+      media_urls = COALESCE(${media_urls ? JSON.stringify(media_urls) : null}, media_urls),
+      reward_type = COALESCE(${reward_type || null}, reward_type),
+      access_type = COALESCE(${access_type || null}, access_type),
+      required_release_id = ${required_release_id || null},
+      required_release_ids = COALESCE(${required_release_ids ? JSON.stringify(required_release_ids) : null}, required_release_ids),
+      requirements_text = COALESCE(${requirements_text || null}, requirements_text),
+      expires_at = ${expires_at || null},
+      max_claims = ${max_claims || null},
+      status = COALESCE(${status || null}, status),
       updated_at = NOW()
     WHERE id = ${id}
   `;
@@ -232,7 +257,9 @@ async function updateReward(req, res, sql) {
 }
 
 async function claimReward(req, res, sql) {
-  const { rewardId, claimerAddress, nftTokenId } = req.body;
+  const rewardId = req.body.reward_id || req.body.rewardId;
+  const claimerAddress = req.body.claimer_address || req.body.claimerAddress;
+  const nftTokenId = req.body.nft_token_id || req.body.nftTokenId;
 
   if (!rewardId || !claimerAddress) {
     return res.status(400).json({ error: 'Reward ID and claimer address required' });
