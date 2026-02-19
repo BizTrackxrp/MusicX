@@ -1,18 +1,22 @@
 /**
- * XRP Music — Unlockable Content Tab v2
+ * XRP Music — Unlockable Content Tab v3
  *
  * Full artist dashboard for NFT-gated content:
- *   - Settings woven into each page (access rules per post, per reward)
+ *   - Settings via small gear icon, dismissible with ✕
  *   - Create Reward page (multi-media, NFT picker, drafts, duration)
  *   - Instagram-style post feed with multi-media carousel
+ *   - "View as others see it" mode on content feed
  *
  * VIEWS:
  *   Owner:  Dashboard → Create Reward | Content Feed | Settings inline
  *   Holder: Content feed + rewards list
  *   Locked: Teaser landing page
  *
- * INTEGRATION:
- *   UnlockableTab.render(artistAddress, viewerAddress, containerEl)
+ * FIXES (v3):
+ *   - Upload: config.apiKey → config.key, uses config.endpoint
+ *   - Removed Max Claims (implied by NFT supply when "until supplies run out")
+ *   - Content feed: settings gear ⚙️ toggle + ✕ to dismiss
+ *   - Better upload error handling with toast fallback
  */
 
 const UnlockableTab = {
@@ -407,12 +411,6 @@ const UnlockableTab = {
             </div>
           </div>
 
-          <!-- Max Claims -->
-          <div class="ut-form-group">
-            <label class="ut-label">Max Claims <span class="ut-label-hint">(leave empty for unlimited)</span></label>
-            <input type="number" class="ut-input" id="ut-reward-max-claims" placeholder="Unlimited" min="1" value="${r.max_claims || ''}" style="max-width:200px;" />
-          </div>
-
           <!-- Actions -->
           <div class="ut-form-actions">
             <button class="btn btn-secondary" id="ut-reward-save-draft">Save as Draft</button>
@@ -438,11 +436,17 @@ const UnlockableTab = {
     logoInput?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      logoZone.innerHTML = '<div class="spinner"></div>';
+      logoZone.innerHTML = '<div class="spinner"></div> Uploading...';
       const url = await this.uploadFile(file);
       if (url) {
         this._rewardLogoUrl = url;
         logoZone.innerHTML = `<img src="${url}" class="ut-upload-preview" />`;
+      } else {
+        logoZone.innerHTML = `
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          <span style="color:var(--error);">Upload failed — tap to retry</span>
+          <input type="file" id="ut-reward-logo-input" accept="image/*" style="display:none" />
+        `;
       }
     });
 
@@ -479,7 +483,6 @@ const UnlockableTab = {
 
     // "Song not released yet" button
     document.getElementById('ut-reward-no-song')?.addEventListener('click', () => {
-      // Select "All my NFTs" since there's no specific song yet
       const allRadio = document.querySelector('input[name="ut-reward-access"][value="any_nft"]');
       if (allRadio) allRadio.checked = true;
       document.getElementById('ut-reward-release-list').style.display = 'none';
@@ -522,7 +525,7 @@ const UnlockableTab = {
       access_type: accessType,
       required_release_ids: accessType === 'specific_release' ? checkedReleases : [],
       expires_at: expiresAt,
-      max_claims: parseInt(document.getElementById('ut-reward-max-claims')?.value) || null,
+      max_claims: null,
       status,
     };
 
@@ -553,25 +556,112 @@ const UnlockableTab = {
     }
   },
 
-  // ─── CONTENT FEED PAGE (Instagram-style) ───────────────
+  // ─── CONTENT FEED PAGE (Instagram-style + settings gear) ───
 
   async showContentFeedPage() {
+    const cfg = this.config || {};
+
     this.container.innerHTML = `
       ${this.getStyles()}
       <div class="ut-page">
         <div class="ut-page-header">
           <button class="ut-back-btn" id="ut-back-dash2">← Back</button>
           <h2 class="ut-page-title">Unlockable Content</h2>
-          <button class="btn btn-primary btn-sm" id="ut-new-post-btn">+ New Post</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary btn-sm" id="ut-new-post-btn">+ New Post</button>
+            <button class="ut-gear-btn" id="ut-toggle-settings" title="Page Settings">⚙️</button>
+          </div>
         </div>
+
+        <!-- Collapsible settings panel -->
+        <div class="ut-inline-settings" id="ut-inline-settings" style="display:none;">
+          <div class="ut-inline-settings-header">
+            <span class="ut-inline-settings-title">Page Settings</span>
+            <button class="ut-inline-settings-close" id="ut-close-settings">✕</button>
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Who can access?</div>
+            <select class="ut-select ut-select-sm" id="ut-feed-access-type">
+              <option value="any_nft" ${(cfg.private_page_access_type || 'any_nft') === 'any_nft' ? 'selected' : ''}>Any NFT holder</option>
+              <option value="specific_release" ${cfg.private_page_access_type === 'specific_release' ? 'selected' : ''}>Specific release only</option>
+            </select>
+          </div>
+          <div class="ut-setting-row" id="ut-feed-release-row" style="display:${cfg.private_page_access_type === 'specific_release' ? 'block' : 'none'};">
+            <select class="ut-select ut-select-sm" id="ut-feed-access-release">
+              <option value="">Select a release...</option>
+              ${this.artistReleases.map(r => `
+                <option value="${r.id}" ${cfg.private_page_release_id === r.id ? 'selected' : ''}>${r.title}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Welcome message</div>
+            <input type="text" class="ut-input ut-input-sm" id="ut-feed-welcome" placeholder="Welcome to my private page!" value="${cfg.welcome_message || ''}" />
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Teaser description (non-holders see this)</div>
+            <input type="text" class="ut-input ut-input-sm" id="ut-feed-desc" placeholder="Exclusive content for my NFT holders..." value="${cfg.private_page_description || ''}" />
+          </div>
+          <button class="btn btn-primary btn-sm" id="ut-feed-save-settings" style="margin-top:8px;">Save</button>
+        </div>
+
         <div id="ut-content-feed" class="ut-feed-grid">
           <div class="ut-loading"><div class="spinner"></div></div>
         </div>
       </div>
     `;
 
+    // Back
     document.getElementById('ut-back-dash2')?.addEventListener('click', () => this.renderOwnerDashboard());
+    // New post
     document.getElementById('ut-new-post-btn')?.addEventListener('click', () => this.showCreatePostModal());
+
+    // Settings gear toggle
+    document.getElementById('ut-toggle-settings')?.addEventListener('click', () => {
+      const panel = document.getElementById('ut-inline-settings');
+      if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+    // Settings close ✕
+    document.getElementById('ut-close-settings')?.addEventListener('click', () => {
+      const panel = document.getElementById('ut-inline-settings');
+      if (panel) panel.style.display = 'none';
+    });
+    // Access type toggle in settings
+    document.getElementById('ut-feed-access-type')?.addEventListener('change', (e) => {
+      const row = document.getElementById('ut-feed-release-row');
+      if (row) row.style.display = e.target.value === 'specific_release' ? 'block' : 'none';
+    });
+    // Save settings from feed page
+    document.getElementById('ut-feed-save-settings')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ut-feed-save-settings');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+      try {
+        await fetch('/api/unlockables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'setup',
+            artist: this.artistAddress,
+            private_page_enabled: true,
+            private_page_access_type: document.getElementById('ut-feed-access-type')?.value || 'any_nft',
+            private_page_release_id: document.getElementById('ut-feed-access-release')?.value || null,
+            private_page_description: document.getElementById('ut-feed-desc')?.value || '',
+            welcome_message: document.getElementById('ut-feed-welcome')?.value || '',
+            tab_setup_complete: true,
+          })
+        });
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        // Close settings panel after save
+        const panel = document.getElementById('ut-inline-settings');
+        if (panel) panel.style.display = 'none';
+        if (typeof Modals !== 'undefined' && Modals.showToast) {
+          Modals.showToast('Settings saved!');
+        }
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        alert('Failed to save settings');
+      }
+    });
 
     await this.loadContentFeed();
   },
@@ -752,7 +842,9 @@ const UnlockableTab = {
         });
         input.value = '';
         const list = overlay.querySelector('#ut-comments-list');
-        const profile = AppState.profile || {};
+        const emptyMsg = list.querySelector('.ut-empty-sm');
+        if (emptyMsg) emptyMsg.remove();
+        const profile = (typeof AppState !== 'undefined' && AppState.profile) ? AppState.profile : {};
         list.innerHTML += `
           <div class="ut-comment">
             <span class="ut-comment-name">${profile.name || Helpers.truncateAddress(this.viewerAddress)}</span>
@@ -780,6 +872,28 @@ const UnlockableTab = {
     overlay.querySelector('.ut-edit-post')?.addEventListener('click', () => {
       overlay.remove();
       this.showCreatePostModal(post);
+    });
+
+    overlay.querySelector('.ut-pin-post')?.addEventListener('click', async () => {
+      try {
+        await fetch('/api/unlockables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_post',
+            id: post.id,
+            artist: this.artistAddress,
+            content: post.content,
+            media_urls: post.media_urls,
+            image_url: post.image_url,
+            access_type: post.access_type,
+            required_release_id: post.required_release_id,
+            pinned: !post.pinned,
+          })
+        });
+        overlay.remove();
+        this.showContentFeedPage();
+      } catch (e) { alert('Failed to update pin'); }
     });
   },
 
@@ -990,9 +1104,8 @@ const UnlockableTab = {
     try {
       const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true`);
       const data = await resp.json();
-      const posts = (data.posts || []).filter(p => !p.access_type || p.access_type === 'page_default');
-      
-      // Also check specific_release posts the user has access to
+
+      // Check which posts the user has access to
       const allPosts = data.posts || [];
       const accessiblePosts = [];
       for (const post of allPosts) {
@@ -1062,7 +1175,7 @@ const UnlockableTab = {
             <div class="ut-reward-card-type">${r.reward_type || 'Reward'}</div>
             ${r.description ? `<div class="ut-reward-card-desc">${r.description.slice(0, 100)}${r.description.length > 100 ? '...' : ''}</div>` : ''}
             <div class="ut-reward-card-meta">
-              ${r.max_claims ? `${r.claim_count || 0}/${r.max_claims} claimed` : `${r.claim_count || 0} claimed`}
+              ${r.claim_count || 0} claimed
               ${r.expires_at ? ` • Ends ${new Date(r.expires_at).toLocaleDateString()}` : ''}
             </div>
             <button class="btn btn-primary btn-sm ut-claim-btn" data-reward-id="${r.id}" style="margin-top:10px;">Claim Reward</button>
@@ -1127,26 +1240,43 @@ const UnlockableTab = {
 
   async uploadFile(file) {
     try {
-      // Get upload config
+      // Get upload config (returns { key, endpoint })
       const configResp = await fetch('/api/upload-config');
       const config = await configResp.json();
+
+      if (!config.key) {
+        throw new Error('Upload service not configured');
+      }
 
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadResp = await fetch(`https://node.lighthouse.storage/api/v0/add`, {
+      // Use the endpoint from config, fallback to default
+      const endpoint = config.endpoint || 'https://node.lighthouse.storage/api/v0/add';
+
+      const uploadResp = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${config.apiKey}` },
+        headers: { 'Authorization': `Bearer ${config.key}` },
         body: formData
       });
+
+      if (!uploadResp.ok) {
+        const errText = await uploadResp.text().catch(() => 'Unknown error');
+        throw new Error(`Upload failed (${uploadResp.status}): ${errText}`);
+      }
+
       const uploadData = await uploadResp.json();
       if (uploadData.Hash) {
         return `/api/ipfs/${uploadData.Hash}`;
       }
-      return null;
+      throw new Error('No hash returned from upload service');
     } catch (e) {
       console.error('Upload error:', e);
-      alert('Failed to upload file');
+      if (typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast('Upload failed — try a smaller file or try again');
+      } else {
+        alert('Failed to upload file: ' + e.message);
+      }
       return null;
     }
   },
@@ -1265,6 +1395,36 @@ const UnlockableTab = {
       }
       .ut-setting-row { margin-bottom:16px; }
       .ut-setting-label { font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:6px; }
+
+      /* Gear button for settings toggle */
+      .ut-gear-btn {
+        width:36px; height:36px; border:1px solid var(--border-color); border-radius:10px;
+        background:transparent; font-size:18px; cursor:pointer; transition:all 0.15s;
+        display:flex; align-items:center; justify-content:center;
+      }
+      .ut-gear-btn:hover { background:var(--bg-hover); border-color:var(--accent); }
+
+      /* Inline settings panel (collapsible) */
+      .ut-inline-settings {
+        margin-bottom:20px; padding:16px 20px;
+        background:var(--bg-secondary, rgba(255,255,255,0.02));
+        border:1px solid var(--border-color); border-radius:14px;
+        animation:utSlideDown 0.15s ease;
+      }
+      @keyframes utSlideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+      .ut-inline-settings-header {
+        display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;
+      }
+      .ut-inline-settings-title { font-size:14px; font-weight:700; }
+      .ut-inline-settings-close {
+        width:28px; height:28px; border:none; border-radius:50%;
+        background:rgba(255,255,255,0.06); color:var(--text-muted);
+        font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+        transition:all 0.15s;
+      }
+      .ut-inline-settings-close:hover { background:rgba(255,255,255,0.12); color:var(--text-primary); }
+      .ut-select-sm { padding:8px 10px; font-size:13px; }
+      .ut-input-sm { padding:8px 10px; font-size:13px; }
 
       /* Forms */
       .ut-page { max-width:680px; margin:0 auto; }
