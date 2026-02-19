@@ -5,6 +5,11 @@
  * Handles:
  * - POST: Create gift, accept gift (lazy mint + sell offer), decline gift
  * - GET: Fetch gifts (sent, received, pending)
+ * 
+ * XAMAN 5.0 FIX: Gift sell offers now use Amount: '0' (free transfer)
+ * and include explicit Memos to prevent the "Text Strings must be
+ * rendered within a <Text> component" crash in Xaman 5.0's NFT offer
+ * detail screen. Same workaround applied in broker-sale.js for purchases.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -111,6 +116,10 @@ async function handleCreateGift(req, res, sql) {
 
 /**
  * Accept a gift — lazy mint NFT + create sell offer for recipient
+ * 
+ * XAMAN 5.0 FIX: 
+ * - Amount changed from '1' to '0' (gifts are free transfers)
+ * - Added explicit Memos to prevent null-string render crash
  */
 async function handleAcceptGift(req, res, sql) {
   const { giftId, recipientAddress } = req.body;
@@ -129,6 +138,7 @@ async function handleAcceptGift(req, res, sql) {
   try {
     const [gift] = await sql`
       SELECT g.*, r.title as release_title, r.total_editions, r.royalty_percent, r.cover_url,
+             r.artist_address,
              t.title as track_title, t.metadata_cid, t.sold_count
       FROM gifts g
       JOIN releases r ON g.release_id = r.id
@@ -157,9 +167,21 @@ async function handleAcceptGift(req, res, sql) {
       const royaltyPercent = gift.royalty_percent || 5;
       const transferFee = Math.round(royaltyPercent * 1000);
 
+      // Check if artist has authorized platform as NFTokenMinter
+      let useIssuer = false;
+      if (gift.artist_address) {
+        try {
+          const acctInfo = await client.request({ command: 'account_info', account: gift.artist_address });
+          useIssuer = acctInfo.result.account_data?.NFTokenMinter === platformAddress;
+        } catch (e) {
+          console.warn('Could not check NFTokenMinter for', gift.artist_address);
+        }
+      }
+
       const mintTx = await client.autofill({
         TransactionType: 'NFTokenMint',
         Account: platformAddress,
+        ...(useIssuer ? { Issuer: gift.artist_address } : {}),
         URI: uriHex,
         Flags: 8,
         TransferFee: transferFee,
@@ -180,13 +202,21 @@ async function handleAcceptGift(req, res, sql) {
 
       console.log('✅ Gift NFT minted:', nftTokenId);
 
+      // XAMAN 5.0 FIX: Amount '0' for free gift transfer + explicit Memos
+      // to prevent "Text Strings must be rendered within a <Text> component"
       const createOfferTx = await client.autofill({
         TransactionType: 'NFTokenCreateOffer',
         Account: platformAddress,
         NFTokenID: nftTokenId,
-        Amount: '1',
+        Amount: '0',
         Flags: 1,
         Destination: recipientAddress,
+        Memos: [{
+          Memo: {
+            MemoType: Buffer.from('text/plain').toString('hex').toUpperCase(),
+            MemoData: Buffer.from('XRP Music NFT Gift').toString('hex').toUpperCase(),
+          }
+        }],
       });
 
       const signedOffer = platformWallet.sign(createOfferTx);
