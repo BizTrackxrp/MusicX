@@ -17,6 +17,10 @@
  * 
  * DELETE:
  *   ?id=REWARD_ID&artist=ADDR → artist deletes a reward
+ * 
+ * FIXES (v2):
+ *   - createReward: fixed undefined 'artistAddress' → uses 'artist' variable
+ *   - max_claims now nullable (NFT supply is the implicit limit)
  */
 import { neon } from '@neondatabase/serverless';
 
@@ -193,14 +197,15 @@ async function createReward(req, res, sql) {
   `;
 
   // Ensure artist_unlockables row exists with tab_setup_complete = true
+  // FIX: was using undefined 'artistAddress', now uses 'artist'
   await sql`
     INSERT INTO artist_unlockables (artist_address, tab_setup_complete, updated_at)
-    VALUES (${artistAddress}, true, NOW())
+    VALUES (${artist}, true, NOW())
     ON CONFLICT (artist_address)
     DO UPDATE SET tab_setup_complete = true, updated_at = NOW()
   `;
 
-  console.log(`✅ Reward created: ${id} by ${artistAddress}`);
+  console.log(`✅ Reward created: ${id} by ${artist}`);
 
   return res.json({ success: true, id });
 }
@@ -285,7 +290,7 @@ async function claimReward(req, res, sql) {
     return res.status(400).json({ error: 'Reward has expired' });
   }
 
-  // Check max claims
+  // Check max claims (if set)
   if (reward.max_claims && reward.claim_count >= reward.max_claims) {
     return res.status(400).json({ error: 'Reward is fully claimed' });
   }
@@ -341,9 +346,11 @@ async function claimReward(req, res, sql) {
 }
 
 async function updateStatus(req, res, sql) {
-  const { id, artistAddress, status } = req.body;
+  const artist = req.body.artist || req.body.artistAddress;
+  const id = req.body.id;
+  const status = req.body.status;
 
-  if (!id || !artistAddress || !status) {
+  if (!id || !artist || !status) {
     return res.status(400).json({ error: 'Missing fields' });
   }
 
@@ -352,7 +359,7 @@ async function updateStatus(req, res, sql) {
   }
 
   const existing = await sql`
-    SELECT id FROM rewards WHERE id = ${id} AND artist_address = ${artistAddress}
+    SELECT id FROM rewards WHERE id = ${id} AND artist_address = ${artist}
   `;
   if (existing.length === 0) {
     return res.status(403).json({ error: 'Not your reward' });
