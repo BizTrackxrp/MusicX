@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 // ============================================
 
 async function handleGet(req, res, sql) {
-  const { artist, posts, check, viewer } = req.query;
+  const { artist, posts, check } = req.query;
 
   if (!artist) {
     return res.status(400).json({ error: 'artist parameter required' });
@@ -141,7 +141,6 @@ async function handlePost(req, res, sql) {
 }
 
 async function setupUnlockable(req, res, sql) {
-  // Accept both camelCase and snake_case field names from frontend
   const artist = req.body.artist || req.body.artistAddress;
   const enabled = req.body.private_page_enabled ?? req.body.privatePageEnabled ?? false;
   const title = req.body.private_page_title ?? req.body.privatePageTitle ?? null;
