@@ -1,6 +1,8 @@
 /**
  * XRP Music - Main App
  * Initialization and routing
+ * 
+ * UPDATED: Added 🎁 Rewards page route for NFT-gated rewards system
  */
 const Router = {
   params: {},
@@ -60,6 +62,10 @@ const Router = {
     }
     if (page === 'transparency') {
       return '/transparency';
+    }
+    // Rewards page
+    if (page === 'rewards') {
+      return '/rewards';
     }
     return `/${page === 'stream' ? '' : page}`;
   },
@@ -152,6 +158,11 @@ const Router = {
       return { page: 'transparency', params: {} };
     }
     
+    // Rewards page
+    if (path === '/rewards') {
+      return { page: 'rewards', params: {} };
+    }
+    
     // Other pages
     const pageName = path.replace('/', '') || 'stream';
     return { page: pageName, params: {} };
@@ -226,6 +237,15 @@ const Router = {
           GenrePage.render(this.params);
         } else {
           console.error('GenrePage not loaded');
+          StreamPage.render();
+        }
+        break;
+      // ========== REWARDS ROUTE ==========
+      case 'rewards':
+        if (typeof RewardsPage !== 'undefined') {
+          RewardsPage.render();
+        } else {
+          console.error('RewardsPage not loaded');
           StreamPage.render();
         }
         break;
