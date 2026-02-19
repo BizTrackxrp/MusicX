@@ -115,25 +115,48 @@ async function handleGet(req, res, sql) {
 
   // Global rewards feed
   if (page === 'global') {
-    let orderBy = 'r.created_at DESC'; // newest
+    let rewards;
     if (sort === 'ending_soon') {
-      orderBy = 'r.expires_at ASC NULLS LAST';
+      rewards = await sql`
+        SELECT r.*,
+          p.name as artist_name,
+          p.avatar_url as artist_avatar
+        FROM rewards r
+        LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+        WHERE r.status = 'active'
+          AND (r.expires_at IS NULL OR r.expires_at > NOW())
+          AND (r.max_claims IS NULL OR r.claim_count < r.max_claims)
+        ORDER BY r.expires_at ASC NULLS LAST
+        LIMIT 50
+      `;
     } else if (sort === 'most_claimed') {
-      orderBy = 'r.claim_count DESC';
+      rewards = await sql`
+        SELECT r.*,
+          p.name as artist_name,
+          p.avatar_url as artist_avatar
+        FROM rewards r
+        LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+        WHERE r.status = 'active'
+          AND (r.expires_at IS NULL OR r.expires_at > NOW())
+          AND (r.max_claims IS NULL OR r.claim_count < r.max_claims)
+        ORDER BY r.claim_count DESC
+        LIMIT 50
+      `;
+    } else {
+      // Default: newest first
+      rewards = await sql`
+        SELECT r.*,
+          p.name as artist_name,
+          p.avatar_url as artist_avatar
+        FROM rewards r
+        LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+        WHERE r.status = 'active'
+          AND (r.expires_at IS NULL OR r.expires_at > NOW())
+          AND (r.max_claims IS NULL OR r.claim_count < r.max_claims)
+        ORDER BY r.created_at DESC
+        LIMIT 50
+      `;
     }
-
-    const rewards = await sql`
-      SELECT r.*,
-        p.name as artist_name,
-        p.avatar_url as artist_avatar
-      FROM rewards r
-      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
-      WHERE r.status = 'active'
-        AND (r.expires_at IS NULL OR r.expires_at > NOW())
-        AND (r.max_claims IS NULL OR r.claim_count < r.max_claims)
-      ORDER BY ${sql.unsafe(orderBy)}
-      LIMIT 50
-    `;
     return res.json({ rewards });
   }
 
