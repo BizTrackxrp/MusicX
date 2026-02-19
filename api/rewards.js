@@ -51,10 +51,10 @@ async function handleGet(req, res, sql) {
   if (id) {
     const rewards = await sql`
       SELECT r.*, 
-        p.display_name as artist_name,
+        p.name as artist_name,
         p.avatar_url as artist_avatar
       FROM rewards r
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE r.id = ${id}
     `;
     if (rewards.length === 0) {
@@ -67,10 +67,10 @@ async function handleGet(req, res, sql) {
   if (claims === 'true' && artist) {
     const claimRows = await sql`
       SELECT rc.*, r.title as reward_title, r.image_url as reward_image,
-        p.display_name as claimer_name
+        p.name as claimer_name
       FROM reward_claims rc
       JOIN rewards r ON r.id = rc.reward_id
-      LEFT JOIN profiles p ON p.address = rc.claimer_address
+      LEFT JOIN profiles p ON p.wallet_address = rc.claimer_address
       WHERE r.artist_address = ${artist}
       ORDER BY rc.claimed_at DESC
       LIMIT 100
@@ -99,10 +99,10 @@ async function handleGet(req, res, sql) {
   if (artist) {
     const rewards = await sql`
       SELECT r.*,
-        p.display_name as artist_name,
+        p.name as artist_name,
         p.avatar_url as artist_avatar
       FROM rewards r
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE r.artist_address = ${artist}
       ORDER BY r.created_at DESC
     `;
@@ -120,10 +120,10 @@ async function handleGet(req, res, sql) {
 
     const rewards = await sql`
       SELECT r.*,
-        p.display_name as artist_name,
+        p.name as artist_name,
         p.avatar_url as artist_avatar
       FROM rewards r
-      LEFT JOIN profiles p ON p.address = r.artist_address
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE r.status = 'active'
         AND (r.expires_at IS NULL OR r.expires_at > NOW())
         AND (r.max_claims IS NULL OR r.claim_count < r.max_claims)
