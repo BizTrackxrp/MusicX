@@ -35,6 +35,9 @@
  * - Tracks can have optional videoUrl/videoCid for music videos
  * - Desktop drawer shows video synced to audio playback
  * - Video is purely visual — audio element remains the playback engine
+ * - VIDEO ENRICHMENT: playTrack() always enriches tracks with video data
+ *   from AppState.releases cache, so video works regardless of play source
+ *   (top tracks, search, queue, release modal, MV badge, etc.)
  */
 
 /**
@@ -506,6 +509,56 @@ const Player = {
     }
   },
   
+  // ============================================
+  // VIDEO DATA ENRICHMENT
+  // ============================================
+
+  /**
+   * Enrich a single track with video data from AppState.releases
+   * This is the KEY FIX: ensures videoUrl/videoCid are always present
+   * regardless of where the play originated (top tracks, search, queue, etc.)
+   * 
+   * The /api/plays endpoint (top tracks) doesn't return video fields,
+   * but AppState.releases (from /api/releases) always has them.
+   * This function bridges that gap.
+   */
+  _enrichTrackVideo(track) {
+    if (!track || track.isExternal) return track;
+    
+    // Already has video data — nothing to do
+    if (track.videoUrl || track.videoCid) return track;
+    
+    // Look up the release in AppState cache
+    const releaseId = track.releaseId;
+    if (!releaseId) return track;
+    
+    const release = (AppState.releases || []).find(r => r.id === releaseId);
+    if (!release?.tracks) return track;
+    
+    // Match by trackId or id
+    const matchId = track.trackId || track.id;
+    const match = release.tracks.find(t => 
+      String(t.id) === String(matchId) || String(t.trackId) === String(matchId)
+    );
+    
+    if (match && (match.videoCid || match.videoUrl)) {
+      track.videoCid = match.videoCid || null;
+      track.videoUrl = match.videoUrl || null;
+      console.log('🎬 Enriched track with video data:', track.title);
+    }
+    
+    return track;
+  },
+
+  /**
+   * Enrich an entire queue of tracks with video data
+   */
+  _enrichQueueVideo(queue) {
+    if (!queue?.length) return queue;
+    queue.forEach(t => this._enrichTrackVideo(t));
+    return queue;
+  },
+  
   /**
    * Open the Spotify-style expanded Now Playing view
    * Called when user taps the up arrow on mobile player
@@ -617,11 +670,24 @@ const Player = {
    * @param {Object} track - Track to play
    * @param {Array} queue - Optional queue (if null, uses global shuffle) — LEGACY, prefer QueueManager
    * @param {Number} queueIndex - Index in queue
+   * 
+   * VIDEO ENRICHMENT: This method ALWAYS enriches the track and queue with
+   * video data from AppState.releases before doing anything else. This ensures
+   * music videos play regardless of where the track was triggered from
+   * (top tracks, search, queue, release modal, MV badge, etc.)
    */
   async playTrack(track, queue = null, queueIndex = 0) {
     if (!track) return;
     
-    console.log('🎵 Playing track:', track.title);
+    // ── ALWAYS enrich track + queue with video data from releases cache ──
+    // This is the critical fix: some entry points (top tracks from /api/plays,
+    // QueueManager auto queue, search results) don't include video fields.
+    // AppState.releases always has them, so we merge here.
+    this._enrichTrackVideo(track);
+    this._enrichQueueVideo(queue);
+    
+    console.log('🎵 Playing track:', track.title, 
+      track.videoCid || track.videoUrl ? '🎬 HAS VIDEO' : '');
     
     // Reset play tracking for new track
     this.resetPlayTracking();
@@ -1107,7 +1173,8 @@ const Player = {
     }
     return '';
   },
-/**
+
+  /**
    * Load video into persistent background element
    * Always ready so any viewer can instantly show it
    */
@@ -1130,6 +1197,7 @@ const Player = {
       console.log('🎬 Persistent MV loaded:', track.title);
     }
   },
+
   /**
    * Create fullscreen video viewer
    * Takes over main content area with video + transport controls
@@ -1582,6 +1650,7 @@ const Player = {
       }
     }, 200);
   },
+
   /**
    * Bind seek on fullscreen progress bar
    */
@@ -1675,7 +1744,7 @@ const Player = {
 
     this._startVideoSync();
 
-   // Update action button (Buy/Owned/Edit based on ownership)
+    // Update action button (Buy/Owned/Edit based on ownership)
     const actionsContainer = drawer.querySelector('.dnp-actions');
     if (actionsContainer) {
       const lastBtn = actionsContainer.lastElementChild;
@@ -1697,7 +1766,7 @@ const Player = {
     }
   },
   
- onPlay() {
+  onPlay() {
     console.log('▶️ Playback started');
     const pv = this.persistentVideo;
     if (pv && pv.src) pv.play().catch(() => {});
