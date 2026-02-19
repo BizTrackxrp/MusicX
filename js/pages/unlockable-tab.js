@@ -65,7 +65,12 @@ const UnlockableTab = {
       }
 
       if (this.isOwner) {
-        this.renderOwnerDashboard();
+        const cfg = this.config || {};
+        if (!cfg.tab_setup_complete) {
+          this.renderOwnerContentPage(); // first-time setup only
+        } else {
+          this.renderOwnerContentPage(); // default: show content feed
+        }
       } else if (this.hasAccess) {
         this.renderHolderView();
       } else {
@@ -427,7 +432,7 @@ const UnlockableTab = {
   },
 
   bindCreateRewardEvents() {
-    document.getElementById('ut-back-dash')?.addEventListener('click', () => this.renderOwnerDashboard());
+    document.getElementById('ut-back-dash')?.addEventListener('click', () => this.renderOwnerContentPage());
 
     // Logo upload
     const logoZone = document.getElementById('ut-reward-logo-zone');
@@ -548,7 +553,7 @@ const UnlockableTab = {
       }
 
       this.rewardCount = (this.rewardCount || 0) + (this._rewardEditId ? 0 : 1);
-      this.renderOwnerDashboard();
+      this.renderOwnerContentPage();
     } catch (e) {
       console.error('Submit reward error:', e);
       alert('Failed to save reward: ' + e.message);
@@ -556,7 +561,183 @@ const UnlockableTab = {
     }
   },
 
-  // ─── CONTENT FEED PAGE (Instagram-style + settings gear) ───
+  // ─── OWNER CONTENT PAGE (default landing — feed + stats + gear) ──
+
+  renderOwnerContentPage() {
+    const cfg = this.config || {};
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-page ut-page-wide">
+        <div class="ut-page-header">
+          <h2 class="ut-page-title">Unlockable Content</h2>
+          <div class="ut-header-actions">
+            <button class="btn btn-primary btn-sm" id="ut-new-post-btn">+ New Post</button>
+            <button class="btn btn-secondary btn-sm" id="ut-create-reward-btn">🎁 Reward</button>
+            <button class="ut-gear-btn" id="ut-toggle-settings" title="Page Settings">⚙️</button>
+          </div>
+        </div>
+
+        <!-- Collapsible settings -->
+        <div class="ut-inline-settings" id="ut-inline-settings" style="display:none;">
+          <div class="ut-inline-settings-header">
+            <span class="ut-inline-settings-title">Page Settings</span>
+            <button class="ut-inline-settings-close" id="ut-close-settings">✕</button>
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Who can access?</div>
+            <select class="ut-select ut-select-sm" id="ut-feed-access-type">
+              <option value="any_nft" ${(cfg.private_page_access_type || 'any_nft') === 'any_nft' ? 'selected' : ''}>Any NFT holder</option>
+              <option value="specific_release" ${cfg.private_page_access_type === 'specific_release' ? 'selected' : ''}>Specific release only</option>
+            </select>
+          </div>
+          <div class="ut-setting-row" id="ut-feed-release-row" style="display:${cfg.private_page_access_type === 'specific_release' ? 'block' : 'none'};">
+            <select class="ut-select ut-select-sm" id="ut-feed-access-release">
+              <option value="">Select a release...</option>
+              ${this.artistReleases.map(r => `<option value="${r.id}" ${cfg.private_page_release_id === r.id ? 'selected' : ''}>${r.title}</option>`).join('')}
+            </select>
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Welcome message</div>
+            <input type="text" class="ut-input ut-input-sm" id="ut-feed-welcome" value="${cfg.welcome_message || ''}" placeholder="Welcome to my private page!" />
+          </div>
+          <div class="ut-setting-row">
+            <div class="ut-setting-label">Teaser (non-holders see this)</div>
+            <input type="text" class="ut-input ut-input-sm" id="ut-feed-desc" value="${cfg.private_page_description || ''}" placeholder="Exclusive content for NFT holders..." />
+          </div>
+          <button class="btn btn-primary btn-sm" id="ut-feed-save-settings" style="margin-top:8px;">Save</button>
+        </div>
+
+        <!-- Clickable stats -->
+        <div class="ut-stats-row">
+          <button class="ut-stat ut-stat-clickable" id="ut-stat-rewards"><span class="ut-stat-num">${this.rewardCount}</span> Active Rewards →</button>
+          <div class="ut-stat"><span class="ut-stat-num">${this.postCount}</span> Posts</div>
+          <div class="ut-stat"><span class="ut-stat-num" id="ut-claims-count">0</span> Total Claims</div>
+        </div>
+
+        <!-- Content feed -->
+        <div id="ut-content-feed" class="ut-feed-grid">
+          <div class="ut-loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    `;
+
+    // Bind events
+    document.getElementById('ut-new-post-btn')?.addEventListener('click', () => this.showCreatePostModal());
+    document.getElementById('ut-create-reward-btn')?.addEventListener('click', () => this.showCreateRewardPage());
+    document.getElementById('ut-stat-rewards')?.addEventListener('click', () => this.showOwnerRewardsList());
+    document.getElementById('ut-toggle-settings')?.addEventListener('click', () => {
+      const p = document.getElementById('ut-inline-settings');
+      if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('ut-close-settings')?.addEventListener('click', () => {
+      document.getElementById('ut-inline-settings').style.display = 'none';
+    });
+    document.getElementById('ut-feed-access-type')?.addEventListener('change', (e) => {
+      document.getElementById('ut-feed-release-row').style.display = e.target.value === 'specific_release' ? 'block' : 'none';
+    });
+    document.getElementById('ut-feed-save-settings')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ut-feed-save-settings');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+      try {
+        await fetch('/api/unlockables', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'setup', artist: this.artistAddress, private_page_enabled: true,
+            private_page_access_type: document.getElementById('ut-feed-access-type')?.value || 'any_nft',
+            private_page_release_id: document.getElementById('ut-feed-access-release')?.value || null,
+            private_page_description: document.getElementById('ut-feed-desc')?.value || '',
+            welcome_message: document.getElementById('ut-feed-welcome')?.value || '',
+            tab_setup_complete: true,
+          })
+        });
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        document.getElementById('ut-inline-settings').style.display = 'none';
+        if (typeof Modals !== 'undefined' && Modals.showToast) Modals.showToast('Settings saved!');
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        alert('Failed to save');
+      }
+    });
+
+    this.loadContentFeed();
+    // Load claims count
+    fetch(`/api/rewards?claims=true&artist=${this.artistAddress}`)
+      .then(r => r.json()).then(d => { const el = document.getElementById('ut-claims-count'); if (el) el.textContent = (d.claims || []).length; })
+      .catch(() => {});
+  },
+
+  // ─── OWNER REWARDS LIST (big cards) ────────────────────
+
+  async showOwnerRewardsList() {
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-page ut-page-wide">
+        <div class="ut-page-header">
+          <button class="ut-back-btn" id="ut-back-feed">← Back</button>
+          <h2 class="ut-page-title">My Rewards</h2>
+          <button class="btn btn-primary btn-sm" id="ut-create-reward-btn2">+ Create Reward</button>
+        </div>
+        <div id="ut-owner-rewards-list"><div class="ut-loading"><div class="spinner"></div></div></div>
+      </div>
+    `;
+    document.getElementById('ut-back-feed')?.addEventListener('click', () => this.renderOwnerContentPage());
+    document.getElementById('ut-create-reward-btn2')?.addEventListener('click', () => this.showCreateRewardPage());
+
+    try {
+      const resp = await fetch(`/api/rewards?artist=${this.artistAddress}`);
+      const data = await resp.json();
+      const rewards = data.rewards || [];
+      const container = document.getElementById('ut-owner-rewards-list');
+      if (!container) return;
+
+      if (rewards.length === 0) {
+        container.innerHTML = '<div class="ut-empty-state"><div class="ut-empty-icon">🎁</div><h3>No Rewards Yet</h3><p>Create your first reward.</p><button class="btn btn-primary" id="ut-empty-cr">Create Reward</button></div>';
+        document.getElementById('ut-empty-cr')?.addEventListener('click', () => this.showCreateRewardPage());
+        return;
+      }
+
+      container.innerHTML = '<div class="ut-owner-rewards-grid">' + rewards.map(r => {
+        const sc = r.status === 'active' ? '#22c55e' : r.status === 'paused' ? '#f59e0b' : '#6b7280';
+        const sl = r.status.charAt(0).toUpperCase() + r.status.slice(1);
+        return `
+          <div class="ut-owner-reward-card">
+            <div class="ut-owner-reward-img-wrap">
+              ${r.image_url ? '<img src="' + r.image_url + '" class="ut-owner-reward-img" onerror="this.src=\'/placeholder.png\'" />' : '<div class="ut-owner-reward-placeholder">🎁</div>'}
+              <div class="ut-owner-reward-status" style="background:${sc};">${sl}</div>
+            </div>
+            <div class="ut-owner-reward-body">
+              <div class="ut-owner-reward-title">${r.title}</div>
+              <div class="ut-owner-reward-type">${r.reward_type || 'Reward'}</div>
+              ${r.description ? '<div class="ut-owner-reward-desc">' + r.description.slice(0, 160) + (r.description.length > 160 ? '...' : '') + '</div>' : ''}
+              <div class="ut-owner-reward-meta">${r.claim_count || 0} claimed${r.expires_at ? ' · Ends ' + new Date(r.expires_at).toLocaleDateString() : ''}</div>
+              <div class="ut-owner-reward-actions">
+                <button class="btn btn-secondary btn-sm ut-edit-reward" data-id="${r.id}">Edit</button>
+                <button class="btn btn-secondary btn-sm ut-toggle-reward" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Activate'}</button>
+                <button class="ut-link-btn ut-delete-reward" data-id="${r.id}" style="color:var(--error);margin-left:auto;">Delete</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('') + '</div>';
+
+      container.querySelectorAll('.ut-edit-reward').forEach(btn => {
+        btn.addEventListener('click', () => { const rw = rewards.find(r => r.id === btn.dataset.id); if (rw) this.showCreateRewardPage(rw); });
+      });
+      container.querySelectorAll('.ut-toggle-reward').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const ns = btn.dataset.status === 'active' ? 'paused' : 'active';
+          try { await fetch('/api/rewards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_status', id: btn.dataset.id, artist: this.artistAddress, status: ns }) }); this.showOwnerRewardsList(); } catch (e) { alert('Failed'); }
+        });
+      });
+      container.querySelectorAll('.ut-delete-reward').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this reward?')) return;
+          try { await fetch('/api/rewards?id=' + btn.dataset.id + '&artist=' + this.artistAddress, { method: 'DELETE' }); this.rewardCount = Math.max(0, (this.rewardCount || 0) - 1); this.showOwnerRewardsList(); } catch (e) { alert('Failed'); }
+        });
+      });
+    } catch (e) { document.getElementById('ut-owner-rewards-list').innerHTML = '<div class="ut-error">Failed to load rewards</div>'; }
+  },
+
+  // ─── CONTENT FEED (shared loader) ─────────────────────
 
   async showContentFeedPage() {
     const cfg = this.config || {};
@@ -612,7 +793,7 @@ const UnlockableTab = {
     `;
 
     // Back
-    document.getElementById('ut-back-dash2')?.addEventListener('click', () => this.renderOwnerDashboard());
+    document.getElementById('ut-back-dash2')?.addEventListener('click', () => this.renderOwnerContentPage());
     // New post
     document.getElementById('ut-new-post-btn')?.addEventListener('click', () => this.showCreatePostModal());
 
@@ -1051,7 +1232,7 @@ const UnlockableTab = {
         if (feedContainer) {
           this.loadContentFeed();
         } else {
-          this.renderOwnerDashboard();
+          this.renderOwnerContentPage();
         }
       } catch (e) {
         console.error('Post submit error:', e);
@@ -1360,15 +1541,15 @@ const UnlockableTab = {
       .ut-action-title { font-size:15px; font-weight:700; }
       .ut-action-desc { font-size:12px; color:var(--text-muted); }
 
-      /* Stats */
-      .ut-stats-row {
-        display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px;
-      }
+      /* Stats row */
+      .ut-stats-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
       .ut-stat {
-        padding:10px 18px; background:var(--bg-secondary, rgba(255,255,255,0.03));
+        padding:10px 16px; background:var(--bg-secondary, rgba(255,255,255,0.03));
         border:1px solid var(--border-color); border-radius:12px;
         font-size:13px; color:var(--text-secondary);
       }
+      .ut-stat-clickable { cursor:pointer; transition:all 0.15s; }
+      .ut-stat-clickable:hover { border-color:var(--accent); background:var(--bg-hover); }
       .ut-stat-num { font-weight:700; color:var(--accent); margin-right:4px; }
 
       /* Sections */
@@ -1622,6 +1803,69 @@ const UnlockableTab = {
       .ut-locked-title { font-size:24px; font-weight:700; margin-bottom:8px; }
       .ut-locked-desc { color:var(--text-muted); font-size:15px; margin-bottom:20px; max-width:400px; margin-left:auto; margin-right:auto; }
       .ut-locked-stats { display:flex; gap:16px; justify-content:center; margin-bottom:24px; font-size:13px; color:var(--text-muted); }
+
+      /* Page layout */
+      .ut-page-wide { max-width:800px; }
+      .ut-header-actions { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+
+      /* Gear button */
+      .ut-gear-btn {
+        width:36px; height:36px; border:1px solid var(--border-color); border-radius:10px;
+        background:transparent; font-size:18px; cursor:pointer; transition:all 0.15s;
+        display:flex; align-items:center; justify-content:center; flex-shrink:0;
+      }
+      .ut-gear-btn:hover { background:var(--bg-hover); border-color:var(--accent); }
+
+      /* Inline settings panel */
+      .ut-inline-settings {
+        margin-bottom:20px; padding:16px 20px;
+        background:var(--bg-secondary, rgba(255,255,255,0.02));
+        border:1px solid var(--border-color); border-radius:14px;
+        animation:utSlideDown 0.15s ease;
+      }
+      @keyframes utSlideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+      .ut-inline-settings-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+      .ut-inline-settings-title { font-size:14px; font-weight:700; }
+      .ut-inline-settings-close {
+        width:28px; height:28px; border:none; border-radius:50%;
+        background:rgba(255,255,255,0.06); color:var(--text-muted);
+        font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+      }
+      .ut-inline-settings-close:hover { background:rgba(255,255,255,0.12); color:var(--text-primary); }
+      .ut-select-sm, .ut-input-sm { padding:8px 10px; font-size:13px; }
+
+      /* Owner Rewards List (big cards) */
+      .ut-owner-rewards-grid { display:flex; flex-direction:column; gap:16px; }
+      .ut-owner-reward-card {
+        display:flex; gap:0;
+        background:var(--bg-secondary, rgba(255,255,255,0.03));
+        border:1px solid var(--border-color); border-radius:16px; overflow:hidden;
+        transition:border-color 0.15s;
+      }
+      .ut-owner-reward-card:hover { border-color:var(--accent); }
+      .ut-owner-reward-img-wrap { position:relative; width:200px; min-height:180px; flex-shrink:0; }
+      @media(max-width:600px) {
+        .ut-owner-reward-card { flex-direction:column; }
+        .ut-owner-reward-img-wrap { width:100%; min-height:160px; }
+      }
+      .ut-owner-reward-img { width:100%; height:100%; object-fit:cover; }
+      .ut-owner-reward-placeholder {
+        width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+        font-size:48px; background:rgba(139,92,246,0.08);
+      }
+      .ut-owner-reward-status {
+        position:absolute; top:10px; left:10px; padding:4px 10px;
+        border-radius:8px; font-size:11px; font-weight:700; color:white; text-transform:uppercase;
+      }
+      .ut-owner-reward-body { padding:20px; flex:1; display:flex; flex-direction:column; }
+      .ut-owner-reward-title { font-size:18px; font-weight:700; margin-bottom:4px; }
+      .ut-owner-reward-type {
+        font-size:11px; font-weight:600; text-transform:uppercase;
+        color:var(--accent); letter-spacing:0.5px; margin-bottom:10px;
+      }
+      .ut-owner-reward-desc { font-size:13px; color:var(--text-muted); line-height:1.5; margin-bottom:12px; flex:1; }
+      .ut-owner-reward-meta { font-size:12px; color:var(--text-muted); margin-bottom:14px; }
+      .ut-owner-reward-actions { display:flex; gap:8px; align-items:center; }
 
       /* Empty State */
       .ut-empty-state { text-align:center; padding:40px 20px; }
