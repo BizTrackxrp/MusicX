@@ -9,6 +9,7 @@
  * UPDATED: Fixed bio text overflow for long bios
  * UPDATED: Fixed mobile player positioning
  * UPDATED: Collection overhaul — dedup, filters, multi-copy popups, send NFT
+ * UPDATED: 🔑 Unlockable Content tab — NFT-gated private page + rewards
  */
 
 const ProfilePage = {
@@ -21,6 +22,11 @@ const ProfilePage = {
   _collectionRawNfts: [],
   _activeCollectionFilter: 'all',
   _needsRefresh: false,
+  
+  // Unlockable tab state
+  _unlockableConfig: null,
+  _showUnlockableTab: false,
+  _unlockableBadge: false,
   
   // Genre definitions (must match modals.js)
   genres: [
@@ -36,7 +42,6 @@ const ProfilePage = {
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
   
-  // Helper to get proxied image URL
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
     if (typeof IpfsHelper !== 'undefined') {
@@ -45,13 +50,6 @@ const ProfilePage = {
     return url;
   },
   
-  /**
-   * Check if a release is "for sale" (available for purchase)
-   * With lazy minting, a release is for sale if:
-   * - It has a sellOfferIndex (traditional pre-minted), OR
-   * - It has mintFeePaid = true (lazy mint), OR
-   * - It has status = 'live' (lazy mint)
-   */
   isForSale(release) {
     return release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
   },
@@ -65,15 +63,15 @@ const ProfilePage = {
     UI.showLoading();
     
     try {
-      // Add timeout to prevent infinite loading
       const timeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
-      const [releases, profile] = await Promise.race([
+      const [releases, profile, unlockableData] = await Promise.race([
         Promise.all([
           API.getReleasesByArtist(AppState.user.address),
-          API.getProfile(AppState.user.address)
+          API.getProfile(AppState.user.address),
+          this.fetchUnlockableConfig(AppState.user.address),
         ]),
         timeout
       ]);
@@ -82,14 +80,39 @@ const ProfilePage = {
       if (profile) {
         setProfile(profile);
       }
+      
+      // Process unlockable tab visibility
+      const isOwner = true;
+      this._unlockableConfig = unlockableData?.config || null;
+      this._showUnlockableTab = isOwner || (this._unlockableConfig?.tab_setup_complete === true);
+      this._unlockableBadge = isOwner && (!this._unlockableConfig || !this._unlockableConfig.tab_setup_complete);
+      
       if (this._needsRefresh) {
         this.activeTab = 'collected';
         this._needsRefresh = false;
       }
+      
+      // Check URL for ?tab=unlockable
+      const urlTab = Router?.params?.tab;
+      if (urlTab === 'unlockable' && this._showUnlockableTab) {
+        this.activeTab = 'unlockable';
+      }
+      
       this.renderContent();
     } catch (error) {
       console.error('Failed to load profile:', error);
       this.renderError();
+    }
+  },
+  
+  async fetchUnlockableConfig(artistAddress) {
+    try {
+      const resp = await fetch(`/api/unlockables?artist=${artistAddress}`);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch (e) {
+      console.warn('Failed to fetch unlockable config:', e);
+      return null;
     }
   },
   
@@ -113,7 +136,6 @@ const ProfilePage = {
   },
   
   renderGenreBadges(profile) {
-    // Only show genres if user is an artist
     if (!profile.isArtist) return '';
     
     const badges = [];
@@ -136,13 +158,12 @@ const ProfilePage = {
     
     return `<div class="profile-genres">${badges.join('')}</div>`;
   },
-  
+
   renderContent() {
     const profile = AppState.profile || {};
     const displayName = getDisplayName();
     const address = AppState.user.address;
     
-    // Set default tab based on whether user is an artist
     const isArtist = profile.isArtist || this.releases.length > 0;
     if (!isArtist && this.activeTab === 'posted') {
       this.activeTab = 'collected';
@@ -225,20 +246,36 @@ const ProfilePage = {
             For Sale
             <span class="tab-count" id="forsale-count">0</span>
           </button>
+          ${this._showUnlockableTab ? `
+            <button class="tab-btn ${this.activeTab === 'unlockable' ? 'active' : ''}" data-tab="unlockable">
+              🔑 Unlockable
+              ${this._unlockableBadge ? '<span class="tab-badge-alert">!</span>' : ''}
+            </button>
+          ` : ''}
         </div>
         
         <!-- Tab Content -->
-        <div class="profile-tab-content">
+        <div class="profile-tab-content" id="profile-tab-content">
           ${this.activeTab === 'posted' ? this.renderPostedTab() : 
             this.activeTab === 'forsale' ? this.renderForSaleTab() :
+            this.activeTab === 'unlockable' ? this.renderUnlockableTab() :
             this.renderCollectedTab()}
         </div>
       </div>
       
+      ${this.getStyles()}
+    `;
+    
+    UI.renderPage(html);
+    this.bindEvents();
+  },
+
+  // ============================================
+  // STYLES (extracted for readability)
+  // ============================================
+  getStyles() {
+    return `
       <style>
-        /* ============================================
-           Profile Banner - FIXED for desktop/mobile
-           ============================================ */
         .profile-banner {
           width: 100%;
           height: 180px;
@@ -247,36 +284,16 @@ const ProfilePage = {
           overflow: hidden;
           position: relative;
         }
-        
         .profile-banner img {
           width: 100%;
           height: 100%;
           object-fit: cover;
           object-position: center center;
         }
-        
-        /* Desktop: taller banner to show more of the image */
-        @media (min-width: 768px) {
-          .profile-banner {
-            height: 220px;
-          }
-        }
-        
-        @media (min-width: 1024px) {
-          .profile-banner {
-            height: 260px;
-          }
-        }
-        
-        @media (min-width: 1280px) {
-          .profile-banner {
-            height: 300px;
-          }
-        }
-        
-        /* ============================================
-           Profile Card Layout
-           ============================================ */
+        @media (min-width: 768px) { .profile-banner { height: 220px; } }
+        @media (min-width: 1024px) { .profile-banner { height: 260px; } }
+        @media (min-width: 1280px) { .profile-banner { height: 300px; } }
+
         .profile-card {
           display: flex;
           align-items: flex-start;
@@ -285,7 +302,6 @@ const ProfilePage = {
           margin-top: 20px;
           margin-bottom: 32px;
         }
-        
         @media (max-width: 640px) {
           .profile-card {
             flex-direction: column;
@@ -294,7 +310,6 @@ const ProfilePage = {
             padding: 0 16px;
           }
         }
-        
         .profile-avatar {
           width: 156px;
           height: 156px;
@@ -311,38 +326,11 @@ const ProfilePage = {
           overflow: hidden;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
-        
-        .profile-avatar img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        
-        .profile-info {
-          flex: 1;
-          min-width: 0;
-          padding-top: 8px;
-        }
-        
-        .profile-name {
-          font-size: 32px;
-          font-weight: 700;
-          margin-bottom: 12px;
-        }
-        
-        .profile-genres {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 12px;
-          flex-wrap: wrap;
-        }
-        
-        @media (max-width: 640px) {
-          .profile-genres {
-            justify-content: center;
-          }
-        }
-        
+        .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .profile-info { flex: 1; min-width: 0; padding-top: 8px; }
+        .profile-name { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+        .profile-genres { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        @media (max-width: 640px) { .profile-genres { justify-content: center; } }
         .profile-genre-badge {
           display: inline-flex;
           align-items: center;
@@ -356,21 +344,9 @@ const ProfilePage = {
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
-        
-        .profile-address {
-          color: var(--text-muted);
-          font-size: 14px;
-          margin-bottom: 10px;
-        }
-        
-        /* ============================================
-           Profile Bio - FIXED overflow for long text
-           ============================================ */
-        .profile-bio-container {
-          max-width: 500px;
-          margin-bottom: 14px;
-        }
-        
+        .profile-address { color: var(--text-muted); font-size: 14px; margin-bottom: 10px; }
+
+        .profile-bio-container { max-width: 500px; margin-bottom: 14px; }
         .profile-bio {
           color: var(--text-secondary);
           font-size: 14px;
@@ -383,66 +359,19 @@ const ProfilePage = {
           padding-right: 8px;
           margin: 0;
         }
-        
-        /* Custom scrollbar for bio */
-        .profile-bio::-webkit-scrollbar {
-          width: 4px;
-        }
-        
-        .profile-bio::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        .profile-bio::-webkit-scrollbar-thumb {
-          background: var(--border-color);
-          border-radius: 2px;
-        }
-        
-        .profile-bio::-webkit-scrollbar-thumb:hover {
-          background: var(--border-light);
-        }
-        
+        .profile-bio::-webkit-scrollbar { width: 4px; }
+        .profile-bio::-webkit-scrollbar-track { background: transparent; }
+        .profile-bio::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+        .profile-bio::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
         @media (max-width: 640px) {
-          .profile-bio-container {
-            max-width: 100%;
-            width: 100%;
-          }
-          
-          .profile-bio {
-            max-height: 120px;
-            text-align: center;
-            padding-right: 0;
-          }
+          .profile-bio-container { max-width: 100%; width: 100%; }
+          .profile-bio { max-height: 120px; text-align: center; padding-right: 0; }
         }
-        
-        /* ============================================
-           Profile Links
-           ============================================ */
-        .profile-links {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        
-        @media (max-width: 640px) {
-          .profile-links {
-            justify-content: center;
-          }
-        }
-        
-        .profile-website {
-          color: var(--accent);
-          font-size: 14px;
-          text-decoration: none;
-          transition: opacity 150ms;
-        }
-        
-        .profile-website:hover {
-          opacity: 0.8;
-          text-decoration: underline;
-        }
-        
+
+        .profile-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        @media (max-width: 640px) { .profile-links { justify-content: center; } }
+        .profile-website { color: var(--accent); font-size: 14px; text-decoration: none; transition: opacity 150ms; }
+        .profile-website:hover { opacity: 0.8; text-decoration: underline; }
         .profile-social-link {
           color: var(--text-muted);
           transition: color 150ms;
@@ -452,54 +381,27 @@ const ProfilePage = {
           font-size: 14px;
           text-decoration: none;
         }
-        
-        .profile-social-link:hover {
-          color: var(--accent);
-        }
-        
-        /* ============================================
-           Profile Actions
-           ============================================ */
-        .profile-actions {
-          display: flex;
-          gap: 8px;
-          flex-shrink: 0;
-        }
-        
+        .profile-social-link:hover { color: var(--accent); }
+
+        .profile-actions { display: flex; gap: 8px; flex-shrink: 0; }
         @media (max-width: 640px) {
-          .profile-actions {
-            width: 100%;
-            justify-content: center;
-          }
-          .profile-actions .btn {
-            flex: 1;
-            max-width: 140px;
-            justify-content: center;
-          }
+          .profile-actions { width: 100%; justify-content: center; }
+          .profile-actions .btn { flex: 1; max-width: 140px; justify-content: center; }
         }
-        
         @media (max-width: 400px) {
-          .btn-text-desktop {
-            display: none;
-          }
-          .profile-actions .btn {
-            padding: 10px 14px;
-            max-width: none;
-            flex: 0;
-          }
+          .btn-text-desktop { display: none; }
+          .profile-actions .btn { padding: 10px 14px; max-width: none; flex: 0; }
         }
-        
-        /* ============================================
-           Profile Tabs
-           ============================================ */
+
         .profile-tabs {
           display: flex;
           gap: 8px;
           border-bottom: 1px solid var(--border-color);
           padding: 0 24px 4px;
           margin-bottom: 24px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
         }
-        
         .tab-btn {
           display: flex;
           align-items: center;
@@ -513,42 +415,28 @@ const ProfilePage = {
           font-weight: 500;
           cursor: pointer;
           transition: all 150ms;
+          white-space: nowrap;
         }
-        
-        .tab-btn:hover {
-          color: var(--text-secondary);
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active { background: var(--bg-hover); color: var(--text-primary); }
+        .tab-count { padding: 2px 8px; background: var(--bg-hover); border-radius: 10px; font-size: 12px; }
+        .tab-badge-alert {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          background: var(--accent);
+          color: white;
+          border-radius: 50%;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
         }
-        
-        .tab-btn.active {
-          background: var(--bg-hover);
-          color: var(--text-primary);
-        }
-        
-        .tab-count {
-          padding: 2px 8px;
-          background: var(--bg-hover);
-          border-radius: 10px;
-          font-size: 12px;
-        }
-        
-        /* ============================================
-           Profile Tab Content - FIXED bottom padding
-           ============================================ */
-        .profile-tab-content {
-          padding: 0 24px;
-          padding-bottom: 120px;
-        }
-        
-        @media (max-width: 1024px) {
-          .profile-tab-content {
-            padding: 0 16px;
-            padding-bottom: 140px;
-          }
-        }
-        
-        /* ============================================
-           Listing Status Styles
-           ============================================ */
+
+        .profile-tab-content { padding: 0 24px; padding-bottom: 120px; }
+        @media (max-width: 1024px) { .profile-tab-content { padding: 0 16px; padding-bottom: 140px; } }
+
         .listing-status-badge {
           position: absolute;
           bottom: 8px;
@@ -563,23 +451,9 @@ const ProfilePage = {
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
-        
-        .listing-status-badge.red {
-          background: rgba(239, 68, 68, 0.9);
-          color: white;
-        }
-        
-        .listing-status-badge.green {
-          background: rgba(34, 197, 94, 0.9);
-          color: white;
-        }
-        
-        .listing-status-badge.gold {
-          background: linear-gradient(135deg, #f59e0b, #d97706);
-          color: white;
-        }
-        
-        /* Card overlay states */
+        .listing-status-badge.red { background: rgba(239, 68, 68, 0.9); color: white; }
+        .listing-status-badge.green { background: rgba(34, 197, 94, 0.9); color: white; }
+        .listing-status-badge.gold { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
         .release-card.not-listed .release-card-cover::after {
           content: '';
           position: absolute;
@@ -588,7 +462,6 @@ const ProfilePage = {
           border-radius: inherit;
           pointer-events: none;
         }
-        
         .release-card.sold-out .release-card-cover::after {
           content: '';
           position: absolute;
@@ -597,8 +470,6 @@ const ProfilePage = {
           border-radius: inherit;
           pointer-events: none;
         }
-        
-        /* Listing overlay for "List Now" button */
         .listing-overlay {
           position: absolute;
           inset: 0;
@@ -610,11 +481,7 @@ const ProfilePage = {
           opacity: 0;
           transition: opacity 200ms;
         }
-        
-        .release-card.not-listed:hover .listing-overlay {
-          opacity: 1;
-        }
-        
+        .release-card.not-listed:hover .listing-overlay { opacity: 1; }
         .list-now-btn {
           display: flex;
           align-items: center;
@@ -629,34 +496,11 @@ const ProfilePage = {
           cursor: pointer;
           transition: transform 150ms, background 150ms;
         }
-        
-        .list-now-btn:hover {
-          background: var(--accent-hover);
-          transform: scale(1.05);
-        }
-        
-        /* Listing card action buttons */
-        .listing-card-actions {
-          display: flex;
-          gap: 8px;
-          margin-top: 8px;
-        }
-        
-        .listing-card-actions .btn {
-          flex: 1;
-          justify-content: center;
-        }
-        
-        .btn-danger {
-          background: rgba(239, 68, 68, 0.1);
-          color: var(--error);
-          border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-        
-        .btn-danger:hover {
-          background: rgba(239, 68, 68, 0.2);
-        }
-        
+        .list-now-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+        .listing-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .listing-card-actions .btn { flex: 1; justify-content: center; }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
         .listing-price-badge {
           position: absolute;
           top: 8px;
@@ -668,414 +512,162 @@ const ProfilePage = {
           font-size: 12px;
           font-weight: 600;
         }
-        
-        /* ============================================
-           Collection Filter Bar (NEW)
-           ============================================ */
+
         .collection-filter-bar {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 20px;
-          padding: 4px;
+          display: flex; gap: 8px; margin-bottom: 20px; padding: 4px;
           background: var(--bg-hover, rgba(255, 255, 255, 0.04));
-          border-radius: var(--radius-lg, 12px);
-          width: fit-content;
+          border-radius: var(--radius-lg, 12px); width: fit-content;
         }
-        
         .collection-filter-btn {
-          padding: 8px 18px;
-          border: none;
-          border-radius: var(--radius, 8px);
-          background: transparent;
-          color: var(--text-muted, rgba(255, 255, 255, 0.5));
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
+          padding: 8px 18px; border: none; border-radius: var(--radius, 8px);
+          background: transparent; color: var(--text-muted, rgba(255, 255, 255, 0.5));
+          font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
         }
-        
-        .collection-filter-btn:hover {
-          color: var(--text-secondary, rgba(255, 255, 255, 0.8));
-          background: rgba(255, 255, 255, 0.04);
-        }
-        
-        .collection-filter-btn.active {
-          color: var(--text-primary, #fff);
-          background: rgba(255, 255, 255, 0.1);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-        
-        /* Multi-copy badge on card cover (NEW) */
+        .collection-filter-btn:hover { color: var(--text-secondary, rgba(255, 255, 255, 0.8)); background: rgba(255, 255, 255, 0.04); }
+        .collection-filter-btn.active { color: var(--text-primary, #fff); background: rgba(255, 255, 255, 0.1); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); }
         .collection-multi-badge {
-          position: absolute;
-          bottom: 8px;
-          left: 8px;
-          right: 8px;
-          padding: 6px 10px;
-          background: rgba(0, 0, 0, 0.75);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border-radius: 8px;
-          color: #00ff88;
-          font-size: 11px;
-          font-weight: 600;
-          text-align: center;
-          cursor: pointer;
-          transition: background 0.2s;
-          z-index: 2;
+          position: absolute; bottom: 8px; left: 8px; right: 8px; padding: 6px 10px;
+          background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+          border-radius: 8px; color: #00ff88; font-size: 11px; font-weight: 600;
+          text-align: center; cursor: pointer; transition: background 0.2s; z-index: 2;
         }
-        
-        .collection-multi-badge:hover {
-          background: rgba(0, 0, 0, 0.88);
-        }
-        
-        /* Artist count badge on artist cards (NEW) */
+        .collection-multi-badge:hover { background: rgba(0, 0, 0, 0.88); }
         .collection-artist-count {
-          position: absolute;
-          bottom: 8px;
-          left: 8px;
-          padding: 4px 10px;
-          background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(8px);
-          border-radius: 6px;
-          color: rgba(255, 255, 255, 0.8);
-          font-size: 11px;
-          font-weight: 600;
+          position: absolute; bottom: 8px; left: 8px; padding: 4px 10px;
+          background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); border-radius: 6px;
+          color: rgba(255, 255, 255, 0.8); font-size: 11px; font-weight: 600;
         }
-        
-        .collection-artist-card {
-          cursor: pointer;
-        }
-        
-        /* ⋯ button on single-copy cards (NEW) */
-        .nft-actions-btn {
-          padding: 4px 10px !important;
-          font-size: 16px !important;
-          min-width: unset !important;
-          letter-spacing: 2px;
-        }
-        /* External NFT badge (blue) */
-        .collected-nft-badge.external {
-          background: rgba(59, 130, 246, 0.85);
-        }
-        
-        /* ============================================
-           Copies & Artist Songs Popup (NEW)
-           ============================================ */
+        .collection-artist-card { cursor: pointer; }
+        .nft-actions-btn { padding: 4px 10px !important; font-size: 16px !important; min-width: unset !important; letter-spacing: 2px; }
+        .collected-nft-badge.external { background: rgba(59, 130, 246, 0.85); }
+
         .copies-popup-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
+          position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center; z-index: 9999;
           animation: copiesFadeIn 0.15s ease;
         }
-        
-        @keyframes copiesFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
+        @keyframes copiesFadeIn { from { opacity: 0; } to { opacity: 1; } }
         .copies-popup {
           background: var(--bg-primary, #16162a);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
           border-radius: var(--radius-xl, 16px);
-          width: 90%;
-          max-width: 400px;
-          max-height: 80vh;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
+          width: 90%; max-width: 400px; max-height: 80vh;
+          overflow: hidden; display: flex; flex-direction: column;
           animation: copiesSlideUp 0.2s ease;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
-        
-        @keyframes copiesSlideUp {
-          from { transform: translateY(12px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        
-        .copies-popup-header {
-          padding: 18px 20px 14px;
-          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
-          position: relative;
-        }
-        
-        .copies-popup-title {
-          font-size: 16px;
-          font-weight: 700;
-          color: var(--text-primary, #fff);
-          padding-right: 30px;
-        }
-        
-        .copies-popup-subtitle {
-          font-size: 13px;
-          color: var(--text-muted, rgba(255, 255, 255, 0.4));
-          margin-top: 2px;
-        }
-        
+        @keyframes copiesSlideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .copies-popup-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06)); position: relative; }
+        .copies-popup-title { font-size: 16px; font-weight: 700; color: var(--text-primary, #fff); padding-right: 30px; }
+        .copies-popup-subtitle { font-size: 13px; color: var(--text-muted, rgba(255, 255, 255, 0.4)); margin-top: 2px; }
         .copies-popup-close {
-          position: absolute;
-          top: 16px;
-          right: 16px;
-          width: 28px;
-          height: 28px;
-          border: none;
-          border-radius: 50%;
-          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-          color: var(--text-muted, rgba(255, 255, 255, 0.5));
-          font-size: 14px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s;
+          position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
+          border: none; border-radius: 50%; background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+          color: var(--text-muted, rgba(255, 255, 255, 0.5)); font-size: 14px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; transition: all 0.2s;
         }
-        
-        .copies-popup-close:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--text-primary, #fff);
-        }
-        
-        .copies-popup-list {
-          overflow-y: auto;
-          flex: 1;
-        }
-        
+        .copies-popup-close:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary, #fff); }
+        .copies-popup-list { overflow-y: auto; flex: 1; }
         .copies-popup-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-          transition: background 0.15s;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); transition: background 0.15s;
         }
-        
-        .copies-popup-row:hover {
-          background: rgba(255, 255, 255, 0.03);
-        }
-        
-        .copies-popup-row:last-child {
-          border-bottom: none;
-        }
-        
-        .copies-popup-row-info {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        
-        .copies-popup-row-label {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary, #fff);
-        }
-        
-        .copies-popup-row-edition {
-          font-size: 12px;
-          color: var(--text-muted, rgba(255, 255, 255, 0.35));
-        }
-        
+        .copies-popup-row:hover { background: rgba(255, 255, 255, 0.03); }
+        .copies-popup-row:last-child { border-bottom: none; }
+        .copies-popup-row-info { display: flex; align-items: center; gap: 12px; }
+        .copies-popup-row-label { font-size: 14px; font-weight: 600; color: var(--text-primary, #fff); }
+        .copies-popup-row-edition { font-size: 12px; color: var(--text-muted, rgba(255, 255, 255, 0.35)); }
         .copies-popup-row-actions {
-          width: 32px;
-          height: 32px;
-          border: none;
-          border-radius: 8px;
-          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-          color: var(--text-muted, rgba(255, 255, 255, 0.6));
-          font-size: 16px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.15s;
+          width: 32px; height: 32px; border: none; border-radius: 8px;
+          background: var(--bg-hover, rgba(255, 255, 255, 0.06)); color: var(--text-muted, rgba(255, 255, 255, 0.6));
+          font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
         }
-        
-        .copies-popup-row-actions:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--text-primary, #fff);
-        }
-        
-        /* Artist songs playlist rows (NEW) */
+        .copies-popup-row-actions:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary, #fff); }
         .artist-song-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-          transition: background 0.15s;
-          cursor: pointer;
+          display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04); transition: background 0.15s; cursor: pointer;
         }
-        
-        .artist-song-row:hover {
-          background: rgba(255, 255, 255, 0.03);
-        }
-        
-        .artist-song-row:last-child {
-          border-bottom: none;
-        }
-        
-        .artist-song-row-cover {
-          width: 40px;
-          height: 40px;
-          border-radius: 6px;
-          object-fit: cover;
-          flex-shrink: 0;
-        }
-        
-        .artist-song-row-info {
-          flex: 1;
-          min-width: 0;
-        }
-        
-        .artist-song-row-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary, #fff);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        
-        .artist-song-row-copies {
-          font-size: 12px;
-          color: var(--text-muted, rgba(255, 255, 255, 0.35));
-          margin-top: 1px;
-        }
-        
+        .artist-song-row:hover { background: rgba(255, 255, 255, 0.03); }
+        .artist-song-row:last-child { border-bottom: none; }
+        .artist-song-row-cover { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+        .artist-song-row-info { flex: 1; min-width: 0; }
+        .artist-song-row-title { font-size: 14px; font-weight: 600; color: var(--text-primary, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .artist-song-row-copies { font-size: 12px; color: var(--text-muted, rgba(255, 255, 255, 0.35)); margin-top: 1px; }
         .artist-song-row-expand {
-          flex-shrink: 0;
-          padding: 6px 12px;
-          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-          border-radius: 8px;
-          background: transparent;
-          color: var(--text-muted, rgba(255, 255, 255, 0.6));
-          font-size: 12px;
-          cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
+          flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: 8px; background: transparent; color: var(--text-muted, rgba(255, 255, 255, 0.6));
+          font-size: 12px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
         }
-        
-        .artist-song-row-expand:hover {
-          border-color: rgba(255, 255, 255, 0.2);
-          color: var(--text-primary, #fff);
-        }
-        
-        /* ============================================
-           Actions Dropdown (⋯ → sell / send) (NEW)
-           ============================================ */
+        .artist-song-row-expand:hover { border-color: rgba(255, 255, 255, 0.2); color: var(--text-primary, #fff); }
         .collection-actions-dropdown {
-          position: fixed;
-          min-width: 200px;
-          background: var(--bg-primary, #1a1a2e);
+          position: fixed; min-width: 200px; background: var(--bg-primary, #1a1a2e);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-          border-radius: 12px;
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-          overflow: hidden;
-          z-index: 10001;
-          animation: copiesFadeIn 0.12s ease;
+          border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+          overflow: hidden; z-index: 10001; animation: copiesFadeIn 0.12s ease;
         }
-        
         .collection-actions-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          width: 100%;
-          padding: 12px 16px;
-          border: none;
-          background: transparent;
+          display: flex; align-items: center; gap: 10px; width: 100%;
+          padding: 12px 16px; border: none; background: transparent;
           color: var(--text-secondary, rgba(255, 255, 255, 0.85));
-          font-size: 14px;
-          cursor: pointer;
-          transition: background 0.15s;
-          text-align: left;
+          font-size: 14px; cursor: pointer; transition: background 0.15s; text-align: left;
         }
-        
-        .collection-actions-item:hover {
-          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-        }
-        
-        .collection-actions-item:first-child {
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        }
-        
-        .collection-actions-item svg {
-          flex-shrink: 0;
-          opacity: 0.6;
-        }
-        
-        /* ============================================
-           Send NFT Popup (NEW)
-           ============================================ */
-        .send-label {
-          display: block;
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--text-muted, rgba(255, 255, 255, 0.6));
-          margin-bottom: 8px;
-        }
-        
+        .collection-actions-item:hover { background: var(--bg-hover, rgba(255, 255, 255, 0.06)); }
+        .collection-actions-item:first-child { border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+        .collection-actions-item svg { flex-shrink: 0; opacity: 0.6; }
+        .send-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted, rgba(255, 255, 255, 0.6)); margin-bottom: 8px; }
         .send-input {
-          width: 100%;
-          padding: 12px 14px;
-          background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+          width: 100%; padding: 12px 14px; background: var(--bg-hover, rgba(255, 255, 255, 0.06));
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-          border-radius: var(--radius, 10px);
-          color: var(--text-primary, #fff);
-          font-size: 15px;
-          outline: none;
-          transition: border-color 0.2s;
-          box-sizing: border-box;
+          border-radius: var(--radius, 10px); color: var(--text-primary, #fff);
+          font-size: 15px; outline: none; transition: border-color 0.2s; box-sizing: border-box;
         }
-        
-        .send-input:focus {
-          border-color: var(--accent, rgba(255, 255, 255, 0.25));
-        }
-        
-        .send-input::placeholder {
-          color: var(--text-muted, rgba(255, 255, 255, 0.25));
-        }
-        
+        .send-input:focus { border-color: var(--accent, rgba(255, 255, 255, 0.25)); }
+        .send-input::placeholder { color: var(--text-muted, rgba(255, 255, 255, 0.25)); }
         .send-warning {
-          margin-top: 12px;
-          padding: 10px 12px;
-          background: rgba(255, 200, 0, 0.06);
-          border: 1px solid rgba(255, 200, 0, 0.15);
-          border-radius: 8px;
-          color: rgba(255, 200, 0, 0.8);
-          font-size: 12px;
-          line-height: 1.4;
+          margin-top: 12px; padding: 10px 12px;
+          background: rgba(255, 200, 0, 0.06); border: 1px solid rgba(255, 200, 0, 0.15);
+          border-radius: 8px; color: rgba(255, 200, 0, 0.8); font-size: 12px; line-height: 1.4;
         }
-
-        /* ============================================
-           Album Badge on Collection Cards
-           ============================================ */
         .collection-album-badge {
-          position: absolute;
-          bottom: 8px;
-          left: 8px;
-          right: 8px;
-          padding: 6px 10px;
-          background: rgba(0, 0, 0, 0.75);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border-radius: 8px;
-          font-size: 11px;
-          font-weight: 600;
-          text-align: center;
-          z-index: 2;
+          position: absolute; bottom: 8px; left: 8px; right: 8px; padding: 6px 10px;
+          background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+          border-radius: 8px; font-size: 11px; font-weight: 600; text-align: center; z-index: 2;
         }
         .collection-album-badge.complete { color: #00ff88; }
         .collection-album-badge.partial { color: #f59e0b; }
       </style>
     `;
-    
-    UI.renderPage(html);
-    this.bindEvents();
   },
+
+  // ============================================
+  // UNLOCKABLE TAB (NEW)
+  // ============================================
+  
+  renderUnlockableTab() {
+    const artistAddress = AppState.user.address;
+    const viewerAddress = AppState.user.address;
+    
+    setTimeout(() => {
+      const container = document.getElementById('profile-tab-content');
+      if (container && typeof UnlockableTab !== 'undefined') {
+        UnlockableTab.render(artistAddress, viewerAddress, container);
+      } else if (container) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>Unlockable Content</h3>
+            <p>This feature is loading. Please refresh the page.</p>
+          </div>
+        `;
+      }
+    }, 0);
+    
+    return `
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+      </div>
+    `;
+  },
+  
   // ============================================
   // POSTED TAB (unchanged)
   // ============================================
@@ -1095,7 +687,6 @@ const ProfilePage = {
         </div>
       `;
     }
-   // Count unlisted releases - now uses isForSale() helper
     const unlistedCount = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
     
     return `
@@ -1119,33 +710,14 @@ const ProfilePage = {
         </div>
         <style>
           .list-all-banner {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
             padding: 16px 20px;
             background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: var(--radius-lg);
-            margin-bottom: 24px;
+            border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); margin-bottom: 24px;
           }
-          .list-all-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: var(--text-secondary);
-            font-size: 14px;
-          }
-          .list-all-info svg {
-            color: var(--error);
-            flex-shrink: 0;
-          }
-          @media (max-width: 500px) {
-            .list-all-banner {
-              flex-direction: column;
-              text-align: center;
-            }
-          }
+          .list-all-info { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; }
+          .list-all-info svg { color: var(--error); flex-shrink: 0; }
+          @media (max-width: 500px) { .list-all-banner { flex-direction: column; text-align: center; } }
         </style>
       ` : ''}
       <div class="release-grid">
@@ -1163,9 +735,7 @@ const ProfilePage = {
   // ============================================
   
   renderCollectedTab() {
-    // Show loading initially
     setTimeout(() => this.loadCollectedNFTs(), 0);
-    
     return `
       <div id="collected-content">
         <div class="loading-spinner">
@@ -1178,7 +748,6 @@ const ProfilePage = {
   async fetchCollectedCount() {
     const countEl = document.getElementById('collected-count');
     if (!countEl || !AppState.user?.address) return;
-    
     try {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
@@ -1193,7 +762,6 @@ const ProfilePage = {
   async fetchForSaleCount() {
     const countEl = document.getElementById('forsale-count');
     if (!countEl || !AppState.user?.address) return;
-    
     try {
       const response = await fetch(`/api/listings?seller=${AppState.user.address}`);
       const data = await response.json();
@@ -1202,7 +770,7 @@ const ProfilePage = {
       countEl.textContent = '?';
     }
   },
-  
+
   async loadCollectedNFTs() {
     const container = document.getElementById('collected-content');
     const countEl = document.getElementById('collected-count');
@@ -1212,7 +780,6 @@ const ProfilePage = {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
       
-      // Merge external music NFTs into collection
       const externalNfts = (AppState.externalNfts || []).map(ext => ({
         nftTokenId: ext.nftTokenId,
         trackId: ext.id,
@@ -1235,8 +802,6 @@ const ProfilePage = {
       }));
 
       const allNfts = [...(data.nfts || []), ...externalNfts];
-      
-      // Update the counter
       if (countEl) countEl.textContent = allNfts.length;
       
       if (allNfts.length === 0) {
@@ -1253,17 +818,15 @@ const ProfilePage = {
         return;
       }
       
-      // Process and deduplicate
       const grouped = this.processCollectionData(allNfts);
       const artists = this.getUniqueArtists(grouped);
       
-      // Store for filter switching
       this._collectionGrouped = grouped;
       this._collectionArtists = artists;
       this._collectionRawNfts = allNfts;
       this._activeCollectionFilter = 'all';
       
-     container.innerHTML = `
+      container.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
           <div class="collection-filter-bar" style="margin-bottom:0;">
             <button class="collection-filter-btn active" data-filter="all">All</button>
@@ -1278,7 +841,6 @@ const ProfilePage = {
         <div class="collected-grid" id="collectionGrid"></div>
       `;
       
-      // Bind filter buttons
       container.querySelectorAll('.collection-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           container.querySelectorAll('.collection-filter-btn').forEach(b => b.classList.remove('active'));
@@ -1286,26 +848,17 @@ const ProfilePage = {
           this._activeCollectionFilter = btn.dataset.filter;
           const grid = document.getElementById('collectionGrid');
           if (!grid) return;
-          
           switch (btn.dataset.filter) {
-            case 'all':
-              this.renderAllCards(this._collectionGrouped, grid);
-              break;
-            case 'by-artist':
-              this.renderArtistCards(this._collectionArtists, grid);
-              break;
-            case 'by-songs':
-              this.renderSongCards(this._collectionGrouped, grid);
-              break;
+            case 'all': this.renderAllCards(this._collectionGrouped, grid); break;
+            case 'by-artist': this.renderArtistCards(this._collectionArtists, grid); break;
+            case 'by-songs': this.renderSongCards(this._collectionGrouped, grid); break;
           }
         });
       });
       
-      // Play Collection — unique tracks only, no duplicate weighting
       document.getElementById('play-collection-btn')?.addEventListener('click', () => {
         const seen = new Set();
         const queue = [];
-        
         for (const item of this._collectionGrouped) {
           if (item.isAlbum && item.tracksArray) {
             for (const track of item.tracksArray) {
@@ -1314,12 +867,8 @@ const ProfilePage = {
               seen.add(key);
               if (track.audioUrl) {
                 queue.push({
-                  id: track.trackId,
-                  trackId: track.trackId,
-                  title: track.trackTitle,
-                  artist: item.artist,
-                  cover: this.getImageUrl(item.coverUrl),
-                  coverUrl: this.getImageUrl(item.coverUrl),
+                  id: track.trackId, trackId: track.trackId, title: track.trackTitle, artist: item.artist,
+                  cover: this.getImageUrl(item.coverUrl), coverUrl: this.getImageUrl(item.coverUrl),
                   audioUrl: track.audioUrl,
                   ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(track.audioUrl) : null,
                   releaseId: item.releaseId,
@@ -1332,12 +881,9 @@ const ProfilePage = {
             seen.add(key);
             if (item.audioUrl) {
               queue.push({
-                id: item.trackId || item.releaseId,
-                trackId: item.trackId || item.releaseId,
-                title: item.releaseTitle,
-                artist: item.artist,
-                cover: this.getImageUrl(item.coverUrl),
-                coverUrl: this.getImageUrl(item.coverUrl),
+                id: item.trackId || item.releaseId, trackId: item.trackId || item.releaseId,
+                title: item.releaseTitle, artist: item.artist,
+                cover: this.getImageUrl(item.coverUrl), coverUrl: this.getImageUrl(item.coverUrl),
                 audioUrl: item.audioUrl,
                 ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(item.audioUrl) : null,
                 releaseId: item.releaseId,
@@ -1346,13 +892,9 @@ const ProfilePage = {
             }
           }
         }
-        
-        if (queue.length > 0) {
-          Player.playTrack(queue[0], queue, 0);
-        }
+        if (queue.length > 0) Player.playTrack(queue[0], queue, 0);
       });
       
-      // Initial render
       this.renderAllCards(grouped, document.getElementById('collectionGrid'));
       
     } catch (error) {
@@ -1371,8 +913,9 @@ const ProfilePage = {
       `;
     }
   },
+
   // ============================================
-  // COLLECTION DATA PROCESSING (NEW)
+  // COLLECTION DATA PROCESSING
   // ============================================
   
   processCollectionData(nfts) {
@@ -1380,7 +923,7 @@ const ProfilePage = {
     
     nfts.forEach(nft => {
       const releaseId = nft.releaseId || nft.trackId || nft.nftTokenId;
-     const isAlbumOrEP = (nft.totalTracks || 0) > 1;
+      const isAlbumOrEP = (nft.totalTracks || 0) > 1;
       
       if (!releaseGroups[releaseId]) {
         releaseGroups[releaseId] = {
@@ -1448,26 +991,22 @@ const ProfilePage = {
       return group;
     });
   },
-getUniqueArtists(grouped) {
+  
+  getUniqueArtists(grouped) {
     const artistMap = {};
     grouped.forEach(item => {
       const key = item.artistAddress || item.artist;
       if (!artistMap[key]) {
-        artistMap[key] = {
-          name: item.artist,
-          address: item.artistAddress,
-          coverUrl: item.coverUrl,
-          songCount: 0,
-          songs: []
-        };
+        artistMap[key] = { name: item.artist, address: item.artistAddress, coverUrl: item.coverUrl, songCount: 0, songs: [] };
       }
-    artistMap[key].songCount += item.isAlbum ? (item.ownedTrackCount || 1) : 1;
+      artistMap[key].songCount += item.isAlbum ? (item.ownedTrackCount || 1) : 1;
       artistMap[key].songs.push(item);
     });
     return Object.values(artistMap);
   },
+
   // ============================================
-  // COLLECTION CARD RENDERERS (NEW)
+  // COLLECTION CARD RENDERERS
   // ============================================
   
   renderAllCards(grouped, grid) {
@@ -1586,7 +1125,7 @@ getUniqueArtists(grouped) {
         </div>
       `;
     }).join('');
-    // Click artist → show their songs popup
+    
     grid.querySelectorAll('.collection-artist-card').forEach(card => {
       card.addEventListener('click', () => {
         const idx = parseInt(card.dataset.artistIdx);
@@ -1595,8 +1134,8 @@ getUniqueArtists(grouped) {
       });
     });
   },
+
   bindCollectionCardEvents(grouped, grid) {
-    // Album card click → album popup
     grid.querySelectorAll('.collection-album-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
@@ -1606,7 +1145,6 @@ getUniqueArtists(grouped) {
       });
     });
     
-    // Play buttons (singles only)
     grid.querySelectorAll('.nft-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1614,16 +1152,12 @@ getUniqueArtists(grouped) {
         const item = grouped[idx];
         if (item && item.audioUrl) {
           Player.playTrack({
-            id: item.trackId || item.releaseId,
-            trackId: item.trackId || item.releaseId,
-            title: item.releaseTitle,
-            artist: item.artist,
-            cover: this.getImageUrl(item.coverUrl),
-            coverUrl: this.getImageUrl(item.coverUrl),
+            id: item.trackId || item.releaseId, trackId: item.trackId || item.releaseId,
+            title: item.releaseTitle, artist: item.artist,
+            cover: this.getImageUrl(item.coverUrl), coverUrl: this.getImageUrl(item.coverUrl),
             audioUrl: item.audioUrl,
             ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(item.audioUrl) : null,
-            releaseId: item.releaseId,
-            isExternal: item.copies[0]?._raw?.isExternal || false,
+            releaseId: item.releaseId, isExternal: item.copies[0]?._raw?.isExternal || false,
           });
         }
       });
@@ -1659,6 +1193,7 @@ getUniqueArtists(grouped) {
       });
     });
   },
+  
   showAlbumPopup(item) {
     document.querySelector('.copies-popup-overlay')?.remove();
     
@@ -1717,7 +1252,6 @@ getUniqueArtists(grouped) {
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     
-    // Play track on row click
     overlay.querySelectorAll('.album-track-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('.multi-click')) return;
@@ -1736,7 +1270,6 @@ getUniqueArtists(grouped) {
       });
     });
     
-    // Multi-copy click
     overlay.querySelectorAll('.multi-click').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1749,7 +1282,6 @@ getUniqueArtists(grouped) {
       });
     });
     
-    // Sell buttons
     overlay.querySelectorAll('.album-sell-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1757,7 +1289,6 @@ getUniqueArtists(grouped) {
         const track = item.tracksArray[trackIdx];
         if (!track) return;
         if (track.copies.length > 1) {
-          // TODO: edition picker
           alert('Multiple copies — pick which edition to sell (coming soon)');
         } else {
           Modals.showListNFTForSale(track.copies[0]._raw);
@@ -1765,7 +1296,6 @@ getUniqueArtists(grouped) {
       });
     });
     
-    // Send buttons
     overlay.querySelectorAll('.album-send-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1780,12 +1310,12 @@ getUniqueArtists(grouped) {
       });
     });
   },
+
   // ============================================
-  // COLLECTION POPUPS (NEW)
+  // COLLECTION POPUPS
   // ============================================
   
   showCopiesPopup(item) {
-    // Remove existing
     document.querySelector('.copies-popup-overlay')?.remove();
     
     const overlay = document.createElement('div');
@@ -1815,14 +1345,9 @@ getUniqueArtists(grouped) {
     `;
     
     document.body.appendChild(overlay);
-    
-    // Close handlers
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     
-    // Action buttons per copy
     overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1849,8 +1374,7 @@ getUniqueArtists(grouped) {
             const coverUrl = this.getImageUrl(song.coverUrl);
             return `
               <div class="artist-song-row" data-song-idx="${idx}">
-                <img class="artist-song-row-cover" src="${coverUrl}" alt="" 
-                     onerror="this.src='/placeholder.png'" />
+                <img class="artist-song-row-cover" src="${coverUrl}" alt="" onerror="this.src='/placeholder.png'" />
                 <div class="artist-song-row-info">
                   <div class="artist-song-row-title">${song.releaseTitle || song.title}</div>
                   <div class="artist-song-row-copies">
@@ -1862,14 +1386,10 @@ getUniqueArtists(grouped) {
                     }
                   </div>
                 </div>
-              ${song.isAlbum ? `
-                  <button class="artist-song-row-expand" data-song-idx="${idx}">
-                    ${song.ownedTrackCount} tracks ▾
-                  </button>
+                ${song.isAlbum ? `
+                  <button class="artist-song-row-expand" data-song-idx="${idx}">${song.ownedTrackCount} tracks ▾</button>
                 ` : song.copies.length > 1 ? `
-                  <button class="artist-song-row-expand" data-song-idx="${idx}">
-                    ${song.copies.length} copies ▾
-                  </button>
+                  <button class="artist-song-row-expand" data-song-idx="${idx}">${song.copies.length} copies ▾</button>
                 ` : `
                   <button class="copies-popup-row-actions" data-song-idx="${idx}" data-copy-idx="0">⋯</button>
                 `}
@@ -1881,13 +1401,9 @@ getUniqueArtists(grouped) {
     `;
     
     document.body.appendChild(overlay);
-    
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     
-    // Expand multi-copy songs → copies popup
     overlay.querySelectorAll('.artist-song-row-expand').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1895,16 +1411,12 @@ getUniqueArtists(grouped) {
         const song = artist.songs[songIdx];
         if (song) {
           overlay.remove();
-          if (song.isAlbum) {
-            this.showAlbumPopup(song);
-          } else {
-            this.showCopiesPopup(song);
-          }
+          if (song.isAlbum) this.showAlbumPopup(song);
+          else this.showCopiesPopup(song);
         }
       });
     });
     
-    // Single-copy actions
     overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1917,36 +1429,30 @@ getUniqueArtists(grouped) {
       });
     });
     
-    // Play on row click (not on buttons)
     overlay.querySelectorAll('.artist-song-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
         const songIdx = parseInt(row.dataset.songIdx);
         const song = artist.songs[songIdx];
         if (song && song.audioUrl) {
-         Player.playTrack({
-            id: song.trackId || song.releaseId,
-            trackId: song.trackId || song.releaseId,
-           title: song.releaseTitle || song.title,
-            artist: song.artist,
-            cover: this.getImageUrl(song.coverUrl),
-            coverUrl: this.getImageUrl(song.coverUrl),
+          Player.playTrack({
+            id: song.trackId || song.releaseId, trackId: song.trackId || song.releaseId,
+            title: song.releaseTitle || song.title, artist: song.artist,
+            cover: this.getImageUrl(song.coverUrl), coverUrl: this.getImageUrl(song.coverUrl),
             audioUrl: song.audioUrl,
             ipfsHash: typeof IpfsHelper !== 'undefined' ? IpfsHelper.extractCid(song.audioUrl) : null,
-            releaseId: song.releaseId,
-            isExternal: song.copies[0]?._raw?.isExternal || false,
+            releaseId: song.releaseId, isExternal: song.copies[0]?._raw?.isExternal || false,
           });
         }
       });
     });
   },
-  
+
   // ============================================
-  // ACTIONS DROPDOWN & SEND NFT (NEW)
+  // ACTIONS DROPDOWN & SEND NFT
   // ============================================
   
   showNftActionsDropdown(anchorEl, item, copy) {
-    // Remove existing
     document.querySelector('.collection-actions-dropdown')?.remove();
     
     const dropdown = document.createElement('div');
@@ -1969,7 +1475,6 @@ getUniqueArtists(grouped) {
       </button>
     `;
     
-    // Position near anchor
     const rect = anchorEl.getBoundingClientRect();
     dropdown.style.position = 'fixed';
     dropdown.style.top = `${rect.bottom + 4}px`;
@@ -1977,7 +1482,6 @@ getUniqueArtists(grouped) {
     
     document.body.appendChild(dropdown);
     
-    // Sell → reuse existing Modals.showListNFTForSale
     const sellBtn = dropdown.querySelector('[data-action="sell"]');
     if (sellBtn) sellBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1985,14 +1489,12 @@ getUniqueArtists(grouped) {
       Modals.showListNFTForSale(copy._raw);
     });
     
-    // Send
     dropdown.querySelector('[data-action="send"]').addEventListener('click', (e) => {
       e.stopPropagation();
       dropdown.remove();
       this.handleSendNft(item, copy);
     });
     
-    // Close on outside click
     setTimeout(() => {
       const closeHandler = (e) => {
         if (!dropdown.contains(e.target)) {
@@ -2005,7 +1507,6 @@ getUniqueArtists(grouped) {
   },
   
   handleSendNft(item, copy) {
-    // Remove any existing send overlay
     document.querySelector('.copies-popup-overlay.send-overlay')?.remove();
     
     const overlay = document.createElement('div');
@@ -2021,26 +1522,16 @@ getUniqueArtists(grouped) {
         </div>
         <div style="padding:20px;">
           <label class="send-label">Recipient's XRP address</label>
-          <input type="text" class="send-input" id="sendAddressInput" 
-                 placeholder="rXXXXXXXXX..." autocomplete="off" />
-          <div class="send-warning">
-            ⚠️ This will transfer the NFT permanently. Double-check the address.
-          </div>
-          <button class="btn btn-primary" id="sendSubmitBtn" style="width:100%;margin-top:16px;">
-            Send NFT
-          </button>
+          <input type="text" class="send-input" id="sendAddressInput" placeholder="rXXXXXXXXX..." autocomplete="off" />
+          <div class="send-warning">⚠️ This will transfer the NFT permanently. Double-check the address.</div>
+          <button class="btn btn-primary" id="sendSubmitBtn" style="width:100%;margin-top:16px;">Send NFT</button>
         </div>
       </div>
     `;
     
     document.body.appendChild(overlay);
-    
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-    
-    // Focus input
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     document.getElementById('sendAddressInput')?.focus();
     
     document.getElementById('sendSubmitBtn').addEventListener('click', async () => {
@@ -2050,7 +1541,6 @@ getUniqueArtists(grouped) {
         alert('Please enter a valid XRP address');
         return;
       }
-      
       if (recipient === AppState.user.address) {
         alert('You cannot send an NFT to yourself');
         return;
@@ -2061,17 +1551,10 @@ getUniqueArtists(grouped) {
       btn.disabled = true;
       
       try {
-        // Create a 0-XRP sell offer with a specific destination = direct transfer
-        const result = await XamanWallet.createSellOffer(
-          copy.nftTokenId,
-          0,           // price = 0 for transfer
-          recipient    // destination = specific recipient
-        );
-        
+        const result = await XamanWallet.createSellOffer(copy.nftTokenId, 0, recipient);
         if (result.success) {
           alert(`NFT sent to ${Helpers.truncateAddress(recipient)}!`);
           overlay.remove();
-          // Refresh collection
           this.loadCollectedNFTs();
         } else {
           throw new Error(result.error || 'Transfer failed');
@@ -2084,20 +1567,16 @@ getUniqueArtists(grouped) {
       }
     });
   },
-  
+
   // ============================================
-  // FOR SALE TAB (unchanged)
+  // FOR SALE TAB
   // ============================================
   
   renderForSaleTab() {
-    // Show loading initially
     setTimeout(() => this.loadForSaleNFTs(), 0);
-    
     return `
       <div id="forsale-content">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-        </div>
+        <div class="loading-spinner"><div class="spinner"></div></div>
       </div>
     `;
   },
@@ -2110,8 +1589,6 @@ getUniqueArtists(grouped) {
     try {
       const response = await fetch(`/api/listings?seller=${AppState.user.address}`);
       const data = await response.json();
-      
-      // Update the counter
       if (countEl) countEl.textContent = data.listings?.length || 0;
       
       if (!data.listings || data.listings.length === 0) {
@@ -2134,7 +1611,6 @@ getUniqueArtists(grouped) {
         </div>
       `;
       
-      // Bind cancel buttons
       container.querySelectorAll('.cancel-listing-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -2143,7 +1619,6 @@ getUniqueArtists(grouped) {
         });
       });
       
-      // Bind edit price buttons
       container.querySelectorAll('.edit-price-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -2171,8 +1646,6 @@ getUniqueArtists(grouped) {
   
   renderListingCard(listing) {
     const coverUrl = this.getImageUrl(listing.cover_url);
-    
-    // Store listing data for buttons
     const listingData = JSON.stringify({
       id: listing.id,
       nftTokenId: listing.nft_token_id,
@@ -2220,7 +1693,6 @@ getUniqueArtists(grouped) {
   async cancelListing(listing) {
     if (!listing.offerIndex) {
       alert('Cannot cancel: No offer index found. The listing may already be cancelled on XRPL.');
-      // Still try to remove from database
       try {
         await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
         this.loadForSaleNFTs();
@@ -2230,26 +1702,15 @@ getUniqueArtists(grouped) {
       return;
     }
     
-    if (!confirm(`Cancel listing for "${listing.trackTitle || listing.releaseTitle}"?\n\nThis will require signing a transaction in Xaman.`)) {
-      return;
-    }
+    if (!confirm(`Cancel listing for "${listing.trackTitle || listing.releaseTitle}"?\n\nThis will require signing a transaction in Xaman.`)) return;
     
     try {
-      // Show loading state
       const btn = document.querySelector(`.cancel-listing-btn[data-listing*="${listing.id}"]`);
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;"></div> Cancelling...';
-      }
+      if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;"></div> Cancelling...'; }
       
-      // Cancel on XRPL first
       const result = await XamanWallet.cancelSellOffer(listing.offerIndex);
-      
       if (result.success) {
-        // Then remove from database
         await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
-        
-        // Refresh the listings
         this.loadForSaleNFTs();
         this.fetchForSaleCount();
       } else {
@@ -2258,17 +1719,10 @@ getUniqueArtists(grouped) {
     } catch (error) {
       console.error('Cancel listing error:', error);
       alert('Failed to cancel listing: ' + error.message);
-      // Restore button state
       const btn = document.querySelector(`.cancel-listing-btn[data-listing*="${listing.id}"]`);
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-          Cancel
-        `;
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Cancel`;
       }
     }
   },
@@ -2277,7 +1731,6 @@ getUniqueArtists(grouped) {
     const currentPrice = parseFloat(listing.price);
     const coverUrl = this.getImageUrl(listing.coverUrl);
     
-    // Create a simple modal for editing price
     const modalHtml = `
       <div class="modal-overlay" id="edit-price-modal" style="display:flex;">
         <div class="modal-container" style="max-width: 400px;">
@@ -2307,7 +1760,6 @@ getUniqueArtists(grouped) {
       </div>
     `;
     
-    // Add modal to page
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
     const modal = document.getElementById('edit-price-modal');
@@ -2316,41 +1768,25 @@ getUniqueArtists(grouped) {
     const confirmBtn = document.getElementById('confirm-edit-price');
     const priceInput = document.getElementById('new-price-input');
     
-    // Focus input
     priceInput.focus();
     priceInput.select();
     
-    // Close handlers
     const closeModal = () => modal.remove();
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     
-    // Confirm handler
     confirmBtn.addEventListener('click', async () => {
       const newPrice = parseFloat(priceInput.value);
-      
-      if (isNaN(newPrice) || newPrice <= 0) {
-        alert('Please enter a valid price');
-        return;
-      }
-      
-      if (newPrice === currentPrice) {
-        alert('New price is the same as current price');
-        return;
-      }
+      if (isNaN(newPrice) || newPrice <= 0) { alert('Please enter a valid price'); return; }
+      if (newPrice === currentPrice) { alert('New price is the same as current price'); return; }
       
       try {
         confirmBtn.disabled = true;
         confirmBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;display:inline-block;"></div> Updating...';
         
-        // Use the editListingPrice function from XamanWallet
         const result = await XamanWallet.editListingPrice(listing.nftTokenId, listing.offerIndex, newPrice);
-        
         if (result.success) {
-          // Update database with new offer index
           await fetch('/api/listings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2363,7 +1799,6 @@ getUniqueArtists(grouped) {
               trackId: listing.trackId
             })
           });
-          
           closeModal();
           this.loadForSaleNFTs();
         } else {
@@ -2377,42 +1812,36 @@ getUniqueArtists(grouped) {
       }
     });
   },
-  
+
   // ============================================
-  // RELEASE CARD (unchanged)
+  // RELEASE CARD
   // ============================================
   
-renderReleaseCard(release) {
+  renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
     const isOwner = AppState.user?.address === release.artistAddress;
     const coverUrl = this.getImageUrl(release.coverUrl);
+    const mintBadge = '';
     
-    // Mint provenance badge
-  const mintBadge = '';
-    
-    // Determine listing status - NOW RECOGNIZES LAZY MINT!
     let statusClass = '';
     let statusBadge = '';
     let statusOverlay = '';
     
     if (isOwner) {
       if (available === 0) {
-        // Sold out - gold
         statusClass = 'sold-out';
         statusBadge = `<span class="listing-status-badge gold">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           Sold Out
         </span>`;
       } else if (this.isForSale(release)) {
-        // Listed for sale (pre-minted OR lazy mint) - green
         statusClass = 'listed';
         statusBadge = `<span class="listing-status-badge green">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
           For Sale
         </span>`;
       } else {
-        // Not listed - red (needs action)
         statusClass = 'not-listed';
         statusBadge = `<span class="listing-status-badge red">List for Sale</span>`;
         statusOverlay = `
@@ -2453,8 +1882,9 @@ renderReleaseCard(release) {
       </div>
     `;
   },
+  
   // ============================================
-  // ERROR & EVENTS (unchanged)
+  // ERROR & EVENTS
   // ============================================
   
   renderError() {
@@ -2485,7 +1915,6 @@ renderReleaseCard(release) {
       Modals.showEditProfile();
     });
     
-    // Share profile button
     document.getElementById('share-profile-btn')?.addEventListener('click', () => {
       const profile = AppState.profile || {};
       ShareUtils.shareArtistProfile({
@@ -2496,30 +1925,23 @@ renderReleaseCard(release) {
       });
     });
     
-    // Fetch collected NFT count (even if on Posted tab)
     this.fetchCollectedCount();
     this.fetchForSaleCount();
     
-    // List All button - only show releases that are truly not for sale
     document.getElementById('list-all-btn')?.addEventListener('click', () => {
       const unlistedReleases = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0);
       Modals.showListAllForSale(unlistedReleases);
     });
     
-    // Release card click (open modal)
     document.querySelectorAll('.release-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        // Don't open modal if clicking "List Now" button
-        if (e.target.closest('.list-now-btn') || e.target.closest('.listing-overlay')) {
-          return;
-        }
+        if (e.target.closest('.list-now-btn') || e.target.closest('.listing-overlay')) return;
         const releaseId = card.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
         if (release) Modals.showRelease(release);
       });
     });
     
-    // List Now button click - open modal
     document.querySelectorAll('.list-now-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
