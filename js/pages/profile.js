@@ -2389,7 +2389,7 @@ renderReleaseCard(release) {
     const coverUrl = this.getImageUrl(release.coverUrl);
     
     // Mint provenance badge
-    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release) : '';
+  const mintBadge = '';
     
     // Determine listing status - NOW RECOGNIZES LAZY MINT!
     let statusClass = '';
