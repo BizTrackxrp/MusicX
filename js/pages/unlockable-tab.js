@@ -1,22 +1,18 @@
 /**
- * XRP Music — Unlockable Content Tab
- * 
- * Plugs into artist profile as a new tab.
- * 
+ * XRP Music — Unlockable Content Tab v2
+ *
+ * Full artist dashboard for NFT-gated content:
+ *   - Settings woven into each page (access rules per post, per reward)
+ *   - Create Reward page (multi-media, NFT picker, drafts, duration)
+ *   - Instagram-style post feed with multi-media carousel
+ *
  * VIEWS:
- *   1. Artist Setup (only artist sees) — configure private page + create rewards
- *   2. Private Page (NFT holders) — gated content feed with posts/comments
- *   3. Rewards (NFT holders) — claimable rewards list
- *   4. Locked Landing (non-holders) — teaser + what you need to unlock
- * 
- * TAB VISIBILITY:
- *   - Artist always sees the tab (with ! badge if not set up)
- *   - Others see the tab ONLY if the artist has set it up
- *   - Tab label: "Unlockable" with 🔓 or 🔑 icon
- * 
+ *   Owner:  Dashboard → Create Reward | Content Feed | Settings inline
+ *   Holder: Content feed + rewards list
+ *   Locked: Teaser landing page
+ *
  * INTEGRATION:
- *   In profile.js, add this tab to the tab bar and call:
- *     UnlockableTab.render(artistAddress, viewerAddress, containerEl)
+ *   UnlockableTab.render(artistAddress, viewerAddress, containerEl)
  */
 
 const UnlockableTab = {
@@ -30,6 +26,7 @@ const UnlockableTab = {
   container: null,
   rewardCount: 0,
   postCount: 0,
+  artistReleases: [],   // cached for NFT picker
 
   // ─── Main Entry ──────────────────────────────────────
 
@@ -39,1093 +36,1438 @@ const UnlockableTab = {
     this.container = containerEl;
     this.isOwner = viewerAddress && viewerAddress.toLowerCase() === artistAddress.toLowerCase();
 
-    containerEl.innerHTML = '<div class="unlockable-loading"><div class="spinner"></div> Loading...</div>';
+    containerEl.innerHTML = '<div class="ut-loading"><div class="spinner"></div> Loading...</div>';
 
     try {
-      // Fetch config
       const configResp = await fetch(`/api/unlockables?artist=${artistAddress}`);
       const configData = await configResp.json();
       this.config = configData.config;
       this.rewardCount = configData.rewardCount || 0;
       this.postCount = configData.postCount || 0;
 
-      // Fetch rewards for this artist
-      const rewardsResp = await fetch(`/api/rewards?artist=${artistAddress}`);
-      const rewardsData = await rewardsResp.json();
-      this.rewards = rewardsData.rewards || [];
-
-      // Check access
-      if (viewerAddress && !this.isOwner) {
-        const accessResp = await fetch(`/api/unlockables?artist=${artistAddress}&check=${viewerAddress}`);
-        const accessData = await accessResp.json();
-        this.hasAccess = accessData.hasAccess;
+      // Check access for non-owners
+      if (!this.isOwner && viewerAddress) {
+        this.hasAccess = await this.checkAccess(artistAddress, viewerAddress);
       } else if (this.isOwner) {
         this.hasAccess = true;
       }
 
-      this.renderContent();
+      // Fetch artist releases for NFT picker (owner only)
+      if (this.isOwner) {
+        try {
+          const relData = await API.getReleasesByArtist(artistAddress);
+          this.artistReleases = relData || [];
+        } catch (e) { this.artistReleases = []; }
+      }
+
+      if (this.isOwner) {
+        this.renderOwnerDashboard();
+      } else if (this.hasAccess) {
+        this.renderHolderView();
+      } else {
+        this.renderLockedView();
+      }
     } catch (error) {
       console.error('Unlockable tab error:', error);
-      containerEl.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Failed to load unlockable content</div>';
+      containerEl.innerHTML = '<div class="ut-error">Failed to load unlockable content</div>';
     }
   },
 
-  renderContent() {
-    if (this.isOwner) {
-      this.renderOwnerView();
-    } else if (this.hasAccess) {
-      this.renderHolderView();
-    } else {
-      this.renderLockedView();
+  async checkAccess(artistAddress, viewerAddress) {
+    if (typeof OwnershipHelper !== 'undefined') {
+      const nfts = OwnershipHelper.getNFTsByArtist(artistAddress);
+      return nfts && nfts.length > 0;
     }
+    try {
+      const resp = await fetch(`/api/user-nfts?address=${viewerAddress}`);
+      const data = await resp.json();
+      return (data.nfts || []).some(n => n.artistAddress === artistAddress);
+    } catch (e) { return false; }
   },
 
-  // ─── OWNER VIEW (Artist's management dashboard) ──────
+  async checkPostAccess(post) {
+    if (this.isOwner) return true;
+    if (!post.access_type || post.access_type === 'page_default') return this.hasAccess;
+    if (post.access_type === 'specific_release' && post.required_release_id) {
+      if (typeof OwnershipHelper !== 'undefined') {
+        return OwnershipHelper.ownsRelease(post.required_release_id);
+      }
+    }
+    return this.hasAccess;
+  },
 
-  renderOwnerView() {
-    const hasPrivatePage = this.config?.private_page_enabled;
-    const activeRewards = this.rewards.filter(r => r.status === 'active');
+  // ─── OWNER DASHBOARD ──────────────────────────────────
 
-    const html = `
-      <div class="unlockable-owner animate-fade-in">
-        
-        <!-- Setup Banner (if not configured yet) -->
-        ${!this.config?.tab_setup_complete ? `
-          <div class="unlock-setup-banner">
-            <div class="setup-icon">🔑</div>
-            <div>
-              <h3>Set Up Unlockable Content</h3>
-              <p>Give your NFT holders exclusive access to rewards, private posts, and more.</p>
+  renderOwnerDashboard() {
+    const cfg = this.config || {};
+    const isSetUp = cfg.tab_setup_complete;
+
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-dashboard">
+        ${!isSetUp ? `
+          <div class="ut-setup-banner" id="ut-setup-banner">
+            <div class="ut-setup-icon">🔑</div>
+            <div class="ut-setup-info">
+              <div class="ut-setup-title">Set Up Unlockable Content</div>
+              <div class="ut-setup-desc">Give your NFT holders exclusive access to rewards, private posts, and more.</div>
             </div>
-            <button class="btn btn-primary" id="unlock-setup-btn">Get Started</button>
+            <button class="btn btn-primary" id="ut-get-started">Get Started</button>
           </div>
         ` : ''}
 
-        <!-- Quick Actions -->
-        <div class="unlock-actions">
-          <button class="unlock-action-card" id="unlock-create-reward">
-            <div class="action-icon">🎁</div>
-            <div class="action-label">Create Reward</div>
-            <div class="action-desc">Offer merch, experiences, or access</div>
-          </button>
-          <button class="unlock-action-card" id="unlock-create-post">
-            <div class="action-icon">📝</div>
-            <div class="action-label">New Post</div>
-            <div class="action-desc">Share exclusive content with holders</div>
-          </button>
-          <button class="unlock-action-card" id="unlock-edit-settings">
-            <div class="action-icon">⚙️</div>
-            <div class="action-label">Settings</div>
-            <div class="action-desc">Access rules & landing page</div>
-          </button>
+        <!-- Action Cards -->
+        <div class="ut-action-grid">
+          <div class="ut-action-card" id="ut-go-rewards">
+            <div class="ut-action-icon">🎁</div>
+            <div class="ut-action-title">Create Reward</div>
+            <div class="ut-action-desc">Offer merch, experiences, or access</div>
+          </div>
+          <div class="ut-action-card" id="ut-go-posts">
+            <div class="ut-action-icon">📝</div>
+            <div class="ut-action-title">New Post</div>
+            <div class="ut-action-desc">Share exclusive content with holders</div>
+          </div>
+          <div class="ut-action-card" id="ut-go-content">
+            <div class="ut-action-icon">🔓</div>
+            <div class="ut-action-title">Unlockable Content</div>
+            <div class="ut-action-desc">View & manage your gated page</div>
+          </div>
         </div>
 
         <!-- Stats -->
-        <div class="unlock-stats">
-          <div class="stat-pill"><span class="stat-num">${activeRewards.length}</span> Active Rewards</div>
-          <div class="stat-pill"><span class="stat-num">${this.postCount}</span> Posts</div>
-          <div class="stat-pill"><span class="stat-num">${this.rewards.reduce((s, r) => s + (r.claim_count || 0), 0)}</span> Total Claims</div>
+        <div class="ut-stats-row">
+          <div class="ut-stat"><span class="ut-stat-num">${this.rewardCount}</span> Active Rewards</div>
+          <div class="ut-stat"><span class="ut-stat-num">${this.postCount}</span> Posts</div>
+          <div class="ut-stat"><span class="ut-stat-num" id="ut-claims-count">0</span> Total Claims</div>
         </div>
 
-        <!-- My Rewards -->
-        ${activeRewards.length > 0 ? `
-          <div class="unlock-section">
-            <h3 class="unlock-section-title">Your Rewards</h3>
-            <div class="rewards-list">
-              ${activeRewards.map(r => this.renderRewardCard(r, true)).join('')}
-            </div>
+        <!-- Recent Claims -->
+        <div class="ut-section">
+          <h3 class="ut-section-title">Recent Claims</h3>
+          <div id="ut-recent-claims" class="ut-claims-list">
+            <div class="ut-loading-sm"><div class="spinner"></div></div>
           </div>
-        ` : ''}
+        </div>
 
-        <!-- Paused/Completed Rewards -->
-        ${this.rewards.filter(r => r.status !== 'active').length > 0 ? `
-          <div class="unlock-section">
-            <h3 class="unlock-section-title" style="color:var(--text-muted);">Inactive Rewards</h3>
-            <div class="rewards-list">
-              ${this.rewards.filter(r => r.status !== 'active').map(r => this.renderRewardCard(r, true)).join('')}
+        <!-- Access Settings (inline) -->
+        <div class="ut-section">
+          <h3 class="ut-section-title">Access Settings</h3>
+          <div class="ut-settings-card" id="ut-access-settings">
+            <div class="ut-setting-row">
+              <div class="ut-setting-label">Who can access your unlockable content?</div>
+              <select class="ut-select" id="ut-access-type">
+                <option value="any_nft" ${(cfg.private_page_access_type || 'any_nft') === 'any_nft' ? 'selected' : ''}>Anyone who owns any of my NFTs</option>
+                <option value="specific_release" ${cfg.private_page_access_type === 'specific_release' ? 'selected' : ''}>Only owners of a specific release</option>
+              </select>
             </div>
-          </div>
-        ` : ''}
-
-        <!-- Private Page Posts Preview -->
-        ${hasPrivatePage && this.postCount > 0 ? `
-          <div class="unlock-section">
-            <h3 class="unlock-section-title">Recent Posts</h3>
-            <div id="unlock-posts-container">
-              <button class="btn btn-secondary" id="unlock-load-posts">Load Posts</button>
+            <div class="ut-setting-row" id="ut-release-picker-row" style="display:${cfg.private_page_access_type === 'specific_release' ? 'block' : 'none'};">
+              <div class="ut-setting-label">Which release?</div>
+              <select class="ut-select" id="ut-access-release">
+                <option value="">Select a release...</option>
+                ${this.artistReleases.map(r => `
+                  <option value="${r.id}" ${cfg.private_page_release_id === r.id ? 'selected' : ''}>${r.title}</option>
+                `).join('')}
+              </select>
             </div>
-          </div>
-        ` : ''}
-
-        <!-- Claims Activity -->
-        <div class="unlock-section">
-          <h3 class="unlock-section-title">Recent Claims</h3>
-          <div id="unlock-claims-container">
-            <button class="btn btn-secondary" id="unlock-load-claims">View Claims</button>
+            <div class="ut-setting-row">
+              <div class="ut-setting-label">Welcome message (shown to holders)</div>
+              <textarea class="ut-textarea" id="ut-welcome-msg" rows="2" placeholder="Welcome to my private page!">${cfg.welcome_message || ''}</textarea>
+            </div>
+            <div class="ut-setting-row">
+              <div class="ut-setting-label">Page description (shown to non-holders as teaser)</div>
+              <textarea class="ut-textarea" id="ut-page-desc" rows="2" placeholder="Exclusive content for my NFT holders...">${cfg.private_page_description || ''}</textarea>
+            </div>
+            <button class="btn btn-primary btn-sm" id="ut-save-settings" style="margin-top:12px;">Save Settings</button>
           </div>
         </div>
       </div>
-      ${this.getStyles()}
     `;
 
-    this.container.innerHTML = html;
     this.bindOwnerEvents();
+    this.loadRecentClaims();
   },
 
-  // ─── HOLDER VIEW (NFT owner sees everything) ──────
+  async loadRecentClaims() {
+    try {
+      const resp = await fetch(`/api/rewards?claims=true&artist=${this.artistAddress}`);
+      const data = await resp.json();
+      const claims = data.claims || [];
+      const container = document.getElementById('ut-recent-claims');
+      const countEl = document.getElementById('ut-claims-count');
+      if (countEl) countEl.textContent = claims.length;
+      if (!container) return;
 
-  async renderHolderView() {
-    const activeRewards = this.rewards.filter(r => r.status === 'active');
-    const hasPrivatePage = this.config?.private_page_enabled;
-    const artistName = this.rewards[0]?.artist_name || 'this artist';
-
-    // Load posts if private page is enabled
-    let posts = [];
-    if (hasPrivatePage && this.viewerAddress) {
-      try {
-        const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true&viewer=${this.viewerAddress}`);
-        const data = await resp.json();
-        posts = data.posts || [];
-      } catch (e) {
-        console.error('Failed to load posts:', e);
+      if (claims.length === 0) {
+        container.innerHTML = '<div class="ut-empty-sm">No claims yet. Create a reward to get started!</div>';
+        return;
       }
+
+      container.innerHTML = claims.slice(0, 10).map(c => `
+        <div class="ut-claim-row">
+          <div class="ut-claim-info">
+            <span class="ut-claim-name">${c.claimer_name || Helpers.truncateAddress(c.claimer_address)}</span>
+            <span class="ut-claim-action">claimed</span>
+            <span class="ut-claim-reward">${c.reward_title}</span>
+          </div>
+          <div class="ut-claim-time">${Helpers.timeAgo ? Helpers.timeAgo(c.claimed_at) : new Date(c.claimed_at).toLocaleDateString()}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      const container = document.getElementById('ut-recent-claims');
+      if (container) container.innerHTML = '<div class="ut-empty-sm">Failed to load claims</div>';
     }
-    this.posts = posts;
-
-    const html = `
-      <div class="unlockable-holder animate-fade-in">
-        <div class="unlock-access-banner">
-          <div class="access-icon">🔑</div>
-          <span>You have access to ${artistName}'s exclusive content</span>
-        </div>
-
-        <!-- Sub-tabs: Posts | Rewards -->
-        <div class="unlock-subtabs">
-          ${hasPrivatePage ? `<button class="unlock-subtab active" data-subtab="posts">Posts ${posts.length > 0 ? `<span class="subtab-count">${posts.length}</span>` : ''}</button>` : ''}
-          <button class="unlock-subtab ${!hasPrivatePage ? 'active' : ''}" data-subtab="rewards">Rewards ${activeRewards.length > 0 ? `<span class="subtab-count">${activeRewards.length}</span>` : ''}</button>
-        </div>
-
-        <div id="unlock-subtab-content">
-          ${hasPrivatePage ? this.renderPostsFeed(posts) : this.renderRewardsList(activeRewards)}
-        </div>
-      </div>
-      ${this.getStyles()}
-    `;
-
-    this.container.innerHTML = html;
-    this.bindHolderEvents();
   },
-
-  // ─── LOCKED VIEW (non-holders see teaser) ──────
-
-  renderLockedView() {
-    const activeRewards = this.rewards.filter(r => r.status === 'active');
-    const artistName = this.rewards[0]?.artist_name || this.config?.private_page_title || 'This Artist';
-    const description = this.config?.private_page_description || 'Own an NFT to unlock exclusive content, rewards, and a private community.';
-    const hasPrivatePage = this.config?.private_page_enabled;
-
-    const html = `
-      <div class="unlockable-locked animate-fade-in">
-        <div class="locked-hero">
-          <div class="locked-icon">🔒</div>
-          <h2 class="locked-title">Exclusive Content</h2>
-          <p class="locked-desc">${description}</p>
-          
-          <div class="locked-what-you-get">
-            ${hasPrivatePage ? `
-              <div class="locked-perk">
-                <span class="perk-icon">📝</span>
-                <span>Private posts & community</span>
-              </div>
-            ` : ''}
-            ${activeRewards.length > 0 ? `
-              <div class="locked-perk">
-                <span class="perk-icon">🎁</span>
-                <span>${activeRewards.length} reward${activeRewards.length !== 1 ? 's' : ''} available</span>
-              </div>
-            ` : ''}
-            <div class="locked-perk">
-              <span class="perk-icon">🔑</span>
-              <span>Own ${this.config?.private_page_access_type === 'specific_release' ? 'a specific release' : 'any NFT'} to unlock</span>
-            </div>
-          </div>
-
-          ${!this.viewerAddress ? `
-            <button class="btn btn-primary btn-lg" onclick="if(typeof XamanAuth!=='undefined')XamanAuth.connect()">
-              Sign In to Check Access
-            </button>
-          ` : `
-            <p class="locked-cta">Browse their releases and grab an NFT to unlock everything!</p>
-          `}
-        </div>
-
-        <!-- Show rewards preview (visible but not claimable) -->
-        ${activeRewards.length > 0 ? `
-          <div class="unlock-section" style="margin-top: 32px;">
-            <h3 class="unlock-section-title">Available Rewards</h3>
-            <p class="unlock-section-desc">Own the right NFT to claim these</p>
-            <div class="rewards-list">
-              ${activeRewards.map(r => this.renderRewardCard(r, false)).join('')}
-            </div>
-          </div>
-        ` : ''}
-      </div>
-      ${this.getStyles()}
-    `;
-
-    this.container.innerHTML = html;
-  },
-
-  // ─── Sub-renderers ──────────────────────────────────
-
-  renderPostsFeed(posts) {
-    if (posts.length === 0) {
-      return '<div class="unlock-empty">No posts yet. Check back soon!</div>';
-    }
-
-    return `
-      <div class="posts-feed">
-        ${posts.map(p => `
-          <div class="private-post" data-post-id="${p.id}">
-            <div class="post-header">
-              <span class="post-date">${this.timeAgo(p.created_at)}</span>
-            </div>
-            ${p.content ? `<div class="post-content">${this.escapeHtml(p.content)}</div>` : ''}
-            ${p.image_url ? `<img class="post-image" src="${this.proxyUrl(p.image_url)}" alt="Post image" onerror="this.style.display='none'">` : ''}
-            ${p.video_url ? `<video class="post-video" src="${this.proxyUrl(p.video_url)}" controls playsinline preload="metadata"></video>` : ''}
-            
-            <!-- Comments -->
-            <div class="post-comments">
-              ${(p.comments || []).map(c => `
-                <div class="post-comment">
-                  <span class="comment-author">${c.commenter_name || this.truncAddr(c.commenter_address)}</span>
-                  <span class="comment-text">${this.escapeHtml(c.content)}</span>
-                  <span class="comment-time">${this.timeAgo(c.created_at)}</span>
-                </div>
-              `).join('')}
-              <div class="comment-input-wrap">
-                <input type="text" class="comment-input" placeholder="Add a comment..." data-post-id="${p.id}">
-                <button class="comment-send-btn" data-post-id="${p.id}">Send</button>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  },
-
-  renderRewardsList(rewards) {
-    if (rewards.length === 0) {
-      return '<div class="unlock-empty">No rewards available right now.</div>';
-    }
-
-    return `
-      <div class="rewards-list">
-        ${rewards.map(r => this.renderRewardCard(r, false)).join('')}
-      </div>
-    `;
-  },
-
-  renderRewardCard(reward, isManage) {
-    const remaining = reward.max_claims ? (reward.max_claims - (reward.claim_count || 0)) : null;
-    const expired = reward.expires_at && new Date(reward.expires_at) < new Date();
-    const typeBadge = { physical: '📦', digital: '💾', experience: '🎟️', access: '🔑' }[reward.reward_type] || '🎁';
-
-    return `
-      <div class="reward-card ${reward.status !== 'active' ? 'inactive' : ''} ${expired ? 'expired' : ''}" data-reward-id="${reward.id}">
-        ${reward.image_url ? `
-          <div class="reward-image">
-            <img src="${this.proxyUrl(reward.image_url)}" alt="${reward.title}" onerror="this.parentElement.style.display='none'">
-          </div>
-        ` : ''}
-        <div class="reward-info">
-          <div class="reward-header">
-            <span class="reward-type-badge">${typeBadge}</span>
-            <h4 class="reward-title">${reward.title}</h4>
-            ${reward.status !== 'active' ? `<span class="reward-status-badge ${reward.status}">${reward.status}</span>` : ''}
-          </div>
-          ${reward.description ? `<p class="reward-desc">${reward.description}</p>` : ''}
-          <div class="reward-meta">
-            ${remaining !== null ? `<span class="reward-remaining">${remaining} remaining</span>` : ''}
-            ${reward.expires_at ? `<span class="reward-expires">${expired ? 'Expired' : 'Ends ' + this.formatDate(reward.expires_at)}</span>` : ''}
-            <span class="reward-claimed">${reward.claim_count || 0} claimed</span>
-          </div>
-
-          ${isManage ? `
-            <div class="reward-manage-actions">
-              <button class="btn btn-sm btn-secondary reward-edit-btn" data-reward-id="${reward.id}">Edit</button>
-              ${reward.status === 'active' ? `
-                <button class="btn btn-sm btn-secondary reward-pause-btn" data-reward-id="${reward.id}">Pause</button>
-              ` : reward.status === 'paused' ? `
-                <button class="btn btn-sm btn-secondary reward-activate-btn" data-reward-id="${reward.id}">Reactivate</button>
-              ` : ''}
-              <button class="btn btn-sm btn-secondary reward-complete-btn" data-reward-id="${reward.id}">Mark Complete</button>
-              <button class="btn btn-sm reward-delete-btn" data-reward-id="${reward.id}" style="color:var(--error);">Delete</button>
-            </div>
-          ` : `
-            <button class="btn btn-primary btn-sm reward-claim-btn" data-reward-id="${reward.id}" 
-              ${!this.hasAccess || expired || (remaining !== null && remaining <= 0) ? 'disabled' : ''}>
-              ${!this.hasAccess ? '🔒 Own NFT to Claim' : expired ? 'Expired' : (remaining !== null && remaining <= 0) ? 'Fully Claimed' : '✋ Claim Now'}
-            </button>
-          `}
-        </div>
-      </div>
-    `;
-  },
-
-  // ─── Modals ─────────────────────────────────────────
-
-  showSetupModal() {
-    const config = this.config || {};
-    const releases = typeof getArtistReleases === 'function' ? getArtistReleases(this.artistAddress) : [];
-
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'unlock-setup-modal';
-    modal.innerHTML = `
-      <div class="modal-content" style="max-width: 560px;">
-        <div class="modal-header">
-          <h3>🔑 Unlockable Content Setup</h3>
-          <button class="modal-close" onclick="document.getElementById('unlock-setup-modal')?.remove()">✕</button>
-        </div>
-        <div class="modal-body" style="padding: 24px;">
-          
-          <div class="form-group">
-            <label class="form-label">What do visitors see when they don't have access?</label>
-            <textarea class="form-input" id="setup-description" rows="3" 
-              placeholder="e.g., Own one of my NFTs to unlock exclusive content, behind-the-scenes posts, and special rewards!"
-            >${config.private_page_description || ''}</textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Enable Private Page?</label>
-            <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">A gated feed where you can post text, images, and videos only NFT holders can see.</p>
-            <label class="toggle-label">
-              <input type="checkbox" id="setup-private-page" ${config.private_page_enabled ? 'checked' : ''}>
-              <span>Enable private posts feed</span>
-            </label>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Private Page Title</label>
-            <input type="text" class="form-input" id="setup-title" 
-              placeholder="e.g., Inner Circle, VIP Lounge, Backstage"
-              value="${config.private_page_title || ''}">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Who gets access?</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" name="setup-access" value="any_nft" ${config.private_page_access_type !== 'specific_release' ? 'checked' : ''}>
-                Anyone who owns any of my NFTs
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="setup-access" value="specific_release" ${config.private_page_access_type === 'specific_release' ? 'checked' : ''}>
-                Only holders of a specific release
-              </label>
-            </div>
-          </div>
-
-          <div class="form-group" id="setup-release-select" style="display:${config.private_page_access_type === 'specific_release' ? 'block' : 'none'};">
-            <label class="form-label">Which release?</label>
-            <select class="form-input" id="setup-release-id">
-              <option value="">Select a release...</option>
-            </select>
-            <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Release ID: <input type="text" class="form-input" id="setup-release-id-manual" placeholder="Paste release ID" value="${config.private_page_release_id || ''}" style="display:inline;width:auto;font-size:11px;padding:2px 8px;"></p>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="document.getElementById('unlock-setup-modal')?.remove()">Cancel</button>
-          <button class="btn btn-primary" id="setup-save-btn">Save Settings</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Toggle release select
-    document.querySelectorAll('input[name="setup-access"]').forEach(radio => {
-      radio.addEventListener('change', () => {
-        document.getElementById('setup-release-select').style.display =
-          document.querySelector('input[name="setup-access"]:checked').value === 'specific_release' ? 'block' : 'none';
-      });
-    });
-
-    // Save
-    document.getElementById('setup-save-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('setup-save-btn');
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
-
-      try {
-        const resp = await fetch('/api/unlockables', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'setup',
-            artistAddress: this.artistAddress,
-            privatePageEnabled: document.getElementById('setup-private-page').checked,
-            privatePageTitle: document.getElementById('setup-title').value.trim() || null,
-            privatePageDescription: document.getElementById('setup-description').value.trim() || null,
-            privatePageAccessType: document.querySelector('input[name="setup-access"]:checked').value,
-            privatePageReleaseId: document.getElementById('setup-release-id-manual').value.trim() || null,
-          }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-          modal.remove();
-          this.render(this.artistAddress, this.viewerAddress, this.container);
-        } else {
-          alert(data.error || 'Failed to save');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-      btn.disabled = false;
-      btn.textContent = 'Save Settings';
-    });
-  },
-
-  showCreateRewardModal(existingReward = null) {
-    const isEdit = !!existingReward;
-
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'reward-modal';
-    modal.innerHTML = `
-      <div class="modal-content" style="max-width: 560px;">
-        <div class="modal-header">
-          <h3>${isEdit ? '✏️ Edit' : '🎁 Create'} Reward</h3>
-          <button class="modal-close" onclick="document.getElementById('reward-modal')?.remove()">✕</button>
-        </div>
-        <div class="modal-body" style="padding: 24px;">
-          
-          <div class="form-group">
-            <label class="form-label">Title *</label>
-            <input type="text" class="form-input" id="reward-title" 
-              placeholder="e.g., Signed plushie, Exclusive merch, VIP meetup"
-              value="${existingReward?.title || ''}">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea class="form-input" id="reward-desc" rows="3" 
-              placeholder="What do fans get? How does it work? Any details they need to know."
-            >${existingReward?.description || ''}</textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Image URL (optional)</label>
-            <input type="text" class="form-input" id="reward-image" 
-              placeholder="https://... or IPFS CID"
-              value="${existingReward?.image_url || ''}">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Type</label>
-            <select class="form-input" id="reward-type">
-              <option value="physical" ${existingReward?.reward_type === 'physical' ? 'selected' : ''}>📦 Physical (merch, vinyl, etc)</option>
-              <option value="digital" ${existingReward?.reward_type === 'digital' ? 'selected' : ''}>💾 Digital (bonus track, wallpaper)</option>
-              <option value="experience" ${existingReward?.reward_type === 'experience' ? 'selected' : ''}>🎟️ Experience (meetup, video call)</option>
-              <option value="access" ${existingReward?.reward_type === 'access' ? 'selected' : ''}>🔑 Access (private channel, early release)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Who can claim?</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" name="reward-access" value="any_nft" ${existingReward?.access_type !== 'specific_release' ? 'checked' : ''}>
-                Anyone who owns any of my NFTs
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="reward-access" value="specific_release" ${existingReward?.access_type === 'specific_release' ? 'checked' : ''}>
-                Only holders of a specific release
-              </label>
-            </div>
-          </div>
-
-          <div class="form-group" id="reward-release-select" style="display:${existingReward?.access_type === 'specific_release' ? 'block' : 'none'};">
-            <label class="form-label">Release ID</label>
-            <input type="text" class="form-input" id="reward-release-id" 
-              placeholder="Paste release ID"
-              value="${existingReward?.required_release_id || ''}">
-          </div>
-
-          <div class="form-row">
-            <div class="form-group" style="flex:1;">
-              <label class="form-label">Max Claims (optional)</label>
-              <input type="number" class="form-input" id="reward-max" min="1"
-                placeholder="Unlimited" value="${existingReward?.max_claims || ''}">
-            </div>
-            <div class="form-group" style="flex:1;">
-              <label class="form-label">Expires (optional)</label>
-              <input type="date" class="form-input" id="reward-expires"
-                value="${existingReward?.expires_at ? existingReward.expires_at.split('T')[0] : ''}">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="document.getElementById('reward-modal')?.remove()">Cancel</button>
-          <button class="btn btn-primary" id="reward-save-btn">${isEdit ? 'Update' : 'Create'} Reward</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Toggle release select
-    document.querySelectorAll('input[name="reward-access"]').forEach(radio => {
-      radio.addEventListener('change', () => {
-        document.getElementById('reward-release-select').style.display =
-          document.querySelector('input[name="reward-access"]:checked').value === 'specific_release' ? 'block' : 'none';
-      });
-    });
-
-    // Save
-    document.getElementById('reward-save-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('reward-save-btn');
-      const title = document.getElementById('reward-title').value.trim();
-      if (!title) return alert('Title is required');
-
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
-
-      const payload = {
-        action: isEdit ? 'update' : 'create',
-        artistAddress: this.artistAddress,
-        title,
-        description: document.getElementById('reward-desc').value.trim() || null,
-        imageUrl: document.getElementById('reward-image').value.trim() || null,
-        rewardType: document.getElementById('reward-type').value,
-        accessType: document.querySelector('input[name="reward-access"]:checked').value,
-        requiredReleaseId: document.getElementById('reward-release-id').value.trim() || null,
-        maxClaims: document.getElementById('reward-max').value ? parseInt(document.getElementById('reward-max').value) : null,
-        expiresAt: document.getElementById('reward-expires').value || null,
-      };
-
-      if (isEdit) payload.id = existingReward.id;
-
-      try {
-        const resp = await fetch('/api/rewards', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await resp.json();
-        if (data.success || data.id) {
-          modal.remove();
-          this.render(this.artistAddress, this.viewerAddress, this.container);
-        } else {
-          alert(data.error || 'Failed');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-      btn.disabled = false;
-      btn.textContent = isEdit ? 'Update' : 'Create';
-    });
-  },
-
-  showCreatePostModal() {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'post-modal';
-    modal.innerHTML = `
-      <div class="modal-content" style="max-width: 560px;">
-        <div class="modal-header">
-          <h3>📝 New Private Post</h3>
-          <button class="modal-close" onclick="document.getElementById('post-modal')?.remove()">✕</button>
-        </div>
-        <div class="modal-body" style="padding: 24px;">
-          <div class="form-group">
-            <label class="form-label">What's on your mind?</label>
-            <textarea class="form-input" id="post-content" rows="4" 
-              placeholder="Share something exclusive with your NFT holders..."></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Image URL (optional)</label>
-            <input type="text" class="form-input" id="post-image" placeholder="https://... or IPFS CID">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Video URL (optional)</label>
-            <input type="text" class="form-input" id="post-video" placeholder="https://... or IPFS CID">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="document.getElementById('post-modal')?.remove()">Cancel</button>
-          <button class="btn btn-primary" id="post-save-btn">Post</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    document.getElementById('post-save-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('post-save-btn');
-      const content = document.getElementById('post-content').value.trim();
-      const imageUrl = document.getElementById('post-image').value.trim();
-      const videoUrl = document.getElementById('post-video').value.trim();
-
-      if (!content && !imageUrl && !videoUrl) return alert('Add some content');
-
-      btn.disabled = true;
-      btn.textContent = 'Posting...';
-
-      try {
-        const resp = await fetch('/api/unlockables', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'create_post',
-            artistAddress: this.artistAddress,
-            content: content || null,
-            imageUrl: imageUrl || null,
-            videoUrl: videoUrl || null,
-          }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-          modal.remove();
-          this.render(this.artistAddress, this.viewerAddress, this.container);
-        } else {
-          alert(data.error || 'Failed');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-      btn.disabled = false;
-      btn.textContent = 'Post';
-    });
-  },
-
-  // ─── Events ─────────────────────────────────────────
 
   bindOwnerEvents() {
-    document.getElementById('unlock-setup-btn')?.addEventListener('click', () => this.showSetupModal());
-    document.getElementById('unlock-edit-settings')?.addEventListener('click', () => this.showSetupModal());
-    document.getElementById('unlock-create-reward')?.addEventListener('click', () => this.showCreateRewardModal());
-    document.getElementById('unlock-create-post')?.addEventListener('click', () => this.showCreatePostModal());
-
-    // Load claims
-    document.getElementById('unlock-load-claims')?.addEventListener('click', async () => {
-      const container = document.getElementById('unlock-claims-container');
-      container.innerHTML = '<div class="spinner"></div>';
-      try {
-        const resp = await fetch(`/api/rewards?claims=true&artist=${this.artistAddress}`);
-        const data = await resp.json();
-        const claims = data.claims || [];
-        if (claims.length === 0) {
-          container.innerHTML = '<div class="unlock-empty">No claims yet</div>';
-        } else {
-          container.innerHTML = claims.map(c => `
-            <div class="claim-row">
-              <span class="claim-who">${c.claimer_name || this.truncAddr(c.claimer_address)}</span>
-              <span class="claim-what">claimed <strong>${c.reward_title}</strong></span>
-              <span class="claim-when">${this.timeAgo(c.claimed_at)}</span>
-            </div>
-          `).join('');
-        }
-      } catch (e) {
-        container.innerHTML = '<div class="unlock-empty">Failed to load claims</div>';
-      }
+    // Get Started → auto-save setup
+    document.getElementById('ut-get-started')?.addEventListener('click', async () => {
+      await this.saveSettings(true);
+      const banner = document.getElementById('ut-setup-banner');
+      if (banner) banner.style.display = 'none';
     });
 
-    // Load posts
-    document.getElementById('unlock-load-posts')?.addEventListener('click', async () => {
-      const container = document.getElementById('unlock-posts-container');
-      container.innerHTML = '<div class="spinner"></div>';
-      try {
-        const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true&viewer=${this.viewerAddress}`);
-        const data = await resp.json();
-        container.innerHTML = this.renderPostsFeed(data.posts || []);
-        this.bindCommentEvents();
-      } catch (e) {
-        container.innerHTML = '<div class="unlock-empty">Failed to load posts</div>';
-      }
+    // Action cards
+    document.getElementById('ut-go-rewards')?.addEventListener('click', () => this.showCreateRewardPage());
+    document.getElementById('ut-go-posts')?.addEventListener('click', () => this.showCreatePostModal());
+    document.getElementById('ut-go-content')?.addEventListener('click', () => this.showContentFeedPage());
+
+    // Access type toggle
+    document.getElementById('ut-access-type')?.addEventListener('change', (e) => {
+      const row = document.getElementById('ut-release-picker-row');
+      if (row) row.style.display = e.target.value === 'specific_release' ? 'block' : 'none';
     });
 
-    // Reward management buttons
-    this.container.querySelectorAll('.reward-edit-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const reward = this.rewards.find(r => r.id === btn.dataset.rewardId);
-        if (reward) this.showCreateRewardModal(reward);
-      });
-    });
-
-    this.container.querySelectorAll('.reward-pause-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.updateRewardStatus(btn.dataset.rewardId, 'paused');
-      });
-    });
-
-    this.container.querySelectorAll('.reward-activate-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.updateRewardStatus(btn.dataset.rewardId, 'active');
-      });
-    });
-
-    this.container.querySelectorAll('.reward-complete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (confirm('Mark this reward as completed? Fans will no longer be able to claim it.')) {
-          this.updateRewardStatus(btn.dataset.rewardId, 'completed');
-        }
-      });
-    });
-
-    this.container.querySelectorAll('.reward-delete-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm('Delete this reward? This cannot be undone.')) return;
-        try {
-          await fetch(`/api/rewards?id=${btn.dataset.rewardId}&artist=${this.artistAddress}`, { method: 'DELETE' });
-          this.render(this.artistAddress, this.viewerAddress, this.container);
-        } catch (e) {
-          alert('Failed to delete');
-        }
-      });
-    });
+    // Save settings
+    document.getElementById('ut-save-settings')?.addEventListener('click', () => this.saveSettings(false));
   },
 
-  bindHolderEvents() {
-    // Sub-tab switching
-    this.container.querySelectorAll('.unlock-subtab').forEach(tab => {
-      tab.addEventListener('click', async () => {
-        this.container.querySelectorAll('.unlock-subtab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const subtab = tab.dataset.subtab;
-        const content = document.getElementById('unlock-subtab-content');
+  async saveSettings(isFirstSetup) {
+    const accessType = document.getElementById('ut-access-type')?.value || 'any_nft';
+    const releaseId = document.getElementById('ut-access-release')?.value || null;
+    const welcomeMsg = document.getElementById('ut-welcome-msg')?.value || '';
+    const pageDesc = document.getElementById('ut-page-desc')?.value || '';
 
-        if (subtab === 'posts') {
-          if (this.posts.length === 0) {
-            content.innerHTML = '<div class="spinner"></div>';
-            try {
-              const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true&viewer=${this.viewerAddress}`);
-              const data = await resp.json();
-              this.posts = data.posts || [];
-            } catch (e) { /* */ }
-          }
-          content.innerHTML = this.renderPostsFeed(this.posts);
-          this.bindCommentEvents();
-        } else {
-          const activeRewards = this.rewards.filter(r => r.status === 'active');
-          content.innerHTML = this.renderRewardsList(activeRewards);
-          this.bindClaimEvents();
-        }
-      });
-    });
-
-    this.bindCommentEvents();
-    this.bindClaimEvents();
-  },
-
-  bindCommentEvents() {
-    this.container.querySelectorAll('.comment-send-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const postId = btn.dataset.postId;
-        const input = this.container.querySelector(`.comment-input[data-post-id="${postId}"]`);
-        const content = input?.value?.trim();
-        if (!content || !this.viewerAddress) return;
-
-        btn.disabled = true;
-        try {
-          await fetch('/api/unlockables', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'comment',
-              postId,
-              commenterAddress: this.viewerAddress,
-              content,
-            }),
-          });
-          input.value = '';
-          // Refresh posts
-          const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true&viewer=${this.viewerAddress}`);
-          const data = await resp.json();
-          this.posts = data.posts || [];
-          document.getElementById('unlock-subtab-content').innerHTML = this.renderPostsFeed(this.posts);
-          this.bindCommentEvents();
-        } catch (e) {
-          alert('Failed to comment');
-        }
-        btn.disabled = false;
-      });
-    });
-  },
-
-  bindClaimEvents() {
-    this.container.querySelectorAll('.reward-claim-btn:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!this.viewerAddress) return;
-        btn.disabled = true;
-        btn.textContent = 'Claiming...';
-
-        try {
-          const resp = await fetch('/api/rewards', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'claim',
-              rewardId: btn.dataset.rewardId,
-              claimerAddress: this.viewerAddress,
-            }),
-          });
-          const data = await resp.json();
-          if (data.success) {
-            btn.textContent = '✅ Claimed!';
-            btn.classList.add('claimed');
-          } else {
-            btn.textContent = data.error || 'Failed';
-            setTimeout(() => { btn.textContent = '✋ Claim Now'; btn.disabled = false; }, 2000);
-          }
-        } catch (e) {
-          btn.textContent = 'Error';
-          setTimeout(() => { btn.textContent = '✋ Claim Now'; btn.disabled = false; }, 2000);
-        }
-      });
-    });
-  },
-
-  // ─── Helpers ────────────────────────────────────────
-
-  async updateRewardStatus(rewardId, status) {
     try {
-      await fetch('/api/rewards', {
+      const btn = document.getElementById(isFirstSetup ? 'ut-get-started' : 'ut-save-settings');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+      await fetch('/api/unlockables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'update_status',
-          id: rewardId,
-          artistAddress: this.artistAddress,
-          status,
-        }),
+          action: 'setup',
+          artist: this.artistAddress,
+          private_page_enabled: true,
+          private_page_access_type: accessType,
+          private_page_release_id: releaseId,
+          private_page_description: pageDesc,
+          welcome_message: welcomeMsg,
+          tab_setup_complete: true,
+        })
       });
-      this.render(this.artistAddress, this.viewerAddress, this.container);
+
+      if (btn) { btn.disabled = false; btn.textContent = isFirstSetup ? 'Get Started' : 'Save Settings'; }
+
+      if (isFirstSetup) {
+        this.config = { ...this.config, tab_setup_complete: true };
+      }
+
+      if (!isFirstSetup && typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast('Settings saved!');
+      }
     } catch (e) {
-      alert('Failed to update status');
+      console.error('Save settings error:', e);
+      alert('Failed to save settings');
     }
   },
 
-  proxyUrl(url) {
-    if (!url) return '/placeholder.png';
-    return typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(url) : url;
+  // ─── CREATE REWARD PAGE ────────────────────────────────
+
+  showCreateRewardPage(existingReward = null) {
+    const isEdit = !!existingReward;
+    const r = existingReward || {};
+    const existingReleaseIds = r.required_release_ids || (r.required_release_id ? [r.required_release_id] : []);
+    const existingMedia = r.media_urls || [];
+    const isAllNfts = (r.access_type || 'any_nft') === 'any_nft';
+
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-page">
+        <div class="ut-page-header">
+          <button class="ut-back-btn" id="ut-back-dash">← Back</button>
+          <h2 class="ut-page-title">${isEdit ? 'Edit Reward' : 'Create Reward'}</h2>
+        </div>
+
+        <div class="ut-form">
+          <!-- Logo / Cover Image -->
+          <div class="ut-form-group">
+            <label class="ut-label">Reward Logo / Cover Image</label>
+            <div class="ut-upload-zone" id="ut-reward-logo-zone">
+              ${r.image_url ? `<img src="${r.image_url}" class="ut-upload-preview" />` : `
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span>Click or drag to upload</span>
+              `}
+              <input type="file" id="ut-reward-logo-input" accept="image/*" style="display:none" />
+            </div>
+          </div>
+
+          <!-- Title -->
+          <div class="ut-form-group">
+            <label class="ut-label">Reward Title</label>
+            <input type="text" class="ut-input" id="ut-reward-title" placeholder="e.g. Signed Vinyl, Backstage Pass..." value="${r.title || ''}" />
+          </div>
+
+          <!-- Description -->
+          <div class="ut-form-group">
+            <label class="ut-label">Description</label>
+            <textarea class="ut-textarea" id="ut-reward-desc" rows="4" placeholder="Describe what holders will receive...">${r.description || ''}</textarea>
+          </div>
+
+          <!-- Additional Media (photos/videos) -->
+          <div class="ut-form-group">
+            <label class="ut-label">Additional Photos / Videos <span class="ut-label-hint">(optional, max 5)</span></label>
+            <div class="ut-media-grid" id="ut-reward-media-grid">
+              ${existingMedia.map((url, i) => `
+                <div class="ut-media-thumb" data-idx="${i}">
+                  ${url.match(/\.(mp4|mov|webm)/i) 
+                    ? `<video src="${url}" class="ut-media-thumb-img"></video>`
+                    : `<img src="${url}" class="ut-media-thumb-img" />`
+                  }
+                  <button class="ut-media-remove" data-idx="${i}">✕</button>
+                </div>
+              `).join('')}
+              <div class="ut-media-add" id="ut-reward-media-add">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <input type="file" id="ut-reward-media-input" accept="image/*,video/*" multiple style="display:none" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Reward Type -->
+          <div class="ut-form-group">
+            <label class="ut-label">Reward Type</label>
+            <select class="ut-select" id="ut-reward-type">
+              <option value="physical" ${r.reward_type === 'physical' ? 'selected' : ''}>Physical (merch, vinyl, etc)</option>
+              <option value="digital" ${r.reward_type === 'digital' ? 'selected' : ''}>Digital (download, file, etc)</option>
+              <option value="experience" ${r.reward_type === 'experience' ? 'selected' : ''}>Experience (meet & greet, etc)</option>
+              <option value="access" ${r.reward_type === 'access' ? 'selected' : ''}>Access (Discord, group chat, etc)</option>
+            </select>
+          </div>
+
+          <!-- Requirements Text -->
+          <div class="ut-form-group">
+            <label class="ut-label">Requirements / Instructions</label>
+            <textarea class="ut-textarea" id="ut-reward-requirements" rows="3" placeholder="How should holders claim this? Any additional requirements?">${r.requirements_text || ''}</textarea>
+          </div>
+
+          <!-- NFT Picker -->
+          <div class="ut-form-group">
+            <label class="ut-label">Which NFT unlocks this reward?</label>
+            <div class="ut-nft-picker">
+              <label class="ut-radio-label">
+                <input type="radio" name="ut-reward-access" value="any_nft" ${isAllNfts ? 'checked' : ''} /> 
+                All my NFTs
+              </label>
+              <label class="ut-radio-label">
+                <input type="radio" name="ut-reward-access" value="specific_release" ${!isAllNfts ? 'checked' : ''} /> 
+                Specific releases only
+              </label>
+            </div>
+            <div class="ut-release-checklist" id="ut-reward-release-list" style="display:${isAllNfts ? 'none' : 'block'};">
+              ${this.artistReleases.map(rel => `
+                <label class="ut-checkbox-label">
+                  <input type="checkbox" value="${rel.id}" ${existingReleaseIds.includes(rel.id) ? 'checked' : ''} />
+                  <img src="${typeof IpfsHelper !== 'undefined' ? IpfsHelper.toProxyUrl(rel.coverUrl) : rel.coverUrl || '/placeholder.png'}" class="ut-release-thumb" onerror="this.src='/placeholder.png'" />
+                  <span>${rel.title}</span>
+                </label>
+              `).join('')}
+              ${this.artistReleases.length === 0 ? '<div class="ut-empty-sm">No releases found</div>' : ''}
+            </div>
+            <button class="ut-link-btn" id="ut-reward-no-song" style="margin-top:8px;">
+              🎵 Song not released yet — I'll attach it later
+            </button>
+          </div>
+
+          <!-- Duration -->
+          <div class="ut-form-group">
+            <label class="ut-label">Duration</label>
+            <div class="ut-duration-row">
+              <label class="ut-radio-label">
+                <input type="radio" name="ut-reward-duration" value="unlimited" ${!r.expires_at ? 'checked' : ''} />
+                Until supplies run out
+              </label>
+              <label class="ut-radio-label">
+                <input type="radio" name="ut-reward-duration" value="timed" ${r.expires_at ? 'checked' : ''} />
+                Ends on a date
+              </label>
+            </div>
+            <div id="ut-reward-date-row" style="display:${r.expires_at ? 'block' : 'none'}; margin-top:8px;">
+              <input type="datetime-local" class="ut-input" id="ut-reward-expires" value="${r.expires_at ? new Date(r.expires_at).toISOString().slice(0,16) : ''}" />
+            </div>
+          </div>
+
+          <!-- Max Claims -->
+          <div class="ut-form-group">
+            <label class="ut-label">Max Claims <span class="ut-label-hint">(leave empty for unlimited)</span></label>
+            <input type="number" class="ut-input" id="ut-reward-max-claims" placeholder="Unlimited" min="1" value="${r.max_claims || ''}" style="max-width:200px;" />
+          </div>
+
+          <!-- Actions -->
+          <div class="ut-form-actions">
+            <button class="btn btn-secondary" id="ut-reward-save-draft">Save as Draft</button>
+            <button class="btn btn-primary" id="ut-reward-publish">${isEdit ? 'Update Reward' : 'Create Reward'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._rewardEditId = isEdit ? r.id : null;
+    this._rewardLogoUrl = r.image_url || null;
+    this._rewardMediaUrls = [...existingMedia];
+    this.bindCreateRewardEvents();
   },
 
-  truncAddr(addr) {
-    if (!addr) return 'Unknown';
-    return addr.slice(0, 6) + '...' + addr.slice(-4);
+  bindCreateRewardEvents() {
+    document.getElementById('ut-back-dash')?.addEventListener('click', () => this.renderOwnerDashboard());
+
+    // Logo upload
+    const logoZone = document.getElementById('ut-reward-logo-zone');
+    const logoInput = document.getElementById('ut-reward-logo-input');
+    logoZone?.addEventListener('click', () => logoInput?.click());
+    logoInput?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      logoZone.innerHTML = '<div class="spinner"></div>';
+      const url = await this.uploadFile(file);
+      if (url) {
+        this._rewardLogoUrl = url;
+        logoZone.innerHTML = `<img src="${url}" class="ut-upload-preview" />`;
+      }
+    });
+
+    // Media add
+    document.getElementById('ut-reward-media-add')?.addEventListener('click', () => {
+      document.getElementById('ut-reward-media-input')?.click();
+    });
+    document.getElementById('ut-reward-media-input')?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      for (const file of files.slice(0, 5 - this._rewardMediaUrls.length)) {
+        const url = await this.uploadFile(file);
+        if (url) this._rewardMediaUrls.push(url);
+      }
+      this.refreshMediaGrid('ut-reward-media-grid', this._rewardMediaUrls, 'reward');
+    });
+
+    // Media remove
+    document.getElementById('ut-reward-media-grid')?.addEventListener('click', (e) => {
+      const removeBtn = e.target.closest('.ut-media-remove');
+      if (removeBtn) {
+        const idx = parseInt(removeBtn.dataset.idx);
+        this._rewardMediaUrls.splice(idx, 1);
+        this.refreshMediaGrid('ut-reward-media-grid', this._rewardMediaUrls, 'reward');
+      }
+    });
+
+    // Access type toggle
+    document.querySelectorAll('input[name="ut-reward-access"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const list = document.getElementById('ut-reward-release-list');
+        if (list) list.style.display = radio.value === 'specific_release' ? 'block' : 'none';
+      });
+    });
+
+    // "Song not released yet" button
+    document.getElementById('ut-reward-no-song')?.addEventListener('click', () => {
+      // Select "All my NFTs" since there's no specific song yet
+      const allRadio = document.querySelector('input[name="ut-reward-access"][value="any_nft"]');
+      if (allRadio) allRadio.checked = true;
+      document.getElementById('ut-reward-release-list').style.display = 'none';
+      if (typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast('No worries! You can attach a specific NFT later by editing this reward.');
+      }
+    });
+
+    // Duration toggle
+    document.querySelectorAll('input[name="ut-reward-duration"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.getElementById('ut-reward-date-row').style.display = radio.value === 'timed' ? 'block' : 'none';
+      });
+    });
+
+    // Save draft
+    document.getElementById('ut-reward-save-draft')?.addEventListener('click', () => this.submitReward('draft'));
+    // Publish
+    document.getElementById('ut-reward-publish')?.addEventListener('click', () => this.submitReward('active'));
   },
 
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML.replace(/\n/g, '<br>');
-  },
+  async submitReward(status) {
+    const title = document.getElementById('ut-reward-title')?.value?.trim();
+    if (!title) { alert('Please enter a reward title'); return; }
 
-  timeAgo(dateStr) {
-    const now = new Date();
-    const d = new Date(dateStr);
-    const diff = Math.floor((now - d) / 1000);
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-    if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  },
+    const accessType = document.querySelector('input[name="ut-reward-access"]:checked')?.value || 'any_nft';
+    const checkedReleases = Array.from(document.querySelectorAll('#ut-reward-release-list input[type="checkbox"]:checked')).map(cb => cb.value);
+    const durationVal = document.querySelector('input[name="ut-reward-duration"]:checked')?.value || 'unlimited';
+    const expiresAt = durationVal === 'timed' ? document.getElementById('ut-reward-expires')?.value || null : null;
 
-  formatDate(dateStr) {
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  },
+    const payload = {
+      action: this._rewardEditId ? 'update' : 'create',
+      artist: this.artistAddress,
+      title,
+      description: document.getElementById('ut-reward-desc')?.value || '',
+      image_url: this._rewardLogoUrl || null,
+      media_urls: this._rewardMediaUrls,
+      reward_type: document.getElementById('ut-reward-type')?.value || 'physical',
+      requirements_text: document.getElementById('ut-reward-requirements')?.value || '',
+      access_type: accessType,
+      required_release_ids: accessType === 'specific_release' ? checkedReleases : [],
+      expires_at: expiresAt,
+      max_claims: parseInt(document.getElementById('ut-reward-max-claims')?.value) || null,
+      status,
+    };
 
-  /**
-   * Static: check if the Unlockable tab should be visible for an artist
-   * Call from profile.js tab rendering
-   */
-  async shouldShowTab(artistAddress, viewerAddress) {
+    if (this._rewardEditId) payload.id = this._rewardEditId;
+
+    const btn = document.getElementById(status === 'draft' ? 'ut-reward-save-draft' : 'ut-reward-publish');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
     try {
-      const resp = await fetch(`/api/unlockables?artist=${artistAddress}`);
+      const resp = await fetch('/api/rewards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const data = await resp.json();
-      const isOwner = viewerAddress && viewerAddress.toLowerCase() === artistAddress.toLowerCase();
-      // Always show for owner, show for others only if setup complete
-      return isOwner || data.config?.tab_setup_complete;
+      if (data.error) throw new Error(data.error);
+
+      if (typeof Modals !== 'undefined' && Modals.showToast) {
+        Modals.showToast(status === 'draft' ? 'Reward saved as draft!' : 'Reward published!');
+      }
+
+      this.rewardCount = (this.rewardCount || 0) + (this._rewardEditId ? 0 : 1);
+      this.renderOwnerDashboard();
     } catch (e) {
-      return false;
+      console.error('Submit reward error:', e);
+      alert('Failed to save reward: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = status === 'draft' ? 'Save as Draft' : (this._rewardEditId ? 'Update Reward' : 'Create Reward'); }
     }
   },
 
-  /**
-   * Static: check if the tab should show a ! badge (unviewed new tab for artist)
-   */
-  shouldShowBadge(config) {
-    return config && !config.tab_setup_complete;
+  // ─── CONTENT FEED PAGE (Instagram-style) ───────────────
+
+  async showContentFeedPage() {
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-page">
+        <div class="ut-page-header">
+          <button class="ut-back-btn" id="ut-back-dash2">← Back</button>
+          <h2 class="ut-page-title">Unlockable Content</h2>
+          <button class="btn btn-primary btn-sm" id="ut-new-post-btn">+ New Post</button>
+        </div>
+        <div id="ut-content-feed" class="ut-feed-grid">
+          <div class="ut-loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('ut-back-dash2')?.addEventListener('click', () => this.renderOwnerDashboard());
+    document.getElementById('ut-new-post-btn')?.addEventListener('click', () => this.showCreatePostModal());
+
+    await this.loadContentFeed();
   },
 
-  // ─── Styles ─────────────────────────────────────────
+  async loadContentFeed() {
+    const container = document.getElementById('ut-content-feed');
+    if (!container) return;
+
+    try {
+      const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true`);
+      const data = await resp.json();
+      const posts = data.posts || [];
+      this.posts = posts;
+
+      if (posts.length === 0) {
+        container.innerHTML = `
+          <div class="ut-empty-state">
+            <div class="ut-empty-icon">📝</div>
+            <h3>No Posts Yet</h3>
+            <p>Share exclusive content with your NFT holders.</p>
+            <button class="btn btn-primary" id="ut-empty-new-post">Create First Post</button>
+          </div>
+        `;
+        document.getElementById('ut-empty-new-post')?.addEventListener('click', () => this.showCreatePostModal());
+        return;
+      }
+
+      // Instagram-style grid
+      container.innerHTML = posts.map((post, idx) => {
+        const media = post.media_urls || [];
+        const firstMedia = media[0] || post.image_url;
+        const isVideo = firstMedia && firstMedia.match(/\.(mp4|mov|webm)/i);
+        const hasMultiple = media.length > 1;
+        const isLocked = post.access_type === 'specific_release';
+
+        return `
+          <div class="ut-grid-card" data-post-idx="${idx}">
+            <div class="ut-grid-card-media">
+              ${firstMedia
+                ? isVideo
+                  ? `<video src="${firstMedia}" class="ut-grid-card-img" preload="metadata"></video>`
+                  : `<img src="${firstMedia}" class="ut-grid-card-img" onerror="this.src='/placeholder.png'" />`
+                : `<div class="ut-grid-card-text-preview">${(post.content || '').slice(0, 120)}</div>`
+              }
+              ${hasMultiple ? '<div class="ut-grid-card-multi">📷 ' + media.length + '</div>' : ''}
+              ${isLocked ? '<div class="ut-grid-card-key">🔑</div>' : ''}
+              ${post.pinned ? '<div class="ut-grid-card-pin">📌</div>' : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Click to expand
+      container.querySelectorAll('.ut-grid-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const idx = parseInt(card.dataset.postIdx);
+          this.showPostDetail(posts[idx]);
+        });
+      });
+
+    } catch (e) {
+      console.error('Load feed error:', e);
+      container.innerHTML = '<div class="ut-error">Failed to load posts</div>';
+    }
+  },
+
+  showPostDetail(post) {
+    const media = post.media_urls || [];
+    if (media.length === 0 && post.image_url) media.push(post.image_url);
+    if (media.length === 0 && post.video_url) media.push(post.video_url);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ut-post-overlay';
+    overlay.innerHTML = `
+      <div class="ut-post-modal">
+        <button class="ut-post-close">✕</button>
+        
+        <!-- Media Carousel -->
+        ${media.length > 0 ? `
+          <div class="ut-carousel" id="ut-carousel">
+            <div class="ut-carousel-track" id="ut-carousel-track" style="width:${media.length * 100}%;">
+              ${media.map(url => {
+                const isVid = url.match(/\.(mp4|mov|webm)/i);
+                return `
+                  <div class="ut-carousel-slide" style="width:${100 / media.length}%;">
+                    ${isVid
+                      ? `<video src="${url}" controls class="ut-carousel-media"></video>`
+                      : `<img src="${url}" class="ut-carousel-media" />`
+                    }
+                  </div>
+                `;
+              }).join('')}
+            </div>
+            ${media.length > 1 ? `
+              <button class="ut-carousel-prev" id="ut-carousel-prev">‹</button>
+              <button class="ut-carousel-next" id="ut-carousel-next">›</button>
+              <div class="ut-carousel-dots">
+                ${media.map((_, i) => `<div class="ut-carousel-dot ${i === 0 ? 'active' : ''}" data-idx="${i}"></div>`).join('')}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <!-- Post Content -->
+        <div class="ut-post-body">
+          <div class="ut-post-content">${post.content || ''}</div>
+          <div class="ut-post-meta">
+            ${post.created_at ? new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+            ${post.access_type === 'specific_release' ? ' • 🔑 Requires specific NFT' : ''}
+          </div>
+
+          ${this.isOwner ? `
+            <div class="ut-post-owner-actions">
+              <button class="ut-link-btn ut-edit-post" data-post-id="${post.id}">Edit</button>
+              <button class="ut-link-btn ut-delete-post" data-post-id="${post.id}" style="color:var(--error);">Delete</button>
+              <button class="ut-link-btn ut-pin-post" data-post-id="${post.id}">${post.pinned ? 'Unpin' : 'Pin'}</button>
+            </div>
+          ` : ''}
+
+          <!-- Comments -->
+          <div class="ut-comments-section">
+            <h4 class="ut-comments-title">Comments</h4>
+            <div class="ut-comments-list" id="ut-comments-list">
+              ${(post.comments || []).map(c => `
+                <div class="ut-comment">
+                  <span class="ut-comment-name">${c.commenter_name || Helpers.truncateAddress(c.commenter_address)}</span>
+                  <span class="ut-comment-text">${c.content}</span>
+                  <span class="ut-comment-time">${new Date(c.created_at).toLocaleDateString()}</span>
+                </div>
+              `).join('')}
+              ${(post.comments || []).length === 0 ? '<div class="ut-empty-sm">No comments yet</div>' : ''}
+            </div>
+            ${this.hasAccess ? `
+              <div class="ut-comment-form">
+                <input type="text" class="ut-input" id="ut-comment-input" placeholder="Write a comment..." />
+                <button class="btn btn-primary btn-sm" id="ut-comment-submit">Post</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Close
+    overlay.querySelector('.ut-post-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    // Carousel navigation
+    let currentSlide = 0;
+    const track = overlay.querySelector('#ut-carousel-track');
+    const dots = overlay.querySelectorAll('.ut-carousel-dot');
+    const goTo = (idx) => {
+      currentSlide = Math.max(0, Math.min(idx, media.length - 1));
+      if (track) track.style.transform = `translateX(-${currentSlide * (100 / media.length)}%)`;
+      dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    };
+    overlay.querySelector('#ut-carousel-prev')?.addEventListener('click', () => goTo(currentSlide - 1));
+    overlay.querySelector('#ut-carousel-next')?.addEventListener('click', () => goTo(currentSlide + 1));
+    dots.forEach(dot => dot.addEventListener('click', () => goTo(parseInt(dot.dataset.idx))));
+
+    // Comment submit
+    overlay.querySelector('#ut-comment-submit')?.addEventListener('click', async () => {
+      const input = overlay.querySelector('#ut-comment-input');
+      const text = input?.value?.trim();
+      if (!text) return;
+      try {
+        await fetch('/api/unlockables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'comment',
+            post_id: post.id,
+            commenter_address: this.viewerAddress,
+            content: text,
+          })
+        });
+        input.value = '';
+        const list = overlay.querySelector('#ut-comments-list');
+        const profile = AppState.profile || {};
+        list.innerHTML += `
+          <div class="ut-comment">
+            <span class="ut-comment-name">${profile.name || Helpers.truncateAddress(this.viewerAddress)}</span>
+            <span class="ut-comment-text">${text}</span>
+            <span class="ut-comment-time">Just now</span>
+          </div>
+        `;
+      } catch (e) { console.error('Comment error:', e); }
+    });
+
+    // Owner actions
+    overlay.querySelector('.ut-delete-post')?.addEventListener('click', async () => {
+      if (!confirm('Delete this post?')) return;
+      try {
+        await fetch('/api/unlockables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete_post', id: post.id, artist: this.artistAddress })
+        });
+        overlay.remove();
+        this.showContentFeedPage();
+      } catch (e) { alert('Failed to delete'); }
+    });
+
+    overlay.querySelector('.ut-edit-post')?.addEventListener('click', () => {
+      overlay.remove();
+      this.showCreatePostModal(post);
+    });
+  },
+
+  // ─── CREATE POST MODAL (multi-media carousel) ─────────
+
+  showCreatePostModal(existingPost = null) {
+    const isEdit = !!existingPost;
+    const p = existingPost || {};
+    const existingMedia = p.media_urls || [];
+    if (!existingMedia.length && p.image_url) existingMedia.push(p.image_url);
+    if (!existingMedia.length && p.video_url) existingMedia.push(p.video_url);
+
+    document.querySelector('.ut-post-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'ut-post-overlay';
+    overlay.innerHTML = `
+      <div class="ut-post-modal" style="max-width:520px;">
+        <button class="ut-post-close">✕</button>
+        <div class="ut-post-body">
+          <h3 style="margin-bottom:16px;">${isEdit ? 'Edit Post' : 'New Post'}</h3>
+
+          <!-- Text -->
+          <div class="ut-form-group">
+            <textarea class="ut-textarea" id="ut-post-content" rows="4" placeholder="What do you want to share with your holders?">${p.content || ''}</textarea>
+          </div>
+
+          <!-- Media Upload -->
+          <div class="ut-form-group">
+            <label class="ut-label">Photos / Videos <span class="ut-label-hint">(up to 10)</span></label>
+            <div class="ut-media-grid" id="ut-post-media-grid">
+              ${existingMedia.map((url, i) => `
+                <div class="ut-media-thumb" data-idx="${i}">
+                  ${url.match(/\.(mp4|mov|webm)/i)
+                    ? `<video src="${url}" class="ut-media-thumb-img"></video>`
+                    : `<img src="${url}" class="ut-media-thumb-img" />`
+                  }
+                  <button class="ut-media-remove" data-idx="${i}">✕</button>
+                </div>
+              `).join('')}
+              <div class="ut-media-add" id="ut-post-media-add">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <input type="file" id="ut-post-media-input" accept="image/*,video/*" multiple style="display:none" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Per-post access control -->
+          <div class="ut-form-group">
+            <label class="ut-label">Access</label>
+            <select class="ut-select" id="ut-post-access">
+              <option value="page_default" ${(p.access_type || 'page_default') === 'page_default' ? 'selected' : ''}>Page default (any NFT holder)</option>
+              <option value="specific_release" ${p.access_type === 'specific_release' ? 'selected' : ''}>Requires specific NFT</option>
+            </select>
+          </div>
+          <div id="ut-post-release-row" style="display:${p.access_type === 'specific_release' ? 'block' : 'none'};">
+            <select class="ut-select" id="ut-post-release">
+              <option value="">Select a release...</option>
+              ${this.artistReleases.map(r => `
+                <option value="${r.id}" ${p.required_release_id === r.id ? 'selected' : ''}>${r.title}</option>
+              `).join('')}
+            </select>
+          </div>
+
+          <!-- Pin option -->
+          <label class="ut-checkbox-label" style="margin-top:12px;">
+            <input type="checkbox" id="ut-post-pinned" ${p.pinned ? 'checked' : ''} />
+            <span>Pin this post to top</span>
+          </label>
+
+          <div class="ut-form-actions" style="margin-top:20px;">
+            <button class="btn btn-secondary" id="ut-post-cancel">Cancel</button>
+            <button class="btn btn-primary" id="ut-post-submit">${isEdit ? 'Update Post' : 'Post'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    this._postMediaUrls = [...existingMedia];
+    this._postEditId = isEdit ? p.id : null;
+
+    // Close
+    overlay.querySelector('.ut-post-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#ut-post-cancel')?.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    // Media add
+    overlay.querySelector('#ut-post-media-add')?.addEventListener('click', () => {
+      overlay.querySelector('#ut-post-media-input')?.click();
+    });
+    overlay.querySelector('#ut-post-media-input')?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      for (const file of files.slice(0, 10 - this._postMediaUrls.length)) {
+        const url = await this.uploadFile(file);
+        if (url) this._postMediaUrls.push(url);
+      }
+      this.refreshMediaGrid('ut-post-media-grid', this._postMediaUrls, 'post');
+    });
+
+    // Media remove
+    overlay.querySelector('#ut-post-media-grid')?.addEventListener('click', (e) => {
+      const removeBtn = e.target.closest('.ut-media-remove');
+      if (removeBtn) {
+        const idx = parseInt(removeBtn.dataset.idx);
+        this._postMediaUrls.splice(idx, 1);
+        this.refreshMediaGrid('ut-post-media-grid', this._postMediaUrls, 'post');
+      }
+    });
+
+    // Access toggle
+    overlay.querySelector('#ut-post-access')?.addEventListener('change', (e) => {
+      overlay.querySelector('#ut-post-release-row').style.display = e.target.value === 'specific_release' ? 'block' : 'none';
+    });
+
+    // Submit
+    overlay.querySelector('#ut-post-submit')?.addEventListener('click', async () => {
+      const content = overlay.querySelector('#ut-post-content')?.value?.trim() || '';
+      if (!content && this._postMediaUrls.length === 0) {
+        alert('Please add some text or media');
+        return;
+      }
+
+      const accessType = overlay.querySelector('#ut-post-access')?.value || 'page_default';
+      const releaseId = overlay.querySelector('#ut-post-release')?.value || null;
+      const pinned = overlay.querySelector('#ut-post-pinned')?.checked || false;
+
+      const payload = {
+        action: this._postEditId ? 'update_post' : 'create_post',
+        artist: this.artistAddress,
+        content,
+        media_urls: this._postMediaUrls,
+        image_url: this._postMediaUrls[0] || null,
+        access_type: accessType,
+        required_release_id: accessType === 'specific_release' ? releaseId : null,
+        pinned,
+      };
+      if (this._postEditId) payload.id = this._postEditId;
+
+      const btn = overlay.querySelector('#ut-post-submit');
+      if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
+
+      try {
+        const resp = await fetch('/api/unlockables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        overlay.remove();
+        this.postCount = (this.postCount || 0) + (this._postEditId ? 0 : 1);
+        // If we're on the feed page, refresh it; otherwise go to dashboard
+        const feedContainer = document.getElementById('ut-content-feed');
+        if (feedContainer) {
+          this.loadContentFeed();
+        } else {
+          this.renderOwnerDashboard();
+        }
+      } catch (e) {
+        console.error('Post submit error:', e);
+        alert('Failed to save post: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = this._postEditId ? 'Update Post' : 'Post'; }
+      }
+    });
+  },
+
+  // ─── HOLDER VIEW (sees content + rewards) ──────────────
+
+  async renderHolderView() {
+    const cfg = this.config || {};
+
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-holder-page">
+        ${cfg.welcome_message ? `<div class="ut-welcome-msg">${cfg.welcome_message}</div>` : ''}
+
+        <!-- Sub-tabs: Posts | Rewards -->
+        <div class="ut-sub-tabs">
+          <button class="ut-sub-tab active" data-subtab="posts">Posts</button>
+          <button class="ut-sub-tab" data-subtab="rewards">Rewards</button>
+        </div>
+
+        <div id="ut-holder-content">
+          <div class="ut-loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    `;
+
+    // Sub-tab switching
+    this.container.querySelectorAll('.ut-sub-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        this.container.querySelectorAll('.ut-sub-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        if (tab.dataset.subtab === 'posts') this.loadHolderPosts();
+        else this.loadHolderRewards();
+      });
+    });
+
+    await this.loadHolderPosts();
+  },
+
+  async loadHolderPosts() {
+    const content = document.getElementById('ut-holder-content');
+    if (!content) return;
+    content.innerHTML = '<div class="ut-loading"><div class="spinner"></div></div>';
+
+    try {
+      const resp = await fetch(`/api/unlockables?artist=${this.artistAddress}&posts=true`);
+      const data = await resp.json();
+      const posts = (data.posts || []).filter(p => !p.access_type || p.access_type === 'page_default');
+      
+      // Also check specific_release posts the user has access to
+      const allPosts = data.posts || [];
+      const accessiblePosts = [];
+      for (const post of allPosts) {
+        if (await this.checkPostAccess(post)) {
+          accessiblePosts.push(post);
+        }
+      }
+
+      if (accessiblePosts.length === 0) {
+        content.innerHTML = '<div class="ut-empty-state"><div class="ut-empty-icon">📝</div><h3>No Posts Yet</h3><p>The artist hasn\'t posted any exclusive content yet.</p></div>';
+        return;
+      }
+
+      // Instagram grid
+      content.innerHTML = `<div class="ut-feed-grid">${accessiblePosts.map((post, idx) => {
+        const media = post.media_urls || [];
+        const firstMedia = media[0] || post.image_url;
+        const isVideo = firstMedia && firstMedia.match(/\.(mp4|mov|webm)/i);
+        return `
+          <div class="ut-grid-card" data-holder-post-idx="${idx}">
+            <div class="ut-grid-card-media">
+              ${firstMedia
+                ? isVideo
+                  ? `<video src="${firstMedia}" class="ut-grid-card-img" preload="metadata"></video>`
+                  : `<img src="${firstMedia}" class="ut-grid-card-img" onerror="this.src='/placeholder.png'" />`
+                : `<div class="ut-grid-card-text-preview">${(post.content || '').slice(0, 120)}</div>`
+              }
+              ${media.length > 1 ? '<div class="ut-grid-card-multi">📷 ' + media.length + '</div>' : ''}
+              ${post.pinned ? '<div class="ut-grid-card-pin">📌</div>' : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}</div>`;
+
+      content.querySelectorAll('.ut-grid-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const idx = parseInt(card.dataset.holderPostIdx);
+          this.showPostDetail(accessiblePosts[idx]);
+        });
+      });
+
+    } catch (e) {
+      content.innerHTML = '<div class="ut-error">Failed to load posts</div>';
+    }
+  },
+
+  async loadHolderRewards() {
+    const content = document.getElementById('ut-holder-content');
+    if (!content) return;
+    content.innerHTML = '<div class="ut-loading"><div class="spinner"></div></div>';
+
+    try {
+      const resp = await fetch(`/api/rewards?artist=${this.artistAddress}`);
+      const data = await resp.json();
+      const rewards = (data.rewards || []).filter(r => r.status === 'active');
+
+      if (rewards.length === 0) {
+        content.innerHTML = '<div class="ut-empty-state"><div class="ut-empty-icon">🎁</div><h3>No Rewards Available</h3><p>Check back later for exclusive rewards!</p></div>';
+        return;
+      }
+
+      content.innerHTML = `<div class="ut-rewards-grid">${rewards.map(r => `
+        <div class="ut-reward-card" data-reward-id="${r.id}">
+          ${r.image_url ? `<img src="${r.image_url}" class="ut-reward-card-img" onerror="this.src='/placeholder.png'" />` : `<div class="ut-reward-card-placeholder">🎁</div>`}
+          <div class="ut-reward-card-body">
+            <div class="ut-reward-card-title">${r.title}</div>
+            <div class="ut-reward-card-type">${r.reward_type || 'Reward'}</div>
+            ${r.description ? `<div class="ut-reward-card-desc">${r.description.slice(0, 100)}${r.description.length > 100 ? '...' : ''}</div>` : ''}
+            <div class="ut-reward-card-meta">
+              ${r.max_claims ? `${r.claim_count || 0}/${r.max_claims} claimed` : `${r.claim_count || 0} claimed`}
+              ${r.expires_at ? ` • Ends ${new Date(r.expires_at).toLocaleDateString()}` : ''}
+            </div>
+            <button class="btn btn-primary btn-sm ut-claim-btn" data-reward-id="${r.id}" style="margin-top:10px;">Claim Reward</button>
+          </div>
+        </div>
+      `).join('')}</div>`;
+
+      content.querySelectorAll('.ut-claim-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.claimReward(btn.dataset.rewardId, btn);
+        });
+      });
+
+    } catch (e) {
+      content.innerHTML = '<div class="ut-error">Failed to load rewards</div>';
+    }
+  },
+
+  async claimReward(rewardId, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Claiming...'; }
+    try {
+      const resp = await fetch('/api/rewards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'claim',
+          reward_id: rewardId,
+          claimer_address: this.viewerAddress,
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      if (btn) { btn.textContent = '✓ Claimed!'; btn.style.background = '#22c55e'; }
+    } catch (e) {
+      alert('Failed to claim: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Claim Reward'; }
+    }
+  },
+
+  // ─── LOCKED VIEW (non-holders see teaser) ──────────────
+
+  renderLockedView() {
+    const cfg = this.config || {};
+
+    this.container.innerHTML = `
+      ${this.getStyles()}
+      <div class="ut-locked-page">
+        <div class="ut-locked-icon">🔒</div>
+        <h2 class="ut-locked-title">Exclusive Content</h2>
+        <p class="ut-locked-desc">${cfg.private_page_description || 'This content is exclusively available to NFT holders.'}</p>
+        <div class="ut-locked-stats">
+          ${this.postCount > 0 ? `<span>${this.postCount} exclusive post${this.postCount > 1 ? 's' : ''}</span>` : ''}
+          ${this.rewardCount > 0 ? `<span>${this.rewardCount} reward${this.rewardCount > 1 ? 's' : ''} available</span>` : ''}
+        </div>
+        <button class="btn btn-primary" onclick="Router.navigate('marketplace')">Browse Music to Unlock</button>
+      </div>
+    `;
+  },
+
+  // ─── HELPERS ───────────────────────────────────────────
+
+  async uploadFile(file) {
+    try {
+      // Get upload config
+      const configResp = await fetch('/api/upload-config');
+      const config = await configResp.json();
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResp = await fetch(`https://node.lighthouse.storage/api/v0/add`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${config.apiKey}` },
+        body: formData
+      });
+      const uploadData = await uploadResp.json();
+      if (uploadData.Hash) {
+        return `/api/ipfs/${uploadData.Hash}`;
+      }
+      return null;
+    } catch (e) {
+      console.error('Upload error:', e);
+      alert('Failed to upload file');
+      return null;
+    }
+  },
+
+  refreshMediaGrid(gridId, urls, prefix) {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+
+    const thumbs = urls.map((url, i) => {
+      const isVid = url.match(/\.(mp4|mov|webm)/i);
+      return `
+        <div class="ut-media-thumb" data-idx="${i}">
+          ${isVid
+            ? `<video src="${url}" class="ut-media-thumb-img"></video>`
+            : `<img src="${url}" class="ut-media-thumb-img" />`
+          }
+          <button class="ut-media-remove" data-idx="${i}">✕</button>
+        </div>
+      `;
+    }).join('');
+
+    const maxItems = prefix === 'post' ? 10 : 5;
+    const addBtn = urls.length < maxItems ? `
+      <div class="ut-media-add" id="ut-${prefix}-media-add">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <input type="file" id="ut-${prefix}-media-input" accept="image/*,video/*" multiple style="display:none" />
+      </div>
+    ` : '';
+
+    grid.innerHTML = thumbs + addBtn;
+
+    // Rebind add button
+    grid.querySelector(`#ut-${prefix}-media-add`)?.addEventListener('click', () => {
+      grid.querySelector(`#ut-${prefix}-media-input`)?.click();
+    });
+    grid.querySelector(`#ut-${prefix}-media-input`)?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      const targetArr = prefix === 'post' ? this._postMediaUrls : this._rewardMediaUrls;
+      for (const file of files.slice(0, maxItems - targetArr.length)) {
+        const url = await this.uploadFile(file);
+        if (url) targetArr.push(url);
+      }
+      this.refreshMediaGrid(gridId, targetArr, prefix);
+    });
+  },
+
+  // ─── STYLES ────────────────────────────────────────────
 
   getStyles() {
-    return `
-      <style>
-        .unlockable-loading { padding: 60px; text-align: center; color: var(--text-muted); }
+    return `<style>
+      /* Loading & Error */
+      .ut-loading { text-align:center; padding:40px; color:var(--text-muted); }
+      .ut-loading-sm { text-align:center; padding:20px; }
+      .ut-error { text-align:center; padding:40px; color:var(--error); }
+      .ut-empty-sm { color:var(--text-muted); font-size:13px; padding:12px 0; }
 
-        /* Setup Banner */
-        .unlock-setup-banner {
-          display: flex; align-items: center; gap: 16px; padding: 20px 24px;
-          background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.1));
-          border: 1px solid rgba(139,92,246,0.3); border-radius: var(--radius-lg); margin-bottom: 24px;
-        }
-        .setup-icon { font-size: 36px; }
-        .unlock-setup-banner h3 { margin: 0; font-size: 16px; color: var(--text-primary); }
-        .unlock-setup-banner p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
+      /* Dashboard */
+      .ut-dashboard { max-width:800px; margin:0 auto; }
+      .ut-setup-banner {
+        display:flex; align-items:center; gap:20px; padding:24px;
+        background:linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.1));
+        border:1px solid rgba(139,92,246,0.3); border-radius:16px; margin-bottom:24px;
+      }
+      .ut-setup-icon { font-size:40px; }
+      .ut-setup-info { flex:1; }
+      .ut-setup-title { font-size:18px; font-weight:700; margin-bottom:4px; }
+      .ut-setup-desc { font-size:14px; color:var(--text-muted); }
+      @media(max-width:600px) { .ut-setup-banner { flex-direction:column; text-align:center; } }
 
-        /* Quick Actions */
-        .unlock-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-        .unlock-action-card {
-          display: flex; flex-direction: column; align-items: center; gap: 6px;
-          padding: 20px 12px; background: var(--bg-card); border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg); cursor: pointer; transition: all 150ms; text-align: center;
-        }
-        .unlock-action-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-        .action-icon { font-size: 28px; }
-        .action-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-        .action-desc { font-size: 11px; color: var(--text-muted); }
+      /* Action Grid */
+      .ut-action-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:24px; }
+      @media(max-width:600px) { .ut-action-grid { grid-template-columns:1fr; } }
+      .ut-action-card {
+        display:flex; flex-direction:column; align-items:center; gap:10px;
+        padding:28px 16px; background:var(--bg-secondary, rgba(255,255,255,0.03));
+        border:1px solid var(--border-color); border-radius:16px;
+        cursor:pointer; transition:all 0.2s; text-align:center;
+      }
+      .ut-action-card:hover { background:var(--bg-hover); border-color:var(--accent); transform:translateY(-2px); }
+      .ut-action-icon { font-size:32px; }
+      .ut-action-title { font-size:15px; font-weight:700; }
+      .ut-action-desc { font-size:12px; color:var(--text-muted); }
 
-        /* Stats */
-        .unlock-stats { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-        .stat-pill {
-          padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border-color);
-          border-radius: 100px; font-size: 13px; color: var(--text-secondary);
-        }
-        .stat-num { font-weight: 700; color: var(--accent); margin-right: 4px; }
+      /* Stats */
+      .ut-stats-row {
+        display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px;
+      }
+      .ut-stat {
+        padding:10px 18px; background:var(--bg-secondary, rgba(255,255,255,0.03));
+        border:1px solid var(--border-color); border-radius:12px;
+        font-size:13px; color:var(--text-secondary);
+      }
+      .ut-stat-num { font-weight:700; color:var(--accent); margin-right:4px; }
 
-        /* Section */
-        .unlock-section { margin-bottom: 28px; }
-        .unlock-section-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; }
-        .unlock-section-desc { font-size: 13px; color: var(--text-muted); margin: -8px 0 12px; }
-        .unlock-empty { padding: 40px; text-align: center; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-lg); }
+      /* Sections */
+      .ut-section { margin-bottom:28px; }
+      .ut-section-title { font-size:16px; font-weight:700; margin-bottom:12px; }
 
-        /* Reward Cards */
-        .rewards-list { display: grid; gap: 12px; }
-        .reward-card {
-          display: flex; gap: 16px; padding: 16px; background: var(--bg-card);
-          border: 1px solid var(--border-color); border-radius: var(--radius-lg); transition: all 150ms;
-        }
-        .reward-card:hover { border-color: rgba(139,92,246,0.4); }
-        .reward-card.inactive { opacity: 0.6; }
-        .reward-card.expired { opacity: 0.5; }
-        .reward-image { width: 100px; min-width: 100px; border-radius: var(--radius-md); overflow: hidden; }
-        .reward-image img { width: 100%; height: 100%; object-fit: cover; }
-        .reward-info { flex: 1; min-width: 0; }
-        .reward-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-        .reward-type-badge { font-size: 18px; }
-        .reward-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
-        .reward-status-badge {
-          padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600; text-transform: uppercase;
-        }
-        .reward-status-badge.paused { background: rgba(234,179,8,0.2); color: #eab308; }
-        .reward-status-badge.completed { background: rgba(34,197,94,0.2); color: #22c55e; }
-        .reward-desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; line-height: 1.4; }
-        .reward-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-        .reward-meta span { font-size: 11px; color: var(--text-muted); }
-        .reward-remaining { color: var(--warning) !important; }
-        .reward-expires { color: var(--error) !important; }
-        .reward-manage-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      /* Claims */
+      .ut-claims-list { display:flex; flex-direction:column; gap:4px; }
+      .ut-claim-row {
+        display:flex; justify-content:space-between; align-items:center;
+        padding:10px 16px; background:var(--bg-secondary, rgba(255,255,255,0.02));
+        border-radius:10px; font-size:13px;
+      }
+      .ut-claim-info { display:flex; gap:6px; flex-wrap:wrap; }
+      .ut-claim-name { font-weight:600; color:var(--text-primary); }
+      .ut-claim-action { color:var(--text-muted); }
+      .ut-claim-reward { color:var(--accent); }
+      .ut-claim-time { color:var(--text-muted); font-size:12px; white-space:nowrap; }
 
-        .reward-claim-btn { margin-top: 4px; }
-        .reward-claim-btn.claimed { background: var(--success); border-color: var(--success); }
+      /* Settings Card */
+      .ut-settings-card {
+        padding:20px; background:var(--bg-secondary, rgba(255,255,255,0.02));
+        border:1px solid var(--border-color); border-radius:14px;
+      }
+      .ut-setting-row { margin-bottom:16px; }
+      .ut-setting-label { font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:6px; }
 
-        /* Access Banner */
-        .unlock-access-banner {
-          display: flex; align-items: center; gap: 10px; padding: 12px 20px;
-          background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(59,130,246,0.1));
-          border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-lg); margin-bottom: 20px;
-          font-size: 14px; color: var(--text-primary);
-        }
-        .access-icon { font-size: 20px; }
+      /* Forms */
+      .ut-page { max-width:680px; margin:0 auto; }
+      .ut-page-header { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
+      .ut-page-title { font-size:22px; font-weight:700; flex:1; }
+      .ut-back-btn {
+        padding:8px 14px; border:1px solid var(--border-color); border-radius:10px;
+        background:transparent; color:var(--text-secondary); font-size:13px;
+        cursor:pointer; transition:all 0.15s; white-space:nowrap;
+      }
+      .ut-back-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
+      .ut-form { display:flex; flex-direction:column; gap:20px; }
+      .ut-form-group { display:flex; flex-direction:column; gap:6px; }
+      .ut-label { font-size:13px; font-weight:700; color:var(--text-secondary); }
+      .ut-label-hint { font-weight:400; color:var(--text-muted); }
+      .ut-input, .ut-textarea, .ut-select {
+        width:100%; padding:12px 14px; background:var(--bg-hover, rgba(255,255,255,0.04));
+        border:1px solid var(--border-color); border-radius:10px;
+        color:var(--text-primary); font-size:14px; outline:none;
+        transition:border-color 0.2s; box-sizing:border-box;
+      }
+      .ut-input:focus, .ut-textarea:focus, .ut-select:focus { border-color:var(--accent); }
+      .ut-textarea { resize:vertical; font-family:inherit; }
+      .ut-select { cursor:pointer; }
 
-        /* Sub-tabs */
-        .unlock-subtabs { display: flex; gap: 4px; margin-bottom: 20px; }
-        .unlock-subtab {
-          padding: 10px 20px; background: var(--bg-card); border: 1px solid var(--border-color);
-          border-radius: var(--radius-md); font-size: 13px; font-weight: 500;
-          color: var(--text-secondary); cursor: pointer; transition: all 150ms;
-        }
-        .unlock-subtab:hover { border-color: var(--accent); }
-        .unlock-subtab.active { border-color: var(--accent); background: rgba(59,130,246,0.1); color: var(--accent); }
-        .subtab-count {
-          display: inline-block; padding: 1px 7px; background: var(--bg-hover);
-          border-radius: 100px; font-size: 11px; margin-left: 4px;
-        }
-        .unlock-subtab.active .subtab-count { background: var(--accent); color: white; }
+      /* Upload zone */
+      .ut-upload-zone {
+        display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+        padding:32px; border:2px dashed var(--border-color); border-radius:14px;
+        cursor:pointer; transition:all 0.2s; color:var(--text-muted);
+        min-height:120px; text-align:center;
+      }
+      .ut-upload-zone:hover { border-color:var(--accent); background:rgba(139,92,246,0.05); }
+      .ut-upload-preview { max-width:100%; max-height:200px; border-radius:10px; object-fit:contain; }
 
-        /* Locked View */
-        .locked-hero { text-align: center; padding: 48px 24px; }
-        .locked-icon { font-size: 56px; margin-bottom: 16px; }
-        .locked-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; }
-        .locked-desc { font-size: 15px; color: var(--text-secondary); max-width: 480px; margin: 0 auto 24px; line-height: 1.5; }
-        .locked-what-you-get { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 0 auto 24px; }
-        .locked-perk {
-          display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-          background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md);
-          font-size: 13px; color: var(--text-secondary);
-        }
-        .perk-icon { font-size: 18px; }
-        .locked-cta { font-size: 14px; color: var(--accent); font-weight: 500; }
+      /* Media grid */
+      .ut-media-grid { display:flex; gap:10px; flex-wrap:wrap; }
+      .ut-media-thumb {
+        position:relative; width:80px; height:80px; border-radius:10px;
+        overflow:hidden; border:1px solid var(--border-color);
+      }
+      .ut-media-thumb-img { width:100%; height:100%; object-fit:cover; }
+      .ut-media-remove {
+        position:absolute; top:4px; right:4px; width:20px; height:20px;
+        border:none; border-radius:50%; background:rgba(0,0,0,0.7); color:white;
+        font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+      }
+      .ut-media-add {
+        width:80px; height:80px; border:2px dashed var(--border-color); border-radius:10px;
+        display:flex; align-items:center; justify-content:center;
+        cursor:pointer; transition:all 0.2s; color:var(--text-muted);
+      }
+      .ut-media-add:hover { border-color:var(--accent); }
 
-        /* Posts Feed */
-        .posts-feed { display: flex; flex-direction: column; gap: 16px; }
-        .private-post {
-          padding: 16px 20px; background: var(--bg-card); border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-        }
-        .post-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .post-date { font-size: 12px; color: var(--text-muted); }
-        .post-content { font-size: 14px; color: var(--text-primary); line-height: 1.5; margin-bottom: 12px; white-space: pre-wrap; }
-        .post-image { max-width: 100%; border-radius: var(--radius-md); margin-bottom: 12px; }
-        .post-video { max-width: 100%; border-radius: var(--radius-md); margin-bottom: 12px; }
+      /* NFT Picker */
+      .ut-nft-picker { display:flex; gap:16px; flex-wrap:wrap; }
+      .ut-radio-label { display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer; }
+      .ut-checkbox-label { display:flex; align-items:center; gap:10px; font-size:14px; cursor:pointer; padding:6px 0; }
+      .ut-release-checklist {
+        max-height:240px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;
+        padding:12px; background:var(--bg-secondary, rgba(255,255,255,0.02));
+        border:1px solid var(--border-color); border-radius:10px; margin-top:8px;
+      }
+      .ut-release-thumb { width:32px; height:32px; border-radius:6px; object-fit:cover; flex-shrink:0; }
+      .ut-duration-row { display:flex; gap:16px; flex-wrap:wrap; }
+      .ut-link-btn {
+        padding:0; border:none; background:none; color:var(--accent);
+        font-size:13px; cursor:pointer; text-decoration:underline;
+      }
+      .ut-form-actions { display:flex; gap:12px; justify-content:flex-end; padding-top:8px; }
 
-        /* Comments */
-        .post-comments { border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 4px; }
-        .post-comment { display: flex; gap: 6px; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; }
-        .comment-author { font-size: 12px; font-weight: 600; color: var(--accent); }
-        .comment-text { font-size: 13px; color: var(--text-secondary); }
-        .comment-time { font-size: 10px; color: var(--text-muted); }
-        .comment-input-wrap { display: flex; gap: 8px; margin-top: 8px; }
-        .comment-input { flex: 1; padding: 8px 12px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13px; }
-        .comment-send-btn {
-          padding: 8px 16px; background: var(--accent); border: none; border-radius: var(--radius-md);
-          color: white; font-size: 13px; font-weight: 500; cursor: pointer;
-        }
+      /* Content Feed Grid */
+      .ut-feed-grid {
+        display:grid; grid-template-columns:repeat(3, 1fr); gap:4px;
+      }
+      @media(max-width:600px) { .ut-feed-grid { grid-template-columns:repeat(2, 1fr); } }
+      .ut-grid-card { position:relative; cursor:pointer; overflow:hidden; border-radius:4px; }
+      .ut-grid-card::before { content:''; display:block; padding-top:100%; }
+      .ut-grid-card-media { position:absolute; inset:0; }
+      .ut-grid-card-img { width:100%; height:100%; object-fit:cover; }
+      .ut-grid-card-text-preview {
+        padding:16px; font-size:13px; color:var(--text-secondary); line-height:1.5;
+        background:var(--bg-secondary, rgba(255,255,255,0.03)); height:100%;
+        overflow:hidden;
+      }
+      .ut-grid-card-multi {
+        position:absolute; top:8px; right:8px; padding:3px 8px;
+        background:rgba(0,0,0,0.7); border-radius:6px; font-size:11px; color:white;
+      }
+      .ut-grid-card-key {
+        position:absolute; bottom:8px; right:8px; padding:3px 8px;
+        background:rgba(0,0,0,0.7); border-radius:6px; font-size:11px;
+      }
+      .ut-grid-card-pin {
+        position:absolute; top:8px; left:8px; font-size:14px;
+      }
+      .ut-grid-card:hover { opacity:0.85; }
 
-        /* Claims */
-        .claim-row {
-          display: flex; align-items: center; gap: 8px; padding: 10px 0;
-          border-bottom: 1px solid var(--border-color); font-size: 13px;
-        }
-        .claim-who { font-weight: 600; color: var(--accent); }
-        .claim-what { color: var(--text-secondary); }
-        .claim-when { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+      /* Post Detail Overlay */
+      .ut-post-overlay {
+        position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(4px);
+        display:flex; align-items:center; justify-content:center;
+        z-index:9999; animation:utFadeIn 0.15s ease;
+      }
+      @keyframes utFadeIn { from{opacity:0} to{opacity:1} }
+      .ut-post-modal {
+        background:var(--bg-primary, #16162a); border:1px solid var(--border-color);
+        border-radius:16px; width:92%; max-width:600px; max-height:90vh;
+        overflow-y:auto; position:relative;
+      }
+      .ut-post-close {
+        position:absolute; top:12px; right:12px; z-index:10;
+        width:32px; height:32px; border:none; border-radius:50%;
+        background:rgba(0,0,0,0.5); color:white; font-size:16px;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+      }
 
-        /* Form helpers */
-        .form-row { display: flex; gap: 12px; }
-        .radio-group { display: flex; flex-direction: column; gap: 8px; }
-        .radio-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
-        .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+      /* Carousel */
+      .ut-carousel { position:relative; overflow:hidden; background:#000; }
+      .ut-carousel-track { display:flex; transition:transform 0.3s ease; }
+      .ut-carousel-slide { flex-shrink:0; }
+      .ut-carousel-media { width:100%; max-height:500px; object-fit:contain; display:block; }
+      .ut-carousel-prev, .ut-carousel-next {
+        position:absolute; top:50%; transform:translateY(-50%);
+        width:36px; height:36px; border:none; border-radius:50%;
+        background:rgba(0,0,0,0.6); color:white; font-size:20px;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        z-index:5;
+      }
+      .ut-carousel-prev { left:8px; }
+      .ut-carousel-next { right:8px; }
+      .ut-carousel-dots { display:flex; justify-content:center; gap:6px; padding:10px; }
+      .ut-carousel-dot {
+        width:8px; height:8px; border-radius:50%;
+        background:rgba(255,255,255,0.3); cursor:pointer; transition:background 0.2s;
+      }
+      .ut-carousel-dot.active { background:white; }
 
-        /* Responsive */
-        @media (max-width: 640px) {
-          .unlock-actions { grid-template-columns: 1fr; }
-          .reward-card { flex-direction: column; }
-          .reward-image { width: 100%; height: 160px; }
-          .unlock-setup-banner { flex-direction: column; text-align: center; }
-          .locked-perk { font-size: 12px; }
-        }
-      </style>
-    `;
+      /* Post Body */
+      .ut-post-body { padding:20px; }
+      .ut-post-content { font-size:15px; line-height:1.6; white-space:pre-wrap; margin-bottom:12px; }
+      .ut-post-meta { font-size:12px; color:var(--text-muted); margin-bottom:16px; }
+      .ut-post-owner-actions { display:flex; gap:16px; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border-color); }
+
+      /* Comments */
+      .ut-comments-section { border-top:1px solid var(--border-color); padding-top:16px; }
+      .ut-comments-title { font-size:14px; font-weight:700; margin-bottom:12px; }
+      .ut-comments-list { display:flex; flex-direction:column; gap:10px; margin-bottom:12px; max-height:300px; overflow-y:auto; }
+      .ut-comment { font-size:14px; line-height:1.4; }
+      .ut-comment-name { font-weight:700; margin-right:6px; }
+      .ut-comment-text { color:var(--text-secondary); }
+      .ut-comment-time { color:var(--text-muted); font-size:11px; margin-left:6px; }
+      .ut-comment-form { display:flex; gap:8px; }
+      .ut-comment-form .ut-input { flex:1; padding:10px 12px; }
+
+      /* Rewards Grid */
+      .ut-rewards-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px; }
+      .ut-reward-card {
+        background:var(--bg-secondary, rgba(255,255,255,0.03));
+        border:1px solid var(--border-color); border-radius:14px; overflow:hidden;
+      }
+      .ut-reward-card-img { width:100%; height:180px; object-fit:cover; }
+      .ut-reward-card-placeholder {
+        height:120px; display:flex; align-items:center; justify-content:center;
+        font-size:40px; background:rgba(139,92,246,0.08);
+      }
+      .ut-reward-card-body { padding:16px; }
+      .ut-reward-card-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+      .ut-reward-card-type {
+        font-size:11px; font-weight:600; text-transform:uppercase;
+        color:var(--accent); letter-spacing:0.5px; margin-bottom:8px;
+      }
+      .ut-reward-card-desc { font-size:13px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; }
+      .ut-reward-card-meta { font-size:12px; color:var(--text-muted); }
+
+      /* Holder View */
+      .ut-holder-page { max-width:680px; margin:0 auto; }
+      .ut-welcome-msg {
+        padding:16px 20px; background:linear-gradient(135deg, rgba(139,92,246,0.1), rgba(59,130,246,0.05));
+        border:1px solid rgba(139,92,246,0.2); border-radius:12px;
+        font-size:14px; color:var(--text-secondary); margin-bottom:20px;
+      }
+      .ut-sub-tabs { display:flex; gap:4px; margin-bottom:20px; }
+      .ut-sub-tab {
+        padding:10px 20px; border:none; border-radius:10px;
+        background:transparent; color:var(--text-muted);
+        font-size:14px; font-weight:600; cursor:pointer; transition:all 0.15s;
+      }
+      .ut-sub-tab:hover { color:var(--text-secondary); }
+      .ut-sub-tab.active { background:var(--bg-hover); color:var(--text-primary); }
+
+      /* Locked View */
+      .ut-locked-page { text-align:center; padding:60px 20px; }
+      .ut-locked-icon { font-size:64px; margin-bottom:16px; }
+      .ut-locked-title { font-size:24px; font-weight:700; margin-bottom:8px; }
+      .ut-locked-desc { color:var(--text-muted); font-size:15px; margin-bottom:20px; max-width:400px; margin-left:auto; margin-right:auto; }
+      .ut-locked-stats { display:flex; gap:16px; justify-content:center; margin-bottom:24px; font-size:13px; color:var(--text-muted); }
+
+      /* Empty State */
+      .ut-empty-state { text-align:center; padding:40px 20px; }
+      .ut-empty-icon { font-size:48px; margin-bottom:12px; }
+      .ut-empty-state h3 { margin-bottom:8px; }
+      .ut-empty-state p { color:var(--text-muted); font-size:14px; margin-bottom:16px; }
+    </style>`;
   },
 };
