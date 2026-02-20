@@ -3952,20 +3952,60 @@ const totalPrice = albumPrice;
                 
             
                
+               <!-- Genre Selector -->
+                <div class="form-group" id="genre-selector-section">
+                  <label class="form-label">Genre(s)</label>
+                  <p class="form-hint" style="margin-bottom: 8px;">Select up to 3 genres for your release</p>
+                  <div class="genre-picker" id="genre-picker">
+                    <button type="button" class="genre-chip" data-genre="hiphop"><span class="genre-dot" style="background:#f97316;"></span>Hip Hop</button>
+                    <button type="button" class="genre-chip" data-genre="rap"><span class="genre-dot" style="background:#ef4444;"></span>Rap</button>
+                    <button type="button" class="genre-chip" data-genre="electronic"><span class="genre-dot" style="background:#3b82f6;"></span>Electronic</button>
+                    <button type="button" class="genre-chip" data-genre="rnb"><span class="genre-dot" style="background:#a855f7;"></span>R&B</button>
+                    <button type="button" class="genre-chip" data-genre="pop"><span class="genre-dot" style="background:#ec4899;"></span>Pop</button>
+                    <button type="button" class="genre-chip" data-genre="rock"><span class="genre-dot" style="background:#84cc16;"></span>Rock</button>
+                    <button type="button" class="genre-chip" data-genre="country"><span class="genre-dot" style="background:#f59e0b;"></span>Country</button>
+                    <button type="button" class="genre-chip" data-genre="jazz"><span class="genre-dot" style="background:#06b6d4;"></span>Jazz</button>
+                    <button type="button" class="genre-chip" data-genre="lofi"><span class="genre-dot" style="background:#8b5cf6;"></span>Lo-Fi</button>
+                    <button type="button" class="genre-chip" data-genre="other"><span class="genre-dot" style="background:#6b7280;"></span>Other</button>
+                  </div>
+                </div>
+
+                <!-- Draft Visibility -->
+                <div class="form-group">
+                  <label class="form-label">Draft Visibility</label>
+                  <div class="visibility-toggle" id="visibility-toggle">
+                    <button type="button" class="visibility-option selected" data-visibility="private">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                      </svg>
+                      Private
+                    </button>
+                    <button type="button" class="visibility-option" data-visibility="public">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                      </svg>
+                      Public
+                    </button>
+                  </div>
+                  <p class="form-hint" id="visibility-hint">Only you + anyone with the direct link can see this draft</p>
+                </div>
+                
                 <div class="mint-fee-preview">
                   <span>Mint Fee:</span>
                   <span id="mint-fee-amount">Upload tracks to calculate</span>
                 </div>
-                
                 <div class="create-nav">
                   <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
                   <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
                 </div>
               </div>
               
-              <!-- Step 3: Review & Mint -->
+             <!-- Step 3: Review & Save -->
               <div class="create-step hidden" id="create-step-3">
-                <h3 class="create-step-title">Review & Mint</h3>
+                <h3 class="create-step-title">Review Your Release</h3>
                 
                 <div class="review-card">
                   <div class="review-cover" id="review-cover"></div>
@@ -3975,6 +4015,7 @@ const totalPrice = albumPrice;
                     <div class="review-meta">
                       <span id="review-type"></span>
                       <span id="review-tracks"></span>
+                      <span id="review-genres"></span>
                     </div>
                   </div>
                 </div>
@@ -3992,10 +4033,26 @@ const totalPrice = albumPrice;
                     <span>Resale Royalty</span>
                     <span id="review-royalty"></span>
                   </div>
+                  <div class="review-row">
+                    <span>Visibility</span>
+                    <span id="review-visibility"></span>
+                  </div>
                   <div class="review-row mint-fee-row">
                     <span>Mint Fee (one-time)</span>
                     <span id="review-mint-fee"></span>
                   </div>
+                </div>
+                
+                <!-- Recommended: Save as Draft -->
+                <div class="draft-recommend-box">
+                  <div class="draft-recommend-header">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span>We recommend saving as a draft first!</span>
+                  </div>
+                  <p class="draft-recommend-text">Preview how your release will look and sound on the platform. Check it out on your profile, share the link with friends, and mint when you're ready.</p>
                 </div>
                 
                 <div class="mint-status hidden" id="mint-status">
@@ -4005,15 +4062,23 @@ const totalPrice = albumPrice;
                   <div class="mint-status-text" id="mint-status-text">Preparing...</div>
                 </div>
                 
-                <div class="create-nav" id="create-nav-3">
+                <div class="create-nav create-nav-draft" id="create-nav-3">
                   <button type="button" class="btn btn-secondary" id="create-back-3">Back</button>
-                  <button type="submit" class="btn btn-primary btn-mint">
+                  <button type="button" class="btn btn-primary btn-save-draft" id="save-draft-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                      <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                      <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    Save Draft
+                  </button>
+                  <button type="submit" class="btn btn-secondary btn-mint-now" id="mint-now-btn" title="Skip draft, mint immediately">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
                       <path d="M2 17l10 5 10-5"></path>
                       <path d="M2 12l10 5 10-5"></path>
                     </svg>
-                    Mint NFT
+                    Mint Now
                   </button>
                 </div>
               </div>
@@ -4160,11 +4225,319 @@ const totalPrice = albumPrice;
           .track-upload-item { gap: 8px; padding: 10px; }
           .track-upload-item .track-name-input { font-size: 13px; }
         }
+        .genre-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+        .genre-chip {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; background: var(--bg-hover); border: 1.5px solid var(--border-color);
+          border-radius: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 500;
+          cursor: pointer; transition: all 150ms;
+        }
+        .genre-chip:hover { border-color: var(--text-muted); }
+        .genre-chip.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--text-primary); }
+        .genre-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .visibility-toggle { display: flex; gap: 8px; }
+        .visibility-option {
+          display: flex; align-items: center; gap: 8px; flex: 1;
+          padding: 12px 16px; background: var(--bg-hover); border: 1.5px solid var(--border-color);
+          border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px; font-weight: 500;
+          cursor: pointer; transition: all 150ms;
+        }
+        .visibility-option:hover { border-color: var(--text-muted); }
+        .visibility-option.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--text-primary); }
+        .draft-recommend-box {
+          margin: 20px 0; padding: 16px 20px;
+          background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25);
+          border-radius: var(--radius-lg);
+        }
+        .draft-recommend-header {
+          display: flex; align-items: center; gap: 8px;
+          font-size: 14px; font-weight: 600; color: #22c55e; margin-bottom: 8px;
+        }
+        .draft-recommend-text {
+          font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0;
+        }
+        .create-nav-draft { gap: 8px; }
+        .btn-save-draft {
+          flex: 2 !important; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-mint-now { flex: 1 !important; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+      </style>
+    `;
+    
+   this.show(html);
+    this.bindCreateEvents();
+  },
+
+  showFinalizeMint(release) {
+    if (!AppState.user?.address) { this.showAuth(); return; }
+    this.activeModal = 'finalize';
+    
+    const trackCount = release.tracks?.length || 1;
+    const isAlbum = release.type !== 'single' && trackCount > 1;
+    const editions = release.totalEditions || 100;
+    const totalNFTs = trackCount * editions;
+    const songPrice = release.songPrice || 5;
+    const albumPrice = release.albumPrice || (songPrice * trackCount);
+    const royalty = release.royaltyPercent || 5;
+    const genres = release.draftGenres || [];
+    const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
+    
+    const networkFee = totalNFTs * 0.000012;
+    const mintFee = (networkFee + 0.01).toFixed(6);
+    
+    const coverUrl = this.getImageUrl(release.coverUrl);
+    
+    const html = `
+      <div class="modal-overlay">
+        <div class="modal create-modal" style="max-width: 480px;">
+          <div class="modal-header">
+            <div class="modal-title">Finalize & Mint</div>
+            <button class="modal-close">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="review-card">
+              <div class="review-cover">
+                ${release.coverUrl ? `<img src="${coverUrl}" alt="${release.title}">` : '<div class="cover-placeholder">🎵</div>'}
+              </div>
+              <div class="review-info">
+                <div class="review-title">${release.title}</div>
+                <div class="review-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
+                <div class="review-meta">
+                  <span>${isAlbum ? (release.type === 'album' ? 'ALBUM' : 'EP') : 'SINGLE'}</span>
+                  <span>${trackCount} track${trackCount > 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="review-details">
+              <div class="review-row">
+                <span>Price</span>
+                <span>${isAlbum ? `Album: ${albumPrice} XRP` : `${songPrice} XRP`}</span>
+              </div>
+              <div class="review-row">
+                <span>Editions</span>
+                <span>${editions} × ${trackCount} tracks = ${totalNFTs} NFTs</span>
+              </div>
+              <div class="review-row">
+                <span>Resale Royalty</span>
+                <span>${royalty}%</span>
+              </div>
+              ${genres.length > 0 ? `
+                <div class="review-row">
+                  <span>Genres</span>
+                  <span>${genres.map(g => genreNames[g] || g).join(', ')}</span>
+                </div>
+              ` : ''}
+              <div class="review-row mint-fee-row">
+                <span>Mint Fee (one-time)</span>
+                <span>${mintFee} XRP</span>
+              </div>
+            </div>
+            
+            <div class="mint-status hidden" id="finalize-mint-status">
+              <div class="mint-status-icon"><div class="spinner"></div></div>
+              <div class="mint-status-text">Preparing...</div>
+            </div>
+            
+            <div id="finalize-nav" style="display:flex;gap:12px;margin-top:20px;">
+              <button class="btn btn-secondary" id="finalize-cancel" style="flex:1;">Cancel</button>
+              <button class="btn btn-primary" id="finalize-confirm" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                  <path d="M2 17l10 5 10-5"></path>
+                  <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                Pay ${mintFee} XRP & Go Live
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .review-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 20px; }
+        .review-cover { width: 80px; height: 80px; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); flex-shrink: 0; }
+        .review-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .review-info { flex: 1; min-width: 0; }
+        .review-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .review-artist { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .review-meta { font-size: 13px; color: var(--text-muted); }
+        .review-meta span { margin-right: 12px; }
+        .review-details { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
+        .review-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+        .review-row span:first-child { color: var(--text-secondary); }
+        .review-row span:last-child { color: var(--text-primary); font-weight: 500; }
+        .mint-fee-row { border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 12px !important; }
+        .mint-status.hidden { display: none; }
       </style>
     `;
     
     this.show(html);
-    this.bindCreateEvents();
+    
+    // Cancel
+    document.getElementById('finalize-cancel')?.addEventListener('click', () => this.close());
+    
+    // Confirm mint
+    document.getElementById('finalize-confirm')?.addEventListener('click', async () => {
+      const statusEl = document.getElementById('finalize-mint-status');
+      const navEl = document.getElementById('finalize-nav');
+      
+      statusEl.classList.remove('hidden');
+      navEl.style.display = 'none';
+      
+      const showStatus = (message, sub) => {
+        statusEl.innerHTML = `
+          <div class="mint-status-icon"><div class="spinner"></div></div>
+          <div class="mint-status-text">${message}</div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">${sub || ''}</p>
+        `;
+      };
+      
+      try {
+        // Step 1: Create metadata JSONs for each track
+        showStatus('Creating metadata...', 'Preparing NFT data');
+        
+        const artistName = release.artistName || AppState.profile?.name || AppState.user.address;
+        const trackMetadataUris = [];
+        
+        for (let i = 0; i < release.tracks.length; i++) {
+          const track = release.tracks[i];
+          const trackMetadata = {
+            name: release.tracks.length === 1 ? release.title : `${release.title} - ${track.title}`,
+            description: release.description || '',
+            image: `ipfs://${release.coverCid}`,
+            animation_url: `ipfs://${track.audioCid}`,
+            attributes: [
+              { trait_type: 'Type', value: release.type },
+              { trait_type: 'Artist', value: artistName },
+              { trait_type: 'Album', value: release.title },
+              { trait_type: 'Track Number', value: i + 1 },
+              { trait_type: 'Total Tracks', value: release.tracks.length },
+            ],
+            properties: {
+              title: track.title,
+              duration: track.duration,
+              audio: `ipfs://${track.audioCid}`,
+              ...(track.videoCid ? { video: `ipfs://${track.videoCid}` } : {}),
+              albumTitle: release.title,
+              trackNumber: i + 1,
+            },
+          };
+          
+          const result = await API.uploadJSON(trackMetadata, `${release.title}-track${i+1}-metadata.json`);
+          trackMetadataUris.push(result.ipfsUrl);
+        }
+        
+        // Also create album metadata
+        const albumMetadata = {
+          name: release.title,
+          description: release.description || '',
+          image: `ipfs://${release.coverCid}`,
+          attributes: [
+            { trait_type: 'Type', value: release.type },
+            { trait_type: 'Artist', value: artistName },
+            { trait_type: 'Tracks', value: release.tracks.length },
+          ],
+          properties: {
+            tracks: release.tracks.map((t, i) => ({
+              title: t.title,
+              duration: t.duration,
+              audio: `ipfs://${t.audioCid}`,
+              metadataUri: trackMetadataUris[i],
+            })),
+          },
+        };
+        const albumResult = await API.uploadJSON(albumMetadata, `${release.title}-album-metadata.json`);
+        
+        // Update release with metadata CID
+        await API.updateRelease(release.id, {
+          metadataCid: albumResult.cid,
+        });
+        
+        // Step 2: Pay mint fee
+        showStatus('Pay Mint Fee', '📱 Sign in Xaman — one quick signature!');
+        
+        Modals.mintingInProgress = true;
+        
+        const configResponse = await fetch('/api/batch-mint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getConfig' }),
+        });
+        const configData = await configResponse.json();
+        const platformAddress = configData.platformAddress;
+        
+        if (!platformAddress) throw new Error('Platform not configured');
+        
+        const paymentResult = await XamanWallet.sendPayment(
+          platformAddress,
+          parseFloat(mintFee),
+          `XRP Music: ${release.title}`
+        );
+        
+        if (!paymentResult.success) throw new Error(paymentResult.error || 'Payment cancelled');
+        
+        Modals.mintingInProgress = false;
+        
+        // Step 3: Mark as live
+        showStatus('Going live...', 'Your release is being published!');
+        
+        await API.updateRelease(release.id, {
+          mintFeePaid: true,
+          mintFeeTxHash: paymentResult.txHash,
+          mintFeeAmount: parseFloat(mintFee),
+          status: 'live',
+          metadataCid: albumResult.cid,
+        });
+        
+        // Success!
+        statusEl.innerHTML = `
+          <div class="mint-success">
+            <div class="mint-success-cover">
+              <img src="${coverUrl}" alt="Cover">
+              <div class="mint-success-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="mint-success-title">🎉 ${release.title}</div>
+            <div class="mint-success-stats">${trackCount} track${trackCount > 1 ? 's' : ''} • ${editions} editions available</div>
+            <p class="mint-success-msg">Your music is live! NFTs mint automatically when fans purchase.</p>
+            <div class="mint-success-actions">
+              <button class="btn btn-primary" id="finalize-done">View Release</button>
+            </div>
+          </div>
+        `;
+        
+        document.getElementById('finalize-done')?.addEventListener('click', () => {
+          Modals.close();
+          Router.navigate('profile');
+        });
+        
+      } catch (error) {
+        console.error('Finalize mint failed:', error);
+        Modals.mintingInProgress = false;
+        statusEl.innerHTML = `
+          <div class="mint-status-icon" style="color: var(--error);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="mint-status-text" style="color: var(--error);">${error.message || 'Minting failed'}</div>
+        `;
+        navEl.style.display = 'flex';
+      }
+    });
   },
   
   bindCreateEvents() {
@@ -4223,6 +4596,42 @@ function calculateMintFee(editions, trackCount = 1) {
     
     // Initialize mint fee
     updateMintFee();
+    
+    // Genre picker
+    const selectedGenres = [];
+    document.querySelectorAll('.genre-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const genre = chip.dataset.genre;
+        const idx = selectedGenres.indexOf(genre);
+        if (idx >= 0) {
+          selectedGenres.splice(idx, 1);
+          chip.classList.remove('selected');
+        } else {
+          if (selectedGenres.length >= 3) {
+            const oldest = selectedGenres.shift();
+            document.querySelector(`.genre-chip[data-genre="${oldest}"]`)?.classList.remove('selected');
+          }
+          selectedGenres.push(genre);
+          chip.classList.add('selected');
+        }
+      });
+    });
+
+    // Visibility toggle
+    let draftVisibility = 'private';
+    document.querySelectorAll('.visibility-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.visibility-option').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        draftVisibility = btn.dataset.visibility;
+        const hint = document.getElementById('visibility-hint');
+        if (hint) {
+          hint.textContent = draftVisibility === 'public'
+            ? 'Shows on your profile with a "Coming Soon" badge (not in Stream/Marketplace)'
+            : 'Only you + anyone with the direct link can see this draft';
+        }
+      });
+    });
     
     // Step navigation
     document.getElementById('create-next-1')?.addEventListener('click', () => {
@@ -4284,7 +4693,16 @@ if (editions > 10000) {
       document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
       document.getElementById('review-royalty').textContent = `${royalty}%`;
       document.getElementById('review-mint-fee').textContent = `${mintFee} XRP`;
-      
+      // Show genres in review
+      const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
+      const reviewGenresEl = document.getElementById('review-genres');
+      if (reviewGenresEl) {
+        reviewGenresEl.textContent = selectedGenres.length > 0 ? selectedGenres.map(g => genreNames[g] || g).join(', ') : 'No genres selected';
+      }
+      const reviewVisEl = document.getElementById('review-visibility');
+      if (reviewVisEl) {
+        reviewVisEl.textContent = draftVisibility === 'public' ? '🌐 Public (Coming Soon on profile)' : '🔒 Private (link only)';
+      }
       document.getElementById('create-step-2').classList.add('hidden');
       document.getElementById('create-step-3').classList.remove('hidden');
     });
@@ -4592,9 +5010,133 @@ if (editions > 10000) {
         audioZone.classList.remove('has-file');
       }
       
-      // Recalculate mint fee when tracks change
+     // Recalculate mint fee when tracks change
       updateMintFee();
    
+    // Save Draft button
+    document.getElementById('save-draft-btn')?.addEventListener('click', async () => {
+      const statusEl = document.getElementById('mint-status');
+      const navEl = document.getElementById('create-nav-3');
+      
+      statusEl.classList.remove('hidden');
+      navEl.style.display = 'none';
+      
+      const showStatus = (step, total, message, submessage) => {
+        statusEl.innerHTML = `
+          <div class="mint-status-icon"><div class="spinner"></div></div>
+          <div class="mint-status-text">Step ${step}/${total}: ${message}</div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">${submessage}</p>
+        `;
+      };
+      
+      try {
+        // Step 1: Upload cover to IPFS
+        showStatus(1, 3, 'Uploading cover art...', 'This may take a moment');
+        const coverResult = await API.uploadFile(coverFile);
+        
+        // Step 2: Upload audio files to IPFS
+        const uploadedTracks = [];
+        for (let i = 0; i < tracks.length; i++) {
+          const trackSizeMB = (tracks[i].file.size / (1024 * 1024)).toFixed(1);
+          showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}...`, `${trackSizeMB}MB — uploading to IPFS`);
+          
+          const audioResult = await DirectUploader.upload(tracks[i].file, (pct) => {
+            showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading to IPFS`);
+          });
+          
+          uploadedTracks.push({
+            title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
+            trackNumber: i + 1,
+            duration: Math.round(tracks[i].duration),
+            audioCid: audioResult.cid,
+            audioUrl: audioResult.url,
+            price: tracks[i].price || 5,
+            genre: selectedGenres[0] || null,
+            genreSecondary: selectedGenres[1] || null,
+            genreTertiary: selectedGenres[2] || null,
+            ...(tracks[i].videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
+          });
+        }
+        
+        // Step 3: Save draft to database
+        showStatus(3, 3, 'Saving draft...', 'Almost done!');
+        
+        const releaseType = tracks.length === 1 ? 'single' : 'album';
+        const releaseTitle = document.getElementById('release-title').value;
+        const releaseDescription = document.getElementById('release-description').value;
+        const editions = parseInt(document.getElementById('release-editions').value) || 100;
+        const royaltyPercent = parseFloat(document.getElementById('release-royalty').value) || 5;
+        const defaultTrackPrice = tracks[0]?.price || 5;
+        const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+        const albumPriceValue = parseFloat(document.getElementById('album-discount-price')?.value) || individualTotal;
+        
+        const draftData = {
+          artistAddress: AppState.user.address,
+          artistName: AppState.profile?.name || null,
+          title: releaseTitle,
+          description: releaseDescription,
+          type: releaseType,
+          coverUrl: coverResult.url,
+          coverCid: coverResult.cid,
+          songPrice: defaultTrackPrice,
+          albumPrice: releaseType !== 'single' ? albumPriceValue : null,
+          totalEditions: editions,
+          royaltyPercent: royaltyPercent,
+          tracks: uploadedTracks,
+          visibility: draftVisibility,
+          draftGenres: selectedGenres,
+        };
+        
+        const result = await API.saveRelease(draftData);
+        
+        // Also save genres to tracks
+        if (selectedGenres.length > 0 && result.trackIds?.length > 0) {
+          try {
+            await fetch('/api/update-track-genres', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                releaseId: result.releaseId,
+                artistAddress: AppState.user.address,
+                tracks: result.trackIds.map(trackId => ({
+                  trackId,
+                  genre: selectedGenres[0] || null,
+                  genreSecondary: selectedGenres[1] || null,
+                  genreTertiary: selectedGenres[2] || null,
+                })),
+              }),
+            });
+          } catch (e) {
+            console.warn('Genre save failed (non-critical):', e);
+          }
+        }
+        
+        // Success!
+        Modals.close();
+        Modals.showToast('Draft saved! Check your Drafts tab.');
+        
+        // Navigate to profile Drafts tab
+        if (typeof ProfilePage !== 'undefined') {
+          ProfilePage.activeTab = 'drafts';
+        }
+        Router.navigate('profile', { tab: 'drafts' });
+        
+      } catch (error) {
+        console.error('Save draft failed:', error);
+        statusEl.innerHTML = `
+          <div class="mint-status-icon" style="color: var(--error);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="mint-status-text" style="color: var(--error);">${error.message || 'Failed to save draft'}</div>
+        `;
+        navEl.style.display = 'flex';
+      }
+    });
+
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -4641,12 +5183,15 @@ if (editions > 10000) {
           tracks[i].status = 'done';
           tracks[i].audioCid = audioResult.cid;
           tracks[i].audioUrl = audioResult.url;
-          uploadedTracks.push({
+         uploadedTracks.push({
   title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
             audioCid: audioResult.cid,
             audioUrl: audioResult.url,
+            genre: selectedGenres[0] || null,
+            genreSecondary: selectedGenres[1] || null,
+            genreTertiary: selectedGenres[2] || null,
           });
           updateTrackList();
         }
