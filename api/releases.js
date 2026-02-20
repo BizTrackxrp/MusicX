@@ -5,11 +5,18 @@
  * With lazy minting, releases are "live" when mint_fee_paid = true.
  * NFTs mint on-demand at purchase time, not upfront.
  * 
+ * DRAFT SYSTEM:
+ * - status='draft' releases are saved but not minted
+ * - visibility='private': only artist sees (+ anyone with direct link)
+ * - visibility='public': shows on artist's profile page with "Coming Soon" badge
+ * - Drafts NEVER appear in Stream, Marketplace, search, or genre pages
+ * 
  * Visibility rules:
  * - Public pages: show is_minted = true OR mint_fee_paid = true OR r.status = 'live'
  * - Public feeds (Stream/Marketplace): when ?feed=true, additionally require artist has >= 20 XRP in total sales
- * - Artist's own page: show ALL their releases (including drafts)
- * - Single release by ID: always visible (for purchase flow, direct links)
+ * - Artist's own page (includeUnminted=true): show ALL their releases (including drafts)
+ * - Artist's public page: show live releases + public drafts (visibility='public')
+ * - Single release by ID: always visible (for purchase flow, direct links, draft preview)
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -50,7 +57,7 @@ async function getReleases(req, res, sql) {
   
   if (id) {
     // Get single release with tracks
-    // No filter - need to see it for purchase flow regardless of status
+    // No filter - need to see it for purchase flow, direct links, AND draft preview
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -68,7 +75,10 @@ async function getReleases(req, res, sql) {
               'mintedEditions', COALESCE(t.minted_editions, 0),
               'price', t.price,
               'videoCid', t.video_cid,
-              'videoUrl', t.video_url
+              'videoUrl', t.video_url,
+              'genre', t.genre,
+              'genreSecondary', t.genre_secondary,
+              'genreTertiary', t.genre_tertiary
             ) ORDER BY t.track_order
           ) FILTER (WHERE t.id IS NOT NULL),
           '[]'
@@ -89,7 +99,7 @@ async function getReleases(req, res, sql) {
   
   if (artist) {
     if (includeUnminted === 'true') {
-      // Artist's own profile - show ALL their releases
+      // Artist's own profile - show ALL their releases (including drafts)
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -107,7 +117,10 @@ async function getReleases(req, res, sql) {
                 'mintedEditions', COALESCE(t.minted_editions, 0),
                 'price', t.price,
                 'videoCid', t.video_cid,
-                'videoUrl', t.video_url
+                'videoUrl', t.video_url,
+                'genre', t.genre,
+                'genreSecondary', t.genre_secondary,
+                'genreTertiary', t.genre_tertiary
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -120,7 +133,7 @@ async function getReleases(req, res, sql) {
         ORDER BY r.created_at DESC
       `;
     } else {
-      // Public view of artist - show live releases only (NO sales threshold here)
+      // Public view of artist - show live releases + public drafts
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -138,7 +151,10 @@ async function getReleases(req, res, sql) {
                 'mintedEditions', COALESCE(t.minted_editions, 0),
                 'price', t.price,
                 'videoCid', t.video_cid,
-                'videoUrl', t.video_url
+                'videoUrl', t.video_url,
+                'genre', t.genre,
+                'genreSecondary', t.genre_secondary,
+                'genreTertiary', t.genre_tertiary
               ) ORDER BY t.track_order
             ) FILTER (WHERE t.id IS NOT NULL),
             '[]'
@@ -147,7 +163,10 @@ async function getReleases(req, res, sql) {
         LEFT JOIN tracks t ON t.release_id = r.id
         LEFT JOIN profiles p ON p.wallet_address = r.artist_address
         WHERE r.artist_address = ${artist}
-          AND (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+          AND (
+            (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+            OR (r.status = 'draft' AND r.visibility = 'public')
+          )
         GROUP BY r.id, p.avatar_url
         ORDER BY r.created_at DESC
       `;
@@ -155,7 +174,8 @@ async function getReleases(req, res, sql) {
   } else if (feed === 'true') {
     // ============================================================
     // FILTERED FEED (Stream cards / Marketplace cards)
-    // Only show releases from artists with >= 20 XRP total sales
+    // Only show LIVE releases from artists with >= 20 XRP total sales
+    // NEVER show drafts in feeds
     // ============================================================
     releases = await sql`
       SELECT r.*, 
@@ -183,6 +203,7 @@ async function getReleases(req, res, sql) {
       LEFT JOIN tracks t ON t.release_id = r.id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+        AND r.status != 'draft'
         AND r.artist_address IN (
           SELECT seller_address
           FROM sales
@@ -195,6 +216,7 @@ async function getReleases(req, res, sql) {
   } else {
     // ============================================================
     // UNFILTERED - All live releases (for artists list, stats, etc.)
+    // NEVER show drafts here either
     // ============================================================
     releases = await sql`
       SELECT r.*, 
@@ -221,7 +243,8 @@ async function getReleases(req, res, sql) {
       FROM releases r
       LEFT JOIN tracks t ON t.release_id = r.id
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
-      WHERE r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live'
+      WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+        AND r.status != 'draft'
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
@@ -248,6 +271,9 @@ async function createRelease(req, res, sql) {
     nftTokenIds,
     txHash,
     sellOfferIndex,
+    // NEW: draft fields
+    visibility,
+    draftGenres,
   } = req.body;
   
   if (!artistAddress || !title || !type) {
@@ -279,6 +305,8 @@ async function createRelease(req, res, sql) {
       is_minted,
       mint_fee_paid,
       status,
+      visibility,
+      draft_genres,
       created_at
     ) VALUES (
       ${releaseId},
@@ -301,6 +329,8 @@ async function createRelease(req, res, sql) {
       false,
       false,
       'draft',
+      ${visibility || 'private'},
+      ${draftGenres ? JSON.stringify(draftGenres) : null},
       NOW()
     )
     RETURNING *
@@ -327,7 +357,10 @@ async function createRelease(req, res, sql) {
           track_number,
           price,
           video_cid,
-          video_url
+          video_url,
+          genre,
+          genre_secondary,
+          genre_tertiary
         ) VALUES (
           ${trackId},
           ${release.id},
@@ -342,7 +375,10 @@ async function createRelease(req, res, sql) {
           ${i + 1},
           ${track.price !== undefined && track.price !== null ? track.price : null},
           ${track.videoCid || null},
-          ${track.videoUrl || null}
+          ${track.videoUrl || null},
+          ${track.genre || null},
+          ${track.genreSecondary || null},
+          ${track.genreTertiary || null}
         )
       `;
       trackIds.push(trackId);
@@ -358,7 +394,7 @@ async function createRelease(req, res, sql) {
 
 /**
  * Update an existing release
- * Used after mint fee payment to mark as live
+ * Used after mint fee payment to mark as live, or to update draft fields
  */
 async function updateRelease(req, res, sql) {
   const { id } = req.query;
@@ -378,6 +414,18 @@ async function updateRelease(req, res, sql) {
   const mintFeeTxHash = updates.mintFeeTxHash || null;
   const mintFeeAmount = updates.mintFeeAmount || null;
   const status = updates.status || null;
+  const visibility = updates.visibility || null;
+  const draftGenres = updates.draftGenres !== undefined ? JSON.stringify(updates.draftGenres) : null;
+  
+  // Handle draft field updates (title, description, price, etc.)
+  const title = updates.title || null;
+  const description = updates.description !== undefined ? updates.description : null;
+  const songPrice = updates.songPrice !== undefined ? updates.songPrice : null;
+  const albumPrice = updates.albumPrice !== undefined ? updates.albumPrice : null;
+  const totalEditions = updates.totalEditions !== undefined ? updates.totalEditions : null;
+  const royaltyPercent = updates.royaltyPercent !== undefined ? updates.royaltyPercent : null;
+  const coverUrl = updates.coverUrl || null;
+  const coverCid = updates.coverCid || null;
   
   // Update the release
   const [updated] = await sql`
@@ -391,7 +439,17 @@ async function updateRelease(req, res, sql) {
       mint_fee_paid = COALESCE(${mintFeePaid}, mint_fee_paid),
       mint_fee_tx_hash = COALESCE(${mintFeeTxHash}, mint_fee_tx_hash),
       mint_fee_amount = COALESCE(${mintFeeAmount}, mint_fee_amount),
-      status = COALESCE(${status}, status)
+      status = COALESCE(${status}, status),
+      visibility = COALESCE(${visibility}, visibility),
+      draft_genres = COALESCE(${draftGenres}, draft_genres),
+      title = COALESCE(${title}, title),
+      description = COALESCE(${description}, description),
+      song_price = COALESCE(${songPrice}, song_price),
+      album_price = COALESCE(${albumPrice}, album_price),
+      total_editions = COALESCE(${totalEditions}, total_editions),
+      royalty_percent = COALESCE(${royaltyPercent}, royalty_percent),
+      cover_url = COALESCE(${coverUrl}, cover_url),
+      cover_cid = COALESCE(${coverCid}, cover_cid)
     WHERE id = ${id}
     RETURNING *
   `;
@@ -408,7 +466,7 @@ async function updateRelease(req, res, sql) {
 
 /**
  * Delete a release and all associated data
- * Used for cleanup when mint fee payment fails
+ * Used for cleanup when mint fee payment fails, or deleting drafts
  */
 async function deleteRelease(req, res, sql) {
   const { id } = req.query;
@@ -514,6 +572,8 @@ function formatRelease(row) {
     mintFeeTxHash: row.mint_fee_tx_hash,
     mintFeeAmount: row.mint_fee_amount ? parseFloat(row.mint_fee_amount) : null,
     status: row.status || 'draft',
+    visibility: row.visibility || 'private',
+    draftGenres: row.draft_genres || null,
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
