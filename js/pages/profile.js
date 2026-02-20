@@ -10,6 +10,7 @@
  * UPDATED: Fixed mobile player positioning
  * UPDATED: Collection overhaul — dedup, filters, multi-copy popups, send NFT
  * UPDATED: 🔑 Unlockable Content tab — NFT-gated private page + rewards
+ * UPDATED: 📝 Draft/Staging system — save drafts, preview, finalize & mint
  */
 
 const ProfilePage = {
@@ -92,10 +93,12 @@ const ProfilePage = {
         this._needsRefresh = false;
       }
       
-      // Check URL for ?tab=unlockable
+      // Check URL for tab parameter (PATCH 6: added drafts)
       const urlTab = Router?.params?.tab;
       if (urlTab === 'unlockable' && this._showUnlockableTab) {
         this.activeTab = 'unlockable';
+      } else if (urlTab === 'drafts') {
+        this.activeTab = 'drafts';
       }
       
       this.renderContent();
@@ -230,12 +233,18 @@ const ProfilePage = {
           </div>
         </div>
         
-        <!-- Tabs -->
+        <!-- Tabs (PATCH 1: Drafts tab added) -->
         <div class="profile-tabs">
           ${profile.isArtist || this.releases.length > 0 ? `
             <button class="tab-btn ${this.activeTab === 'posted' ? 'active' : ''}" data-tab="posted">
               My Releases
-              <span class="tab-count">${this.releases.length}</span>
+              <span class="tab-count">${this.releases.filter(r => r.status !== 'draft').length}</span>
+            </button>
+          ` : ''}
+          ${(profile.isArtist || this.releases.length > 0) && this.releases.some(r => r.status === 'draft') ? `
+            <button class="tab-btn ${this.activeTab === 'drafts' ? 'active' : ''}" data-tab="drafts">
+              Drafts
+              <span class="tab-count">${this.releases.filter(r => r.status === 'draft').length}</span>
             </button>
           ` : ''}
           <button class="tab-btn ${this.activeTab === 'collected' ? 'active' : ''}" data-tab="collected">
@@ -254,9 +263,10 @@ const ProfilePage = {
           ` : ''}
         </div>
         
-        <!-- Tab Content -->
+        <!-- Tab Content (PATCH 2: Drafts tab routing added) -->
         <div class="profile-tab-content" id="profile-tab-content">
           ${this.activeTab === 'posted' ? this.renderPostedTab() : 
+            this.activeTab === 'drafts' ? this.renderDraftsTab() :
             this.activeTab === 'forsale' ? this.renderForSaleTab() :
             this.activeTab === 'unlockable' ? this.renderUnlockableTab() :
             this.renderCollectedTab()}
@@ -640,7 +650,7 @@ const ProfilePage = {
   },
 
   // ============================================
-  // UNLOCKABLE TAB (NEW)
+  // UNLOCKABLE TAB
   // ============================================
   
   renderUnlockableTab() {
@@ -669,11 +679,12 @@ const ProfilePage = {
   },
   
   // ============================================
-  // POSTED TAB (unchanged)
+  // POSTED TAB (PATCH 3: filters out drafts)
   // ============================================
   
   renderPostedTab() {
-    if (this.releases.length === 0) {
+    const liveReleases = this.releases.filter(r => r.status !== 'draft');
+    if (liveReleases.length === 0) {
       return `
         <div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -687,7 +698,7 @@ const ProfilePage = {
         </div>
       `;
     }
-    const unlistedCount = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
+    const unlistedCount = liveReleases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
     
     return `
       ${unlistedCount > 0 ? `
@@ -721,15 +732,150 @@ const ProfilePage = {
         </style>
       ` : ''}
       <div class="release-grid">
-        ${this.releases.map(release => this.renderReleaseCard(release)).join('')}
+        ${liveReleases.map(release => this.renderReleaseCard(release)).join('')}
+      </div>
+    `;
+  },
+  
+  markNeedsRefresh() {
+    this._needsRefresh = true;
+  },
+
+  // ============================================
+  // DRAFTS TAB (PATCH 4: new)
+  // ============================================
+  
+  renderDraftsTab() {
+    const drafts = this.releases.filter(r => r.status === 'draft');
+    
+    if (drafts.length === 0) {
+      return `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <h3>No Drafts</h3>
+          <p>Drafts you save will appear here. Create a release and save it as a draft to preview before minting!</p>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">Create Release</button>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="drafts-intro">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span>Preview your releases before going live. Click a draft to see how it looks, then finalize when ready!</span>
+      </div>
+      
+      <div class="release-grid">
+        ${drafts.map(draft => this.renderDraftCard(draft)).join('')}
+      </div>
+      
+      <style>
+        .drafts-intro {
+          display: flex; align-items: center; gap: 12px;
+          padding: 14px 20px; margin-bottom: 24px;
+          background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2);
+          border-radius: var(--radius-lg); font-size: 14px; color: var(--text-secondary);
+        }
+        .drafts-intro svg { flex-shrink: 0; }
+        .draft-card { position: relative; }
+        .draft-badge {
+          position: absolute; top: 8px; left: 8px; z-index: 2;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 4px 10px; border-radius: 12px;
+          font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        .draft-badge.private-badge {
+          background: rgba(107, 114, 128, 0.9); color: white;
+        }
+        .draft-badge.public-badge {
+          background: rgba(59, 130, 246, 0.9); color: white;
+        }
+        .draft-card-actions {
+          display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+        }
+        .draft-card-actions .btn { flex: 1; min-width: 0; justify-content: center; font-size: 12px; padding: 8px 10px; }
+        .btn-finalize {
+          background: linear-gradient(135deg, var(--accent), #a855f7) !important;
+          border: none !important; color: white !important;
+        }
+        .btn-finalize:hover { opacity: 0.9; }
+        .draft-genre-chips {
+          display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
+        }
+        .draft-genre-chip {
+          display: inline-flex; align-items: center; gap: 3px;
+          padding: 2px 8px; border-radius: 10px;
+          font-size: 10px; font-weight: 600; color: var(--text-muted);
+          background: var(--bg-hover);
+        }
+      </style>
+    `;
+  },
+  
+  renderDraftCard(draft) {
+    const coverUrl = this.getImageUrl(draft.coverUrl);
+    const trackCount = draft.tracks?.length || 1;
+    const price = draft.albumPrice || draft.songPrice;
+    const isPublic = draft.visibility === 'public';
+    const genres = draft.draftGenres || [];
+    const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
+    
+    return `
+      <div class="release-card draft-card" data-draft-id="${draft.id}">
+        <div class="release-card-cover">
+          ${draft.coverUrl 
+            ? `<img src="${coverUrl}" alt="${draft.title}" onerror="this.src='/placeholder.png'">`
+            : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
+          }
+          <span class="release-type-badge ${draft.type}">${draft.type}</span>
+          <span class="draft-badge ${isPublic ? 'public-badge' : 'private-badge'}">
+            ${isPublic ? '🌐 Coming Soon' : '🔒 Draft'}
+          </span>
+        </div>
+        <div class="release-card-info">
+          <div class="release-card-title">${draft.title}</div>
+          <div class="release-card-artist">${draft.artistName || Helpers.truncateAddress(draft.artistAddress)}</div>
+          ${genres.length > 0 ? `
+            <div class="draft-genre-chips">
+              ${genres.map(g => `<span class="draft-genre-chip">${genreNames[g] || g}</span>`).join('')}
+            </div>
+          ` : ''}
+          <div class="release-card-footer">
+            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-tracks">${trackCount} track${trackCount > 1 ? 's' : ''}</span>
+          </div>
+          <div class="draft-card-actions">
+            <button class="btn btn-sm btn-finalize finalize-draft-btn" data-draft-id="${draft.id}">
+              ⚡ Finalize & Mint
+            </button>
+            <button class="btn btn-sm btn-secondary toggle-visibility-btn" data-draft-id="${draft.id}" data-current="${draft.visibility || 'private'}">
+              ${isPublic ? '🔒 Make Private' : '🌐 Make Public'}
+            </button>
+            <button class="btn btn-sm btn-secondary share-draft-btn" data-draft-id="${draft.id}" title="Copy link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-danger delete-draft-btn" data-draft-id="${draft.id}" title="Delete draft">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     `;
   },
 
-  markNeedsRefresh() {
-    this._needsRefresh = true;
-  },
-  
   // ============================================
   // COLLECTED TAB (OVERHAULED)
   // ============================================
@@ -1814,7 +1960,7 @@ const ProfilePage = {
   },
 
   // ============================================
-  // RELEASE CARD
+  // RELEASE CARD (PATCH 8: draft handling added)
   // ============================================
   
   renderReleaseCard(release) {
@@ -1822,6 +1968,31 @@ const ProfilePage = {
     const price = release.albumPrice || release.songPrice;
     const isOwner = AppState.user?.address === release.artistAddress;
     const coverUrl = this.getImageUrl(release.coverUrl);
+    
+    // PATCH 8: Draft handling for public profile view
+    if (release.status === 'draft') {
+      return `
+        <div class="release-card draft-card" data-release-id="${release.id}">
+          <div class="release-card-cover">
+            ${release.coverUrl 
+              ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
+              : `<div class="placeholder">🎵</div>`
+            }
+            <span class="release-type-badge ${release.type}">${release.type}</span>
+            <span class="draft-badge public-badge">🌐 Coming Soon</span>
+          </div>
+          <div class="release-card-info">
+            <div class="release-card-title">${release.title}</div>
+            <div class="release-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
+            <div class="release-card-footer">
+              <span class="release-card-price">${release.albumPrice || release.songPrice} XRP</span>
+              <span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
     const mintBadge = '';
     
     let statusClass = '';
@@ -1884,7 +2055,7 @@ const ProfilePage = {
   },
   
   // ============================================
-  // ERROR & EVENTS
+  // ERROR & EVENTS (PATCH 5: draft event bindings added)
   // ============================================
   
   renderError() {
@@ -1947,6 +2118,89 @@ const ProfilePage = {
         e.stopPropagation();
         const release = JSON.parse(btn.dataset.release);
         Modals.showListForSale(release);
+      });
+    });
+    
+    // ============================================
+    // DRAFT EVENT BINDINGS (PATCH 5)
+    // ============================================
+    
+    // Draft card click — preview
+    document.querySelectorAll('.draft-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const draftId = card.dataset.draftId;
+        const draft = this.releases.find(r => r.id === draftId);
+        if (draft) Modals.showRelease(draft);
+      });
+    });
+    
+    // Finalize & Mint
+    document.querySelectorAll('.finalize-draft-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        const draft = this.releases.find(r => r.id === draftId);
+        if (draft) Modals.showFinalizeMint(draft);
+      });
+    });
+    
+    // Toggle visibility
+    document.querySelectorAll('.toggle-visibility-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        const current = btn.dataset.current;
+        const newVisibility = current === 'public' ? 'private' : 'public';
+        
+        try {
+          btn.disabled = true;
+          btn.textContent = 'Updating...';
+          await API.updateRelease(draftId, { visibility: newVisibility });
+          Modals.showToast(newVisibility === 'public' ? 'Draft is now public on your profile!' : 'Draft is now private');
+          this.render(); // Refresh
+        } catch (err) {
+          console.error('Toggle visibility failed:', err);
+          Modals.showToast('Failed to update visibility');
+          btn.disabled = false;
+        }
+      });
+    });
+    
+    // Share draft link
+    document.querySelectorAll('.share-draft-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        const url = `${window.location.origin}/release/${draftId}`;
+        navigator.clipboard.writeText(url).then(() => {
+          Modals.showToast('Draft link copied! Share it with anyone to preview.');
+        }).catch(() => {
+          Modals.showToast('Failed to copy link');
+        });
+      });
+    });
+    
+    // Delete draft
+    document.querySelectorAll('.delete-draft-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        const draft = this.releases.find(r => r.id === draftId);
+        
+        if (!confirm(`Delete draft "${draft?.title || 'this release'}"?\n\nThis cannot be undone. Audio files on IPFS will remain but the draft record will be deleted.`)) return;
+        
+        try {
+          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;"></div>';
+          await fetch(`/api/releases?id=${draftId}`, { method: 'DELETE' });
+          Modals.showToast('Draft deleted');
+          this.render(); // Refresh
+        } catch (err) {
+          console.error('Delete draft failed:', err);
+          Modals.showToast('Failed to delete draft');
+          btn.disabled = false;
+        }
       });
     });
   },
