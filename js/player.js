@@ -695,9 +695,18 @@ const Player = {
     // Update state
     setCurrentTrack(track);
     
-    // If queue provided (legacy calls), set it up
-    if (queue && queue.length > 0) {
-      // Shuffle the queue, keeping current track at position 0
+ // If QueueManager has a context queue set up (album/playlist), DON'T override it.
+    // The context queue was already configured by QueueManager.playNow() before we got here.
+    const hasContext = typeof QueueManager !== 'undefined' 
+      && QueueManager.context.type !== 'library' 
+      && QueueManager.contextQueue.length > 0;
+
+    if (hasContext) {
+      // QueueManager already set up the album/playlist context — just set minimal state
+      setQueue([track], 0);
+      console.log('🎵 Playing within context:', QueueManager.context.type, '— queue preserved');
+    } else if (queue && queue.length > 0) {
+      // Legacy calls without QueueManager context — shuffle as before
       const currentTrack = queue[queueIndex];
       const otherTracks = queue.filter((_, i) => i !== queueIndex);
       const shuffledOthers = typeof Helpers !== 'undefined' && Helpers.shuffle 
@@ -705,15 +714,12 @@ const Player = {
         : this.shuffleArray([...otherTracks]);
       const shuffledQueue = [currentTrack, ...shuffledOthers];
       setQueue(shuffledQueue, 0);
-      
-      // Also update our cache with these tracks
       this.allTracksCache = shuffledQueue;
     } else {
       // No queue provided - build global queue if needed
       if (this.allTracksCache.length === 0) {
         this.buildGlobalQueue();
       }
-      // Set queue to all tracks with current at front
       const otherTracks = this.allTracksCache.filter(t => t.trackId !== track.trackId && t.id !== track.id);
       const shuffledOthers = typeof Helpers !== 'undefined' && Helpers.shuffle
         ? Helpers.shuffle([...otherTracks])
