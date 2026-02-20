@@ -691,7 +691,17 @@ const Modals = {
               videoUrl: tr.videoUrl || null,
               videoCid: tr.videoCid || null,
             }));
-            Player.playTrack(playTrack, queue, idx);
+            if (typeof QueueManager !== 'undefined') {
+              QueueManager.playNow(playTrack, {
+                context: 'album',
+                contextId: release.id,
+                contextName: release.title,
+                contextTracks: queue,
+                trackIndex: idx,
+              });
+            } else {
+              Player.playTrack(playTrack, queue, idx);
+            }
             document.querySelectorAll('.np-track-row').forEach((el, i) => {
               el.classList.toggle('playing', i === idx);
               el.querySelector('.np-track-num').textContent = i === idx ? '▶' : i + 1;
@@ -2984,49 +2994,79 @@ const Modals = {
       }
     }
     
-    // Play button
+   // Play button — plays album from track 1, queues rest IN ORDER
     document.getElementById('play-release-btn')?.addEventListener('click', () => {
       if (release.tracks?.length > 0) {
-        const queue = release.tracks.map((t, i) => ({
+        const albumTracks = release.tracks.map((t, i) => ({
           id: parseInt(t.id) || i, trackId: t.id?.toString(),
           title: release.type === 'single' ? release.title : t.title,
           artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
           cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
         }));
-        Player.playTrack(queue[0], queue, 0);
+        if (typeof QueueManager !== 'undefined') {
+          QueueManager.playNow(albumTracks[0], {
+            context: 'album',
+            contextId: release.id,
+            contextName: release.title,
+            contextTracks: albumTracks,
+            trackIndex: 0,
+          });
+        } else {
+          Player.playTrack(albumTracks[0], albumTracks, 0);
+        }
       }
     });
 
-    // Track row click to play
+    // Track row click to play — queues remaining album tracks IN ORDER
     document.querySelectorAll('.track-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.buy-track-btn') || e.target.closest('.track-action-btn')) return;
         const idx = parseInt(row.dataset.trackIdx, 10);
         if (release.tracks?.[idx]) {
-          const queue = release.tracks.map((t, i) => ({
+          const albumTracks = release.tracks.map((t, i) => ({
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
             cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
           }));
-          Player.playTrack(queue[idx], queue, idx);
+          if (typeof QueueManager !== 'undefined') {
+            QueueManager.playNow(albumTracks[idx], {
+              context: 'album',
+              contextId: release.id,
+              contextName: release.title,
+              contextTracks: albumTracks,
+              trackIndex: idx,
+            });
+          } else {
+            Player.playTrack(albumTracks[idx], albumTracks, idx);
+          }
         }
       });
     });
     
-    // Track play buttons
+   // Track play buttons — queues remaining album tracks IN ORDER
     document.querySelectorAll('.track-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.trackIdx, 10);
         if (release.tracks?.[idx]) {
-          const queue = release.tracks.map((t, i) => ({
+          const albumTracks = release.tracks.map((t, i) => ({
             id: parseInt(t.id) || i, trackId: t.id?.toString(),
             title: release.type === 'single' ? release.title : t.title,
             artist: release.artistName || Helpers.truncateAddress(release.artistAddress),
             cover: Modals.getImageUrl(release.coverUrl), ipfsHash: t.audioCid, releaseId: release.id, duration: t.duration, videoUrl: t.videoUrl || null, videoCid: t.videoCid || null,
           }));
-          Player.playTrack(queue[idx], queue, idx);
+          if (typeof QueueManager !== 'undefined') {
+            QueueManager.playNow(albumTracks[idx], {
+              context: 'album',
+              contextId: release.id,
+              contextName: release.title,
+              contextTracks: albumTracks,
+              trackIndex: idx,
+            });
+          } else {
+            Player.playTrack(albumTracks[idx], albumTracks, idx);
+          }
         }
       });
     });
