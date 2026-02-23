@@ -458,6 +458,33 @@ async function updateRelease(req, res, sql) {
     return res.status(404).json({ error: 'Release not found' });
   }
   
+  // Update tracks if provided (used by edit mode to swap audio files)
+  if (updates.tracks && Array.isArray(updates.tracks) && updates.tracks.length > 0) {
+    // Delete existing tracks
+    await sql`DELETE FROM tracks WHERE release_id = ${id}`;
+    
+    // Insert new tracks
+    for (let i = 0; i < updates.tracks.length; i++) {
+      const track = updates.tracks[i];
+      const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await sql`
+        INSERT INTO tracks (
+          id, release_id, title, track_order, duration,
+          audio_cid, audio_url, metadata_cid, sold_count, minted_editions,
+          track_number, price, video_cid, video_url,
+          genre, genre_secondary, genre_tertiary
+        ) VALUES (
+          ${trackId}, ${id}, ${track.title || 'Untitled'}, ${track.trackNumber || i + 1},
+          ${track.duration || null}, ${track.audioCid || null}, ${track.audioUrl || null},
+          ${track.metadataCid || null}, 0, 0, ${i + 1},
+          ${track.price !== undefined ? track.price : null},
+          ${track.videoCid || null}, ${track.videoUrl || null},
+          ${track.genre || null}, ${track.genreSecondary || null}, ${track.genreTertiary || null}
+        )
+      `;
+    }
+  }
+  
   return res.json({ 
     success: true, 
     release: formatRelease(updated)
