@@ -4369,9 +4369,15 @@ const totalPrice = albumPrice;
             existingTrackId: t.id,
           });
         });
-        updateTrackList();
-        document.getElementById('audio-upload-zone')?.classList.add('has-file');
       }
+      
+      // Delay track list render so all variables (audioZone etc.) are declared first
+      setTimeout(() => {
+        if (isEditMode && tracks.length > 0) {
+          updateTrackList();
+          document.getElementById('audio-upload-zone')?.classList.add('has-file');
+        }
+      }, 50);
       
       // Genres - pre-select
       const draftGenres = existingDraft.draftGenres || [];
