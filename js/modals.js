@@ -5057,8 +5057,10 @@ if (editions > 10000) {
     // Mint panel back button
     document.getElementById('mint-panel-back')?.addEventListener('click', closeExpandPanels);
 
-    // Confirm Mint button triggers form submit
-    document.getElementById('confirm-mint-now-btn')?.addEventListener('click', () => {
+   // Confirm Mint button triggers form submit
+    document.getElementById('confirm-mint-now-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (Modals.mintingInProgress) return; // Prevent double-click
       form?.requestSubmit();
     });
     // Form submit - Mint NFT
