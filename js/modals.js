@@ -5068,6 +5068,10 @@ if (editions > 10000) {
       e.preventDefault();
       if (Modals.mintSubmitting) return; // Prevent double submit
       Modals.mintSubmitting = true;
+      // Disable all submit/pay buttons to prevent double-click
+      document.getElementById('confirm-mint-now-btn')?.setAttribute('disabled', 'true');
+      document.getElementById('confirm-mint-now-btn')?.style.setProperty('opacity', '0.5');
+      document.getElementById('confirm-mint-now-btn')?.style.setProperty('pointer-events', 'none');
       
       let releaseId = null;  // Declare in outer scope for cleanup access
       const statusEl = document.getElementById('mint-status');
@@ -5076,6 +5080,9 @@ if (editions > 10000) {
       
       statusEl.classList.remove('hidden');
       navEl.style.display = 'none';
+      document.getElementById('confirm-save-draft-btn')?.setAttribute('disabled', 'true');
+      document.getElementById('confirm-save-draft-btn')?.style.setProperty('opacity', '0.5');
+      document.getElementById('confirm-save-draft-btn')?.style.setProperty('pointer-events', 'none');
       
       // Helper to show status with patience message
       const showStatus = (step, total, message, submessage) => {
@@ -5224,6 +5231,15 @@ if (isEditMode && existingDraft?.id) {
     royaltyPercent: royaltyPercent,
   });
   Modals.pendingReleaseId = releaseId;
+ // Also update tracks with current data
+  await API.updateRelease(releaseId, {
+    tracks: uploadedTracks.map((t, i) => ({
+      ...t,
+      price: tracks[i]?.price || t.price,
+      ...(tracks[i]?.videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
+    })),
+  });
+  
   console.log('Updated existing draft for minting:', releaseId);
 } else {
 // Pre-create release to get IDs
