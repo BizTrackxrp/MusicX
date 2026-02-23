@@ -5066,9 +5066,10 @@ if (editions > 10000) {
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (Modals.mintSubmitting) return; // Prevent double submit
+      Modals.mintSubmitting = true;
       
       let releaseId = null;  // Declare in outer scope for cleanup access
-      
       const statusEl = document.getElementById('mint-status');
       const statusText = document.getElementById('mint-status-text');
       const navEl = document.getElementById('create-nav-3');
@@ -5381,9 +5382,11 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         console.log('releaseId value:', releaseId);
         
         Modals.mintingInProgress = false;
+        Modals.mintSubmitting = false;
         
         // AUTO-CLEANUP: Delete the pre-created release if minting failed
-       if (releaseId) {
+        // But NOT in edit mode — don't delete an existing draft just because mint failed!
+       if (releaseId && !isEditMode) {
   console.log('🧹 Cleaning up failed release:', releaseId);
   try {
     const deleteResponse = await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
@@ -5398,6 +5401,8 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
   } catch (cleanupErr) {
     console.error('❌ Cleanup fetch error:', cleanupErr);
   }
+} else if (isEditMode) {
+  console.log('⚠️ Edit mode — keeping draft intact, reverting to draft status');
 } else {
   console.log('⚠️ No releaseId to cleanup');
 }
