@@ -797,10 +797,78 @@ const ProfilePage = {
         .draft-badge.public-badge {
           background: rgba(59, 130, 246, 0.9); color: white;
         }
-        .draft-card-actions {
-          display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+        .draft-card { position: relative; }
+        .draft-play-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0, 0, 0, 0.5);
+          border-radius: inherit;
+          opacity: 0;
+          transition: opacity 200ms;
+          cursor: pointer;
         }
-        .draft-card-actions .btn { flex: 1; min-width: 0; justify-content: center; font-size: 12px; padding: 8px 10px; }
+        .release-card-cover:hover .draft-play-overlay { opacity: 1; }
+        .draft-play-btn {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          backdrop-filter: blur(8px);
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          color: white;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 150ms, background 150ms;
+        }
+        .draft-play-btn:hover {
+          transform: scale(1.1);
+          background: rgba(255, 255, 255, 0.25);
+        }
+        .draft-play-btn svg { margin-left: 3px; }
+        .draft-card-actions {
+          display: flex; gap: 8px; margin-top: 10px;
+        }
+        .draft-card-actions .btn-finalize { flex: 1; }
+        .draft-more-btn {
+          min-width: 40px !important;
+          flex: 0 !important;
+          font-size: 14px !important;
+          letter-spacing: 1px;
+          padding: 8px 12px !important;
+        }
+        .draft-dropdown {
+          position: absolute;
+          bottom: 52px;
+          right: 8px;
+          min-width: 180px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+          overflow: hidden;
+          z-index: 20;
+        }
+        .draft-dropdown.hidden { display: none; }
+        .draft-dropdown-item {
+          display: block;
+          width: 100%;
+          padding: 10px 16px;
+          background: none;
+          border: none;
+          color: var(--text-secondary);
+          font-size: 13px;
+          text-align: left;
+          cursor: pointer;
+          transition: background 150ms;
+        }
+        .draft-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .draft-dropdown-danger { color: var(--error); }
+        .draft-dropdown-danger:hover { background: rgba(239, 68, 68, 0.1); }
         .btn-finalize {
           background: linear-gradient(135deg, var(--accent), #a855f7) !important;
           border: none !important; color: white !important;
@@ -819,7 +887,7 @@ const ProfilePage = {
     `;
   },
   
-  renderDraftCard(draft) {
+renderDraftCard(draft) {
     const coverUrl = this.getImageUrl(draft.coverUrl);
     const trackCount = draft.tracks?.length || 1;
     const price = draft.albumPrice || draft.songPrice;
@@ -836,8 +904,15 @@ const ProfilePage = {
           }
           <span class="release-type-badge ${draft.type}">${draft.type}</span>
           <span class="draft-badge ${isPublic ? 'public-badge' : 'private-badge'}">
-            ${isPublic ? '🌐 Coming Soon' : '🔒 Draft'}
+            ${isPublic ? '🌐 DRAFT' : '🔒 DRAFT'}
           </span>
+          <div class="draft-play-overlay" data-draft-id="${draft.id}">
+            <button class="draft-play-btn" data-draft-id="${draft.id}">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="white">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="release-card-info">
           <div class="release-card-title">${draft.title}</div>
@@ -855,27 +930,25 @@ const ProfilePage = {
             <button class="btn btn-sm btn-finalize finalize-draft-btn" data-draft-id="${draft.id}">
               ⚡ Finalize & Mint
             </button>
-            <button class="btn btn-sm btn-secondary toggle-visibility-btn" data-draft-id="${draft.id}" data-current="${draft.visibility || 'private'}">
-              ${isPublic ? '🔒 Make Private' : '🌐 Make Public'}
-            </button>
-            <button class="btn btn-sm btn-secondary share-draft-btn" data-draft-id="${draft.id}" title="Copy link">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-              </svg>
-            </button>
-            <button class="btn btn-sm btn-danger delete-draft-btn" data-draft-id="${draft.id}" title="Delete draft">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
+            <button class="btn btn-sm btn-secondary draft-more-btn" data-draft-id="${draft.id}" title="More options">
+              •••
             </button>
           </div>
+        </div>
+        <div class="draft-dropdown hidden" id="draft-dropdown-${draft.id}">
+          <button class="draft-dropdown-item toggle-visibility-btn" data-draft-id="${draft.id}" data-current="${draft.visibility || 'private'}">
+            ${isPublic ? '🔒 Make Private' : '🌐 Make Public'}
+          </button>
+          <button class="draft-dropdown-item share-draft-btn" data-draft-id="${draft.id}">
+            🔗 Copy Link
+          </button>
+          <button class="draft-dropdown-item draft-dropdown-danger delete-draft-btn" data-draft-id="${draft.id}">
+            🗑️ Delete Draft
+          </button>
         </div>
       </div>
     `;
   },
-
   // ============================================
   // COLLECTED TAB (OVERHAULED)
   // ============================================
@@ -2124,7 +2197,45 @@ const ProfilePage = {
     // ============================================
     // DRAFT EVENT BINDINGS (PATCH 5)
     // ============================================
-    
+    // Draft ••• dropdown toggle
+    document.querySelectorAll('.draft-more-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        // Close any other open dropdowns
+        document.querySelectorAll('.draft-dropdown').forEach(d => {
+          if (d.id !== `draft-dropdown-${draftId}`) d.classList.add('hidden');
+        });
+        const dropdown = document.getElementById(`draft-dropdown-${draftId}`);
+        dropdown?.classList.toggle('hidden');
+      });
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.draft-dropdown').forEach(d => d.classList.add('hidden'));
+    });
+
+    // Draft play button
+    document.querySelectorAll('.draft-play-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const draftId = btn.dataset.draftId;
+        const draft = this.releases.find(r => r.id === draftId);
+        if (draft?.tracks?.length > 0) {
+          const track = draft.tracks[0];
+          Player.playTrack({
+            id: track.id, trackId: track.id?.toString(),
+            title: draft.type === 'single' ? draft.title : track.title,
+            artist: draft.artistName || Helpers.truncateAddress(draft.artistAddress),
+            cover: this.getImageUrl(draft.coverUrl),
+            ipfsHash: track.audioCid,
+            releaseId: draft.id,
+            duration: track.duration,
+          });
+        }
+      });
+    });
     // Draft card click — preview
     document.querySelectorAll('.draft-card').forEach(card => {
       card.addEventListener('click', (e) => {
