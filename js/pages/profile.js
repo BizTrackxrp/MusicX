@@ -928,7 +928,7 @@ renderDraftCard(draft) {
           </div>
           <div class="draft-card-actions">
             <button class="btn btn-sm btn-finalize finalize-draft-btn" data-draft-id="${draft.id}">
-              ⚡ Finalize & Mint
+              ✏️ Review & Finalize
             </button>
             <button class="btn btn-sm btn-secondary draft-more-btn" data-draft-id="${draft.id}" title="More options">
               •••
