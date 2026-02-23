@@ -2205,9 +2205,10 @@ const Modals = {
     const trackCount = release.tracks?.length || 1;
     const albumPrice = parseFloat(release.albumPrice) || (defaultTrackPrice * trackCount);
     const isAlbum = release.type !== 'single' && trackCount > 1;
+    const isDraft = release.status === 'draft';
     
     // Check if full album is available (all tracks have stock)
-    const canBuyFullAlbum = isAlbum && available >= trackCount;
+    const canBuyFullAlbum = !isDraft && isAlbum && available >= trackCount;
     
    // Calculate total duration
     const totalDuration = release.tracks?.reduce((sum, t) => sum + (t.duration || 0), 0) || 0;
@@ -2215,15 +2216,18 @@ const Modals = {
       ? `${Math.floor(totalDuration / 3600)} hr ${Math.floor((totalDuration % 3600) / 60)} min`
       : `${Math.floor(totalDuration / 60)} min ${totalDuration % 60} sec`;
     
-    // Mint provenance badge
-    const mintBadge = typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release, { size: 'md' }) : '';
+    // Mint provenance badge — hide for drafts
+    const mintBadge = !isDraft && typeof MintBadge !== 'undefined' ? MintBadge.getHTML(release, { size: 'md' }) : '';
+    
+    // Draft badge
+    const draftBadge = isDraft ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;background:rgba(107,114,128,0.9);color:white;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">📝 DRAFT</span>` : '';
     
     const html = `
       <div class="modal-overlay release-modal-overlay">
         <div class="modal release-modal">
           <!-- Badge + Close container -->
 <div style="position:absolute;top:16px;right:16px;z-index:10;display:flex;align-items:center;gap:12px;">
-  ${release.soldEditions === 0 ? `<span style="font-size:14px;font-weight:600;color:white;white-space:nowrap;">🏆 1st Edition Available!</span>` : `<span style="font-size:14px;color:rgba(255,255,255,0.8);">${available} of ${release.totalEditions} available</span>`}
+  ${isDraft ? `<span style="font-size:14px;color:rgba(255,255,255,0.6);">Draft Preview</span>` : release.soldEditions === 0 ? `<span style="font-size:14px;font-weight:600;color:white;white-space:nowrap;">🏆 1st Edition Available!</span>` : `<span style="font-size:14px;color:rgba(255,255,255,0.8);">${available} of ${release.totalEditions} available</span>`}
   <button onclick="Modals.close()" style="background:none;border:none;padding:0;cursor:pointer;color:white;opacity:0.8;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -2243,6 +2247,7 @@ const Modals = {
                 <div class="release-modal-badge-row">
                   <span class="release-type-label">${isAlbum ? (release.type === 'album' ? 'Album' : 'EP') : 'Single'}</span>
                   ${mintBadge}
+                  ${draftBadge}
                 </div>
                 <h1 class="release-title-large">${release.title}</h1>
                 <div class="release-meta">
@@ -2303,7 +2308,9 @@ const Modals = {
               </button>
 ` : ''}
             <div style="flex: 1;"></div>
-            ${canBuyFullAlbum ? `
+            ${isDraft ? `
+              <span style="padding:8px 16px;background:rgba(107,114,128,0.2);border:1px solid rgba(107,114,128,0.3);border-radius:var(--radius);color:var(--text-muted);font-size:13px;font-weight:500;">Not Yet Available</span>
+            ` : canBuyFullAlbum ? `
               <button class="btn btn-primary buy-album-btn" id="buy-album-btn">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="9" cy="21" r="1"></circle>
@@ -2345,7 +2352,7 @@ const Modals = {
             ${release.tracks?.map((track, idx) => {
               const trackSold = track.soldCount || 0;
               const trackRemaining = release.totalEditions - trackSold;
-              const trackAvailable = trackRemaining > 0;
+              const trackAvailable = !isDraft && trackRemaining > 0;
               return `
                 <div class="track-row" data-track-idx="${idx}">
                   <span class="track-col-num">
@@ -2393,9 +2400,9 @@ const Modals = {
   </button>
 </span>
                   <span class="track-col-duration">${Helpers.formatDuration(track.duration)}</span>
-                 <span class="track-col-avail">${trackRemaining}/${release.totalEditions}</span>
+                 <span class="track-col-avail">${isDraft ? '—' : `${trackRemaining}/${release.totalEditions}`}</span>
                   <span class="track-col-buy">
-                    ${trackAvailable ? `
+                    ${isDraft ? `<span class="sold-out-label">Draft</span>` : trackAvailable ? `
                       <button class="btn btn-sm buy-track-btn" data-track-idx="${idx}" data-track-id="${track.id}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <circle cx="9" cy="21" r="1"></circle>
@@ -2750,7 +2757,7 @@ const Modals = {
           }
           .release-header-content { flex-direction: column; align-items: center; text-align: center; gap: 16px; }
           .release-cover-small { width: 140px; height: 140px; }
-          .release-header { padding: 20px 16px 16px; }
+          .release-header { padding: 48px 16px 16px; }
           .release-title-large { font-size: 22px; margin: 4px 0 12px; }
           .release-meta { justify-content: center; font-size: 13px; }
           .release-actions-bar { 
