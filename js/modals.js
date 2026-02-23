@@ -3861,15 +3861,16 @@ const totalPrice = albumPrice;
     }
   },
   
- showCreate() {
+ showCreate(existingDraft) {
     if (!AppState.user?.address) { this.showAuth(); return; }
     this.activeModal = 'create';
+    const isEditMode = !!existingDraft;
     
     const html = `
       <div class="modal-overlay">
         <div class="modal create-modal">
           <div class="modal-header">
-            <div class="modal-title">Create Release</div>
+           <div class="modal-title">${isEditMode ? 'Review & Finalize' : 'Create Release'}</div>
             <button class="modal-close">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -4312,285 +4313,86 @@ const totalPrice = albumPrice;
     `;
     
    this.show(html);
-    this.bindCreateEvents();
+    this.bindCreateEvents(existingDraft || null);
   },
 
+
   showFinalizeMint(release) {
-    if (!AppState.user?.address) { this.showAuth(); return; }
-    this.activeModal = 'finalize';
-    
-    const trackCount = release.tracks?.length || 1;
-    const isAlbum = release.type !== 'single' && trackCount > 1;
-    const editions = release.totalEditions || 100;
-    const totalNFTs = trackCount * editions;
-    const songPrice = release.songPrice || 5;
-    const albumPrice = release.albumPrice || (songPrice * trackCount);
-    const royalty = release.royaltyPercent || 5;
-    const genres = release.draftGenres || [];
-    const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
-    
-    const networkFee = totalNFTs * 0.000012;
-    const mintFee = (networkFee + 0.01).toFixed(6);
-    
-    const coverUrl = this.getImageUrl(release.coverUrl);
-    
-    const html = `
-      <div class="modal-overlay">
-        <div class="modal create-modal" style="max-width: 480px;">
-          <div class="modal-header">
-            <div class="modal-title">Finalize & Mint</div>
-            <button class="modal-close">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          
-          <div class="modal-body">
-            <div class="review-card">
-              <div class="review-cover">
-                ${release.coverUrl ? `<img src="${coverUrl}" alt="${release.title}">` : '<div class="cover-placeholder">🎵</div>'}
-              </div>
-              <div class="review-info">
-                <div class="review-title">${release.title}</div>
-                <div class="review-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
-                <div class="review-meta">
-                  <span>${isAlbum ? (release.type === 'album' ? 'ALBUM' : 'EP') : 'SINGLE'}</span>
-                  <span>${trackCount} track${trackCount > 1 ? 's' : ''}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div class="review-details">
-              <div class="review-row">
-                <span>Price</span>
-                <span>${isAlbum ? `Album: ${albumPrice} XRP` : `${songPrice} XRP`}</span>
-              </div>
-              <div class="review-row">
-                <span>Editions</span>
-                <span>${editions} × ${trackCount} tracks = ${totalNFTs} NFTs</span>
-              </div>
-              <div class="review-row">
-                <span>Resale Royalty</span>
-                <span>${royalty}%</span>
-              </div>
-              ${genres.length > 0 ? `
-                <div class="review-row">
-                  <span>Genres</span>
-                  <span>${genres.map(g => genreNames[g] || g).join(', ')}</span>
-                </div>
-              ` : ''}
-              <div class="review-row mint-fee-row">
-                <span>Mint Fee (one-time)</span>
-                <span>${mintFee} XRP</span>
-              </div>
-            </div>
-            
-            <div class="mint-status hidden" id="finalize-mint-status">
-              <div class="mint-status-icon"><div class="spinner"></div></div>
-              <div class="mint-status-text">Preparing...</div>
-            </div>
-            
-            <div id="finalize-nav" style="display:flex;gap:12px;margin-top:20px;">
-              <button class="btn btn-secondary" id="finalize-cancel" style="flex:1;">Cancel</button>
-              <button class="btn btn-primary" id="finalize-confirm" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                  <path d="M2 17l10 5 10-5"></path>
-                  <path d="M2 12l10 5 10-5"></path>
-                </svg>
-                Pay ${mintFee} XRP & Go Live
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <style>
-        .review-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 20px; }
-        .review-cover { width: 80px; height: 80px; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); flex-shrink: 0; }
-        .review-cover img { width: 100%; height: 100%; object-fit: cover; }
-        .review-info { flex: 1; min-width: 0; }
-        .review-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-        .review-artist { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
-        .review-meta { font-size: 13px; color: var(--text-muted); }
-        .review-meta span { margin-right: 12px; }
-        .review-details { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
-        .review-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
-        .review-row span:first-child { color: var(--text-secondary); }
-        .review-row span:last-child { color: var(--text-primary); font-weight: 500; }
-        .mint-fee-row { border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 12px !important; }
-        .mint-status.hidden { display: none; }
-      </style>
-    `;
-    
-    this.show(html);
-    
-    // Cancel
-    document.getElementById('finalize-cancel')?.addEventListener('click', () => this.close());
-    
-    // Confirm mint
-    document.getElementById('finalize-confirm')?.addEventListener('click', async () => {
-      const statusEl = document.getElementById('finalize-mint-status');
-      const navEl = document.getElementById('finalize-nav');
-      
-      statusEl.classList.remove('hidden');
-      navEl.style.display = 'none';
-      
-      const showStatus = (message, sub) => {
-        statusEl.innerHTML = `
-          <div class="mint-status-icon"><div class="spinner"></div></div>
-          <div class="mint-status-text">${message}</div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">${sub || ''}</p>
-        `;
-      };
-      
-      try {
-        // Step 1: Create metadata JSONs for each track
-        showStatus('Creating metadata...', 'Preparing NFT data');
-        
-        const artistName = release.artistName || AppState.profile?.name || AppState.user.address;
-        const trackMetadataUris = [];
-        
-        for (let i = 0; i < release.tracks.length; i++) {
-          const track = release.tracks[i];
-          const trackMetadata = {
-            name: release.tracks.length === 1 ? release.title : `${release.title} - ${track.title}`,
-            description: release.description || '',
-            image: `ipfs://${release.coverCid}`,
-            animation_url: `ipfs://${track.audioCid}`,
-            attributes: [
-              { trait_type: 'Type', value: release.type },
-              { trait_type: 'Artist', value: artistName },
-              { trait_type: 'Album', value: release.title },
-              { trait_type: 'Track Number', value: i + 1 },
-              { trait_type: 'Total Tracks', value: release.tracks.length },
-            ],
-            properties: {
-              title: track.title,
-              duration: track.duration,
-              audio: `ipfs://${track.audioCid}`,
-              ...(track.videoCid ? { video: `ipfs://${track.videoCid}` } : {}),
-              albumTitle: release.title,
-              trackNumber: i + 1,
-            },
-          };
-          
-          const result = await API.uploadJSON(trackMetadata, `${release.title}-track${i+1}-metadata.json`);
-          trackMetadataUris.push(result.ipfsUrl);
-        }
-        
-        // Also create album metadata
-        const albumMetadata = {
-          name: release.title,
-          description: release.description || '',
-          image: `ipfs://${release.coverCid}`,
-          attributes: [
-            { trait_type: 'Type', value: release.type },
-            { trait_type: 'Artist', value: artistName },
-            { trait_type: 'Tracks', value: release.tracks.length },
-          ],
-          properties: {
-            tracks: release.tracks.map((t, i) => ({
-              title: t.title,
-              duration: t.duration,
-              audio: `ipfs://${t.audioCid}`,
-              metadataUri: trackMetadataUris[i],
-            })),
-          },
-        };
-        const albumResult = await API.uploadJSON(albumMetadata, `${release.title}-album-metadata.json`);
-        
-        // Update release with metadata CID
-        await API.updateRelease(release.id, {
-          metadataCid: albumResult.cid,
-        });
-        
-        // Step 2: Pay mint fee
-        showStatus('Pay Mint Fee', '📱 Sign in Xaman — one quick signature!');
-        
-        Modals.mintingInProgress = true;
-        
-        const configResponse = await fetch('/api/batch-mint', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getConfig' }),
-        });
-        const configData = await configResponse.json();
-        const platformAddress = configData.platformAddress;
-        
-        if (!platformAddress) throw new Error('Platform not configured');
-        
-        const paymentResult = await XamanWallet.sendPayment(
-          platformAddress,
-          parseFloat(mintFee),
-          `XRP Music: ${release.title}`
-        );
-        
-        if (!paymentResult.success) throw new Error(paymentResult.error || 'Payment cancelled');
-        
-        Modals.mintingInProgress = false;
-        
-        // Step 3: Mark as live
-        showStatus('Going live...', 'Your release is being published!');
-        
-        await API.updateRelease(release.id, {
-          mintFeePaid: true,
-          mintFeeTxHash: paymentResult.txHash,
-          mintFeeAmount: parseFloat(mintFee),
-          status: 'live',
-          metadataCid: albumResult.cid,
-        });
-        
-        // Success!
-        statusEl.innerHTML = `
-          <div class="mint-success">
-            <div class="mint-success-cover">
-              <img src="${coverUrl}" alt="Cover">
-              <div class="mint-success-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg>
-              </div>
-            </div>
-            <div class="mint-success-title">🎉 ${release.title}</div>
-            <div class="mint-success-stats">${trackCount} track${trackCount > 1 ? 's' : ''} • ${editions} editions available</div>
-            <p class="mint-success-msg">Your music is live! NFTs mint automatically when fans purchase.</p>
-            <div class="mint-success-actions">
-              <button class="btn btn-primary" id="finalize-done">View Release</button>
-            </div>
-          </div>
-        `;
-        
-        document.getElementById('finalize-done')?.addEventListener('click', () => {
-          Modals.close();
-          Router.navigate('profile');
-        });
-        
-      } catch (error) {
-        console.error('Finalize mint failed:', error);
-        Modals.mintingInProgress = false;
-        statusEl.innerHTML = `
-          <div class="mint-status-icon" style="color: var(--error);">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="15" y1="9" x2="9" y2="15"></line>
-              <line x1="9" y1="9" x2="15" y2="15"></line>
-            </svg>
-          </div>
-          <div class="mint-status-text" style="color: var(--error);">${error.message || 'Minting failed'}</div>
-        `;
-        navEl.style.display = 'flex';
-      }
-    });
+    // Open the create wizard in edit mode, pre-populated with draft data
+    this.showCreate(release);
   },
-  
-  bindCreateEvents() {
+  bindCreateEvents(existingDraft) {
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
+    const selectedGenres = [];
+    const isEditMode = !!existingDraft;
+    
+    // ============================================
+    // EDIT MODE: Pre-populate from existing draft
+    // ============================================
+    if (isEditMode) {
+      // Step 1 fields
+      document.getElementById('release-title').value = existingDraft.title || '';
+      document.getElementById('release-description').value = existingDraft.description || '';
+      document.getElementById('release-editions').value = existingDraft.totalEditions || 100;
+      document.getElementById('release-royalty').value = existingDraft.royaltyPercent || 5;
+      
+      // Cover art - show existing
+      if (existingDraft.coverUrl) {
+        const coverPreviewImg = document.getElementById('cover-preview-img');
+        if (coverPreviewImg) {
+          coverPreviewImg.src = Modals.getImageUrl(existingDraft.coverUrl);
+          document.getElementById('cover-placeholder')?.classList.add('hidden');
+          document.getElementById('cover-preview')?.classList.remove('hidden');
+          document.getElementById('cover-upload-zone')?.classList.add('has-file');
+        }
+        // Mark cover as already uploaded (no file object, but we have the CID)
+        coverFile = '__existing__';
+      }
+      
+      // Audio tracks - populate from existing
+      if (existingDraft.tracks?.length > 0) {
+        existingDraft.tracks.forEach((t, i) => {
+          tracks.push({
+            file: null, // Already uploaded
+            title: existingDraft.type === 'single' ? existingDraft.title : (t.title || `Track ${i+1}`),
+            duration: t.duration || 0,
+            status: 'done',
+            audioCid: t.audioCid,
+            audioUrl: t.audioUrl,
+            price: t.price || existingDraft.songPrice || 5,
+            priceCustomized: true,
+            videoCid: t.videoCid || null,
+            videoUrl: t.videoUrl || null,
+            metadataCid: t.metadataCid || null,
+            existingTrackId: t.id,
+          });
+        });
+        updateTrackList();
+        document.getElementById('audio-upload-zone')?.classList.add('has-file');
+      }
+      
+      // Genres - pre-select
+      const draftGenres = existingDraft.draftGenres || [];
+      if (typeof draftGenres === 'string') {
+        try { draftGenres = JSON.parse(draftGenres); } catch(e) {}
+      }
+      if (Array.isArray(draftGenres)) {
+        draftGenres.forEach(g => {
+          selectedGenres.push(g);
+          document.querySelector(`.genre-chip[data-genre="${g}"]`)?.classList.add('selected');
+        });
+      }
+      
+      // Album price
+      if (existingDraft.albumPrice && existingDraft.tracks?.length > 1) {
+        setTimeout(() => {
+          const albumInput = document.getElementById('album-discount-price');
+          if (albumInput) albumInput.value = existingDraft.albumPrice;
+        }, 100);
+      }
+    }
    
    // Calculate listing fee: pre-funds future on-demand mints
 // tracks × editions × network fee + buffer for reserves
@@ -4645,7 +4447,6 @@ function calculateMintFee(editions, trackCount = 1) {
     updateMintFee();
     
     // Genre picker
-    const selectedGenres = [];
     document.querySelectorAll('.genre-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const genre = chip.dataset.genre;
@@ -4724,7 +4525,10 @@ if (editions > 10000) {
       document.getElementById('release-type').value = releaseType;
       
      // Update review
-      document.getElementById('review-cover').innerHTML = `<img src="${URL.createObjectURL(coverFile)}" alt="Cover">`;
+      const coverPreviewSrc = coverFile === '__existing__' 
+        ? Modals.getImageUrl(existingDraft?.coverUrl) 
+        : URL.createObjectURL(coverFile);
+      document.getElementById('review-cover').innerHTML = `<img src="${coverPreviewSrc}" alt="Cover">`;
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
       document.getElementById('review-type').textContent = releaseType.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
@@ -5094,19 +4898,31 @@ if (editions > 10000) {
       };
       
       try {
-        // Step 1: Upload cover to IPFS
-        showStatus(1, 3, 'Uploading cover art...', 'This may take a moment');
-        const coverResult = await API.uploadFile(coverFile);
+      // Step 1: Upload cover to IPFS (skip if already uploaded in edit mode)
+        let coverResult;
+        if (coverFile === '__existing__' && existingDraft?.coverCid) {
+          showStatus(1, 3, 'Using existing cover art...', 'Already uploaded');
+          coverResult = { cid: existingDraft.coverCid, url: existingDraft.coverUrl };
+        } else {
+          showStatus(1, 3, 'Uploading cover art...', 'This may take a moment');
+          coverResult = await API.uploadFile(coverFile);
+        }
         
-        // Step 2: Upload audio files to IPFS
+        // Step 2: Upload audio files to IPFS (skip already-uploaded tracks)
         const uploadedTracks = [];
         for (let i = 0; i < tracks.length; i++) {
-          const trackSizeMB = (tracks[i].file.size / (1024 * 1024)).toFixed(1);
-          showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}...`, `${trackSizeMB}MB — uploading to IPFS`);
-          
-          const audioResult = await DirectUploader.upload(tracks[i].file, (pct) => {
-            showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading to IPFS`);
-          });
+          let audioResult;
+          if (tracks[i].audioCid && !tracks[i].file) {
+            // Already uploaded in edit mode
+            showStatus(2, 3, `Track ${i + 1} of ${tracks.length} already uploaded`, 'Skipping...');
+            audioResult = { cid: tracks[i].audioCid, url: tracks[i].audioUrl };
+          } else {
+            const trackSizeMB = (tracks[i].file.size / (1024 * 1024)).toFixed(1);
+            showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}...`, `${trackSizeMB}MB — uploading to IPFS`);
+            audioResult = await DirectUploader.upload(tracks[i].file, (pct) => {
+              showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading to IPFS`);
+            });
+          }
           
           uploadedTracks.push({
             title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
@@ -5151,7 +4967,25 @@ if (editions > 10000) {
           draftGenres: selectedGenres,
         };
         
-        const result = await API.saveRelease(draftData);
+       let result;
+        if (isEditMode && existingDraft?.id) {
+          // Update existing draft
+          await API.updateRelease(existingDraft.id, {
+            title: releaseTitle,
+            description: releaseDescription,
+            songPrice: defaultTrackPrice,
+            albumPrice: releaseType !== 'single' ? albumPriceValue : null,
+            totalEditions: editions,
+            royaltyPercent: royaltyPercent,
+            coverUrl: coverResult.url,
+            coverCid: coverResult.cid,
+            visibility: draftVisibility,
+            draftGenres: selectedGenres,
+          });
+          result = { releaseId: existingDraft.id, trackIds: existingDraft.tracks?.map(t => t.id) || [] };
+        } else {
+          result = await API.saveRelease(draftData);
+        }
         
         // Also save genres to tracks
         if (selectedGenres.length > 0 && result.trackIds?.length > 0) {
@@ -5247,23 +5081,35 @@ if (editions > 10000) {
       };
       
       try {
-        // Step 1: Upload cover to IPFS (small file, use existing proxy)
-        showStatus(1, 5, 'Uploading cover art...', 'This may take a moment depending on file size');
-        const coverResult = await API.uploadFile(coverFile);
+       // Step 1: Upload cover to IPFS (skip if already uploaded in edit mode)
+        let coverResult;
+        if (coverFile === '__existing__' && existingDraft?.coverCid) {
+          showStatus(1, 5, 'Using existing cover art...', 'Already uploaded');
+          coverResult = { cid: existingDraft.coverCid, url: existingDraft.coverUrl };
+        } else {
+          showStatus(1, 5, 'Uploading cover art...', 'This may take a moment depending on file size');
+          coverResult = await API.uploadFile(coverFile);
+        }
         document.getElementById('cover-cid').value = coverResult.cid;
         document.getElementById('cover-url').value = coverResult.url;
         
-        // Step 2: Upload audio files to IPFS via DirectUploader (bypasses 4.5MB limit)
+       // Step 2: Upload audio files to IPFS (skip already-uploaded tracks)
         const uploadedTracks = [];
         for (let i = 0; i < tracks.length; i++) {
-          const trackSizeMB = (tracks[i].file.size / (1024 * 1024)).toFixed(1);
-          showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}...`, `${trackSizeMB}MB — uploading directly to IPFS`);
-          tracks[i].status = 'uploading';
-          updateTrackList();
-          
-          const audioResult = await DirectUploader.upload(tracks[i].file, (pct) => {
-            showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading directly to IPFS`);
-          });
+          let audioResult;
+          if (tracks[i].audioCid && !tracks[i].file) {
+            // Already uploaded in edit mode
+            showStatus(2, 5, `Track ${i + 1} already uploaded`, 'Skipping...');
+            audioResult = { cid: tracks[i].audioCid, url: tracks[i].audioUrl };
+          } else {
+            const trackSizeMB = (tracks[i].file.size / (1024 * 1024)).toFixed(1);
+            showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}...`, `${trackSizeMB}MB — uploading directly to IPFS`);
+            tracks[i].status = 'uploading';
+            updateTrackList();
+            audioResult = await DirectUploader.upload(tracks[i].file, (pct) => {
+              showStatus(2, 5, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading directly to IPFS`);
+            });
+          }
           tracks[i].status = 'done';
           tracks[i].audioCid = audioResult.cid;
           tracks[i].audioUrl = audioResult.url;
@@ -5353,7 +5199,24 @@ const totalNFTs = uploadedTracks.length * editions;
 const defaultTrackPrice = tracks[0]?.price || 5;
 const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
 const albumPriceValue = parseFloat(document.getElementById('album-discount-price')?.value) || individualTotal;
-
+// In edit mode, update existing release instead of creating new one
+if (isEditMode && existingDraft?.id) {
+  releaseId = existingDraft.id;
+  // Update the existing release with any changes
+  await API.updateRelease(releaseId, {
+    title: releaseTitle,
+    description: releaseDescription,
+    coverUrl: coverResult.url,
+    coverCid: coverResult.cid,
+    metadataCid: albumMetadataResult.cid,
+    songPrice: tracks[0]?.price || 5,
+    albumPrice: releaseType !== 'single' ? (parseFloat(document.getElementById('album-discount-price')?.value) || tracks.reduce((s,t) => s + (parseFloat(t.price)||0), 0)) : null,
+    totalEditions: editions,
+    royaltyPercent: royaltyPercent,
+  });
+  Modals.pendingReleaseId = releaseId;
+  console.log('Updated existing draft for minting:', releaseId);
+} else {
 // Pre-create release to get IDs
 const preReleaseData = {
   artistAddress: AppState.user.address,
@@ -5386,7 +5249,7 @@ Modals.pendingReleaseId = releaseId;  // Track for cleanup if modal closes
 const trackIds = preCreateResult.trackIds;
 
 console.log('Pre-created release:', { releaseId, trackIds });
-
+} // close the else block from edit mode check
 // Step 5: Pay mint fee (pre-funds on-demand minting)
 const mintFee = calculateMintFee(editions, uploadedTracks.length);
 
@@ -5467,7 +5330,7 @@ Modals.mintingInProgress = false;
 statusEl.innerHTML = `
   <div class="mint-success">
     <div class="mint-success-cover">
-      <img src="${URL.createObjectURL(coverFile)}" alt="Cover">
+      <img src="${coverFile === '__existing__' ? Modals.getImageUrl(existingDraft?.coverUrl) : URL.createObjectURL(coverFile)}" alt="Cover">
       <div class="mint-success-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
