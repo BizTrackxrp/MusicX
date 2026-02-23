@@ -3970,33 +3970,8 @@ const totalPrice = albumPrice;
                   </div>
                 </div>
 
-                <!-- Draft Visibility -->
-                <div class="form-group">
-                  <label class="form-label">Draft Visibility</label>
-                  <div class="visibility-toggle" id="visibility-toggle">
-                    <button type="button" class="visibility-option selected" data-visibility="private">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                      </svg>
-                      Private
-                    </button>
-                    <button type="button" class="visibility-option" data-visibility="public">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="2" y1="12" x2="22" y2="12"></line>
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                      </svg>
-                      Public
-                    </button>
-                  </div>
-                  <p class="form-hint" id="visibility-hint">Only you + anyone with the direct link can see this draft</p>
-                </div>
+               
                 
-                <div class="mint-fee-preview">
-                  <span>Mint Fee:</span>
-                  <span id="mint-fee-amount">Upload tracks to calculate</span>
-                </div>
                 <div class="create-nav">
                   <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
                   <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
@@ -4033,26 +4008,6 @@ const totalPrice = albumPrice;
                     <span>Resale Royalty</span>
                     <span id="review-royalty"></span>
                   </div>
-                  <div class="review-row">
-                    <span>Visibility</span>
-                    <span id="review-visibility"></span>
-                  </div>
-                  <div class="review-row mint-fee-row">
-                    <span>Mint Fee (one-time)</span>
-                    <span id="review-mint-fee"></span>
-                  </div>
-                </div>
-                
-                <!-- Recommended: Save as Draft -->
-                <div class="draft-recommend-box">
-                  <div class="draft-recommend-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                    <span>We recommend saving as a draft first!</span>
-                  </div>
-                  <p class="draft-recommend-text">Preview how your release will look and sound on the platform. Check it out on your profile, share the link with friends, and mint when you're ready.</p>
                 </div>
                 
                 <div class="mint-status hidden" id="mint-status">
@@ -4060,6 +4015,76 @@ const totalPrice = albumPrice;
                     <div class="spinner"></div>
                   </div>
                   <div class="mint-status-text" id="mint-status-text">Preparing...</div>
+                </div>
+                
+                <!-- Expand panel: Save Draft (hidden until clicked) -->
+                <div class="expand-panel hidden" id="draft-expand-panel">
+                  <div class="expand-panel-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                      <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                      <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    <span>Draft Visibility</span>
+                  </div>
+                  <p class="expand-panel-hint">Choose who can see this draft before you mint</p>
+                  <div class="visibility-toggle" id="visibility-toggle">
+                    <button type="button" class="visibility-option selected" data-visibility="private">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                      </svg>
+                      Private
+                    </button>
+                    <button type="button" class="visibility-option" data-visibility="public">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                      </svg>
+                      Public
+                    </button>
+                  </div>
+                  <p class="form-hint" id="visibility-hint">Only you + anyone with the direct link can see this draft</p>
+                  <div style="display:flex;gap:10px;margin-top:16px;">
+                    <button type="button" class="btn btn-secondary" id="draft-panel-back" style="flex:1;">Back</button>
+                    <button type="button" class="btn btn-primary" id="confirm-save-draft-btn" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                      </svg>
+                      Save Draft
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Expand panel: Mint Now (hidden until clicked) -->
+                <div class="expand-panel hidden" id="mint-expand-panel">
+                  <div class="expand-panel-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                      <path d="M2 17l10 5 10-5"></path>
+                      <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    <span>Mint & Go Live</span>
+                  </div>
+                  <div class="mint-fee-preview" style="margin:12px 0;">
+                    <span>Mint Fee:</span>
+                    <span id="mint-fee-amount">Calculating...</span>
+                  </div>
+                  <p class="expand-panel-hint">One small network fee to publish your release. NFTs mint automatically when fans buy.</p>
+                  <div style="display:flex;gap:10px;margin-top:16px;">
+                    <button type="button" class="btn btn-secondary" id="mint-panel-back" style="flex:1;">Back</button>
+                    <button type="submit" class="btn btn-primary" id="confirm-mint-now-btn" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                      </svg>
+                      Pay & Go Live
+                    </button>
+                  </div>
                 </div>
                 
                 <div class="create-nav create-nav-draft" id="create-nav-3">
@@ -4072,7 +4097,7 @@ const totalPrice = albumPrice;
                     </svg>
                     Save Draft
                   </button>
-                  <button type="submit" class="btn btn-secondary btn-mint-now" id="mint-now-btn" title="Skip draft, mint immediately">
+                  <button type="button" class="btn btn-secondary btn-mint-now" id="mint-now-btn" title="Skip draft, mint immediately">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
                       <path d="M2 17l10 5 10-5"></path>
@@ -4081,12 +4106,6 @@ const totalPrice = albumPrice;
                     Mint Now
                   </button>
                 </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      
       <style>
         .create-modal { max-width: 540px; }
         .create-step-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; }
@@ -4261,6 +4280,27 @@ const totalPrice = albumPrice;
           flex: 2 !important; display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn-mint-now { flex: 1 !important; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+        .expand-panel {
+          padding: 20px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          margin-bottom: 16px;
+          animation: expandIn 200ms ease;
+        }
+        .expand-panel.hidden { display: none; }
+        .expand-panel-header {
+          display: flex; align-items: center; gap: 8px;
+          font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;
+        }
+        .expand-panel-header svg { color: var(--accent); }
+        .expand-panel-hint {
+          font-size: 13px; color: var(--text-muted); margin: 0 0 12px 0; line-height: 1.4;
+        }
+        @keyframes expandIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       </style>
     `;
     
@@ -4617,22 +4657,30 @@ function calculateMintFee(editions, trackCount = 1) {
       });
     });
 
-    // Visibility toggle
+   // Visibility toggle (lives inside draft expand panel on step 3)
     let draftVisibility = 'private';
-    document.querySelectorAll('.visibility-option').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.visibility-option').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        draftVisibility = btn.dataset.visibility;
-        const hint = document.getElementById('visibility-hint');
-        if (hint) {
-          hint.textContent = draftVisibility === 'public'
-            ? 'Shows on your profile with a "Coming Soon" badge (not in Stream/Marketplace)'
-            : 'Only you + anyone with the direct link can see this draft';
-        }
+    function bindVisibilityToggle() {
+      document.querySelectorAll('.visibility-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.visibility-option').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          draftVisibility = btn.dataset.visibility;
+          const hint = document.getElementById('visibility-hint');
+          if (hint) {
+            hint.textContent = draftVisibility === 'public'
+              ? 'Shows on your profile with a "Coming Soon" badge (not in Stream/Marketplace)'
+              : 'Only you + anyone with the direct link can see this draft';
+          }
+        });
       });
-    });
-    
+    }
+
+    // Helper to close expand panels and restore nav buttons
+    function closeExpandPanels() {
+      document.getElementById('draft-expand-panel')?.classList.add('hidden');
+      document.getElementById('mint-expand-panel')?.classList.add('hidden');
+      document.getElementById('create-nav-3').style.display = 'flex';
+    }
     // Step navigation
     document.getElementById('create-next-1')?.addEventListener('click', () => {
   const title = document.getElementById('release-title').value.trim();
@@ -4692,21 +4740,19 @@ if (editions > 10000) {
       
       document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
       document.getElementById('review-royalty').textContent = `${royalty}%`;
-      document.getElementById('review-mint-fee').textContent = `${mintFee} XRP`;
+    
       // Show genres in review
       const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
       const reviewGenresEl = document.getElementById('review-genres');
       if (reviewGenresEl) {
         reviewGenresEl.textContent = selectedGenres.length > 0 ? selectedGenres.map(g => genreNames[g] || g).join(', ') : 'No genres selected';
       }
-      const reviewVisEl = document.getElementById('review-visibility');
-      if (reviewVisEl) {
-        reviewVisEl.textContent = draftVisibility === 'public' ? '🌐 Public (Coming Soon on profile)' : '🔒 Private (link only)';
-      }
+    
       document.getElementById('create-step-2').classList.add('hidden');
       document.getElementById('create-step-3').classList.remove('hidden');
     });
-    document.getElementById('create-back-3')?.addEventListener('click', () => {
+  document.getElementById('create-back-3')?.addEventListener('click', () => {
+      closeExpandPanels();
       document.getElementById('create-step-3').classList.add('hidden');
       document.getElementById('create-step-2').classList.remove('hidden');
     });
@@ -5013,8 +5059,19 @@ if (editions > 10000) {
      // Recalculate mint fee when tracks change
       updateMintFee();
    
-    // Save Draft button
-    document.getElementById('save-draft-btn')?.addEventListener('click', async () => {
+   // Save Draft button — opens visibility picker panel
+    document.getElementById('save-draft-btn')?.addEventListener('click', () => {
+      document.getElementById('mint-expand-panel')?.classList.add('hidden');
+      document.getElementById('draft-expand-panel')?.classList.remove('hidden');
+      document.getElementById('create-nav-3').style.display = 'none';
+      bindVisibilityToggle();
+    });
+
+    // Draft panel back button
+    document.getElementById('draft-panel-back')?.addEventListener('click', closeExpandPanels);
+
+    // Confirm Save Draft (inside expand panel) — does the actual saving
+    document.getElementById('confirm-save-draft-btn')?.addEventListener('click', async () => {
       const statusEl = document.getElementById('mint-status');
       const navEl = document.getElementById('create-nav-3');
       
@@ -5136,7 +5193,27 @@ if (editions > 10000) {
         navEl.style.display = 'flex';
       }
     });
+// Mint Now button — opens fee panel
+    document.getElementById('mint-now-btn')?.addEventListener('click', () => {
+      document.getElementById('draft-expand-panel')?.classList.add('hidden');
+      document.getElementById('mint-expand-panel')?.classList.remove('hidden');
+      document.getElementById('create-nav-3').style.display = 'none';
+      // Calculate and show mint fee
+      const editions = parseInt(document.getElementById('release-editions').value) || 1;
+      const trackCount = tracks.length;
+      const fee = calculateMintFee(editions, trackCount);
+      const totalNFTs = trackCount * editions;
+      const feeDisplay = document.getElementById('mint-fee-amount');
+      if (feeDisplay) feeDisplay.textContent = `~${fee} XRP (${totalNFTs} NFTs)`;
+    });
 
+    // Mint panel back button
+    document.getElementById('mint-panel-back')?.addEventListener('click', closeExpandPanels);
+
+    // Confirm Mint button triggers form submit
+    document.getElementById('confirm-mint-now-btn')?.addEventListener('click', () => {
+      form?.requestSubmit();
+    });
     // Form submit - Mint NFT
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
