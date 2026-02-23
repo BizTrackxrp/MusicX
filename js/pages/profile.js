@@ -70,7 +70,7 @@ const ProfilePage = {
       
       const [releases, profile, unlockableData] = await Promise.race([
         Promise.all([
-          API.getReleasesByArtist(AppState.user.address),
+         API.getReleasesByArtist(AppState.user.address, true),
           API.getProfile(AppState.user.address),
           this.fetchUnlockableConfig(AppState.user.address),
         ]),
