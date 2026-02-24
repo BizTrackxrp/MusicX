@@ -9,16 +9,21 @@
  * MINTING: Uses Railway worker queue - no timeout limits!
  * Max 10,000 NFTs per batch. User can close page after signing.
  * 
- * XAMAN 5.0 WORKAROUND: Added Memos to NFTokenAcceptOffer payloads
- * to prevent "Text Strings must be rendered within a <Text> component"
- * crash in Xaman 5.0's new NFT offer detail screen. Can be removed
- * once Xaman 5.1 is widely adopted.
+ * XAMAN 5.0 WORKAROUND: Added Memos + extra custom_meta fields to
+ * NFTokenAcceptOffer payloads to prevent "Text Strings must be rendered
+ * within a <Text> component" crash in Xaman 5.0's NFT offer detail screen.
+ * 
+ * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
+ * due to xrplcluster.com timeouts causing purchase failures.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
 
 // Session key for this browser tab only
 const SESSION_KEY = 'xrpmusic_session';
+
+// XRPL node for client-side tx lookups (offer index extraction)
+const XRPL_LOOKUP_NODE = 'https://s1.ripple.com:51234';
 
 const XamanWallet = {
   sdk: null,
@@ -802,11 +807,12 @@ const XamanWallet = {
   /**
    * Accept a sell offer to receive an NFT
    * 
-   * XAMAN 5.0 WORKAROUND: Added explicit Memos to prevent the
-   * "Text Strings must be rendered within a <Text> component" crash.
-   * Xaman 5.0 added NFT offer detail lookup on the sign request screen
-   * which crashes when certain fields resolve to null/undefined strings.
-   * Providing explicit memo data gives the renderer something safe to display.
+   * XAMAN 5.0 WORKAROUND: Added explicit Memos, force_network, identifier,
+   * and expanded blob fields to prevent the "Text Strings must be rendered
+   * within a <Text> component" crash. Xaman 5.0 added NFT offer detail
+   * lookup on the sign request screen which crashes when certain fields
+   * resolve to null/undefined strings. Providing explicit data for every
+   * field gives the renderer something safe to display.
    */
   async acceptSellOffer(offerIndex) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -822,11 +828,18 @@ const XamanWallet = {
           NFTokenSellOffer: offerIndex,
           Memos: this.buildMemo('XRP Music NFT purchase'),
         },
+        options: {
+          force_network: 'MAINNET',
+        },
         custom_meta: {
           instruction: 'Sign to receive your music NFT',
+          identifier: 'xrpmusic_nft_accept',
           blob: {
             purpose: 'NFT Transfer',
             platform: 'XRP Music',
+            description: 'Accept NFT sell offer',
+            type: 'NFTokenAcceptOffer',
+            offer: offerIndex || '',
           },
         },
       });
@@ -989,12 +1002,13 @@ const XamanWallet = {
   
   /**
    * Get offer index from transaction metadata
+   * Uses s1.ripple.com JSON-RPC endpoint for reliability
    */
   async getOfferIndexFromTx(txHash) {
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     try {
-      const response = await fetch('https://xrplcluster.com', {
+      const response = await fetch(XRPL_LOOKUP_NODE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1030,10 +1044,11 @@ const XamanWallet = {
   
   /**
    * Get the latest sell offer for an NFT from a specific owner
+   * Uses s1.ripple.com JSON-RPC endpoint for reliability
    */
   async getLatestSellOffer(nftTokenId, ownerAddress) {
     try {
-      const response = await fetch('https://xrplcluster.com', {
+      const response = await fetch(XRPL_LOOKUP_NODE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
