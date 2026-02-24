@@ -5,8 +5,15 @@
  * 
  * XAMAN 5.0 FIX: Uses priced sell offers instead of Payment + 0-drop accept.
  * - SINGLE TRACK: 1 signature (NFTokenAcceptOffer with full price embedded)
- * - ALBUM: N signatures (one NFTokenAcceptOffer per track, price split across them)
+ * - ALBUM: N signatures (one NFTokenAcceptOffer per track via broker-sale)
  * - No separate Payment signature needed for either flow
+ * 
+ * FEB 24 2026 FIX: Album purchases now route each track through broker-sale
+ * (the single-track endpoint) instead of broker-album-sale mint-single.
+ * This fixes a Xaman crash ("text strings must be rendered within <Text>")
+ * that only occurred with album offers but not single offers, despite
+ * identical on-chain offer structures. Root cause likely in Xaman's
+ * NFT detail lookup handling differences between the two endpoints.
  * 
  * MOBILE FIX: Added intermediate button tap between signatures
  * Mobile browsers block popups/deep-links not triggered by direct user gesture
@@ -250,8 +257,6 @@ const PurchasePage = {
                 </div>
                 ` : ''}
               </div>
-              
-          
               
               <!-- Status Area (hidden initially) -->
               <div class="purchase-status" id="purchase-status" style="display: none;">
@@ -893,13 +898,14 @@ const PurchasePage = {
   },
   
   /**
-   * Album purchase - N signatures (one per track, NO separate payment)
+   * Album purchase - N signatures (one per track)
    * 
-   * XAMAN 5.0 FIX: Each track gets a priced sell offer. The album price
-   * is split proportionally across tracks. Each NFTokenAcceptOffer pays
-   * the track's share AND transfers the NFT. No separate Payment tx needed.
+   * FEB 24 2026 FIX: Routes each track through broker-sale (prepare)
+   * instead of broker-album-sale (mint-single). This uses the exact same
+   * code path that works for single track purchases, fixing the Xaman
+   * "text strings" crash that only occurred with album offers.
    * 
-   * VERIFY FIX: Checks on-chain after each accept to catch silent failures
+   * Still uses broker-album-sale for: init (pricing), verify, finalize (artist payment)
    */
   async processAlbumPurchase(updateStatus) {
     const tracks = this.release.tracks || [];
@@ -925,14 +931,13 @@ const PurchasePage = {
       throw new Error(initResult.error || 'Failed to initialize purchase');
     }
     
-    const { sessionId, artistAddress, perTrackOfferPrices } = initResult;
+    const { sessionId, artistAddress } = initResult;
     const confirmedSales = [];
     const failedTracks = [];
     
-    // Step 2: Process each track sequentially (no separate payment!)
+    // Step 2: Process each track sequentially using broker-sale (single track endpoint)
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
-      const offerPrice = perTrackOfferPrices ? perTrackOfferPrices[i] : null;
       
       this.updateAlbumProgress(i, trackCount, track.title, 'minting');
       updateStatus(
@@ -940,28 +945,25 @@ const PurchasePage = {
         `"${track.title}" - minting...`
       );
       
-      // Mint NFT + create PRICED sell offer
-      const mintResponse = await fetch('/api/broker-album-sale', {
+      // Use broker-sale (prepare) - the same endpoint that works for singles
+      const prepareResponse = await fetch('/api/broker-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'mint-single',
+          action: 'prepare',
           releaseId: this.release.id,
           trackId: track.id,
-          trackIndex: i,
           buyerAddress: AppState.user.address,
-          sessionId: sessionId,
-          offerPrice: offerPrice,
         }),
       });
       
-      const mintResult = await mintResponse.json();
+      const prepareResult = await prepareResponse.json();
       
-      if (!mintResult.success) {
-        console.error(`Track ${i + 1} mint failed:`, mintResult.error);
+      if (!prepareResult.success) {
+        console.error(`Track ${i + 1} prepare failed:`, prepareResult.error);
         failedTracks.push(track.title);
         if (confirmedSales.length === 0 && failedTracks.length === 1) {
-          throw new Error(mintResult.error || `Failed to prepare "${track.title}"`);
+          throw new Error(prepareResult.error || `Failed to prepare "${track.title}"`);
         }
         continue;
       }
@@ -979,10 +981,9 @@ const PurchasePage = {
         `Accepting NFT ${i + 1}/${trackCount}`,
         `"${track.title}" - sign in Xaman`
       );
-      // Wait for ledger propagation before sending to Xaman
-      await new Promise(r => setTimeout(r, 5000));
-      // Buyer signs NFTokenAcceptOffer (pays proportional XRP + gets NFT)
-      const acceptResult = await XamanWallet.acceptSellOffer(mintResult.offerIndex);
+      
+      // Buyer signs NFTokenAcceptOffer (pays track price + gets NFT)
+      const acceptResult = await XamanWallet.acceptSellOffer(prepareResult.sellOfferIndex);
       
       if (!acceptResult.success) {
         console.error(`Accept failed for track ${i + 1}`);
@@ -1009,9 +1010,9 @@ const PurchasePage = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'verify-transfer',
-              nftTokenId: mintResult.nftTokenId,
+              nftTokenId: prepareResult.nftTokenId,
               buyerAddress: AppState.user.address,
-              offerIndex: mintResult.offerIndex,
+              offerIndex: prepareResult.sellOfferIndex,
             }),
           });
           const verifyResult = await verifyResponse.json();
@@ -1038,14 +1039,14 @@ const PurchasePage = {
         continue;
       }
       
-      // Only confirm sale if verified on-chain
+      // Confirm sale using broker-sale confirm (records sale + pays artist per-track)
       try {
-        await fetch('/api/broker-album-sale', {
+        await fetch('/api/broker-sale', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'confirm-single',
-            pendingSale: mintResult.pendingSale,
+            action: 'confirm',
+            pendingSale: prepareResult.pendingSale,
             acceptTxHash: acceptResult.txHash,
           }),
         });
@@ -1069,11 +1070,13 @@ const PurchasePage = {
       }
     }
     
-    // Step 3: Finalize - pay artist 98% of total collected
+    // Step 3: Send album-level Discord notification + milestones
     if (confirmedSales.length > 0) {
       updateStatus('Finalizing', 'Completing purchase...');
       
-      // If all tracks confirmed, use album price. Otherwise pro-rate.
+      // Update release sold_editions via finalize
+      // Note: individual artist payments already happened in broker-sale confirm
+      // The finalize here is just for the album Discord notification + milestone tracking
       const finalPrice = confirmedSales.length === trackCount
         ? albumPrice
         : trackPrice * confirmedSales.length;
@@ -1086,7 +1089,7 @@ const PurchasePage = {
             action: 'finalize',
             releaseId: this.release.id,
             artistAddress: artistAddress,
-            totalPrice: finalPrice,
+            totalPrice: 0, // Artist already paid per-track by broker-sale confirm
             trackCount: confirmedSales.length,
             buyerAddress: AppState.user.address,
           }),
