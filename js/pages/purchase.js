@@ -979,7 +979,8 @@ const PurchasePage = {
         `Accepting NFT ${i + 1}/${trackCount}`,
         `"${track.title}" - sign in Xaman`
       );
-      
+      // Wait for ledger propagation before sending to Xaman
+      await new Promise(r => setTimeout(r, 5000));
       // Buyer signs NFTokenAcceptOffer (pays proportional XRP + gets NFT)
       const acceptResult = await XamanWallet.acceptSellOffer(mintResult.offerIndex);
       
