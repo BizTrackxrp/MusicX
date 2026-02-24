@@ -898,16 +898,6 @@ const PurchasePage = {
     }, 2000);
   },
   
-  /**
-   * Album purchase - N signatures (one per track)
-   * 
-   * FEB 24 2026 FIX: Routes each track through broker-sale (prepare)
-   * instead of broker-album-sale (mint-single). This uses the exact same
-   * code path that works for single track purchases, fixing the Xaman
-   * "text strings" crash that only occurred with album offers.
-   * 
-   * Still uses broker-album-sale for: init (pricing), verify, finalize (artist payment)
-   */
   async processAlbumPurchase(updateStatus) {
     const tracks = this.release.tracks || [];
     const trackCount = tracks.length;
@@ -932,19 +922,24 @@ const PurchasePage = {
       throw new Error(initResult.error || 'Failed to initialize purchase');
     }
     
-    const { sessionId, artistAddress } = initResult;
+    const { sessionId, artistAddress, perTrackOfferPrices } = initResult;
     const confirmedSales = [];
     const failedTracks = [];
+    
+    console.log('Album init:', { albumPrice, perTrackOfferPrices });
     
     // Step 2: Process each track sequentially using broker-sale (single track endpoint)
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
+      const overridePrice = perTrackOfferPrices ? perTrackOfferPrices[i] : null;
       
       this.updateAlbumProgress(i, trackCount, track.title, 'minting');
       updateStatus(
         `Preparing NFT ${i + 1}/${trackCount}`,
         `"${track.title}" - minting...`
       );
+      
+      console.log(`Track ${i+1}: ${track.title}, overridePrice: ${overridePrice}`);
       
       // Use broker-sale (prepare) - the same endpoint that works for singles
       const prepareResponse = await fetch('/api/broker-sale', {
@@ -955,6 +950,7 @@ const PurchasePage = {
           releaseId: this.release.id,
           trackId: track.id,
           buyerAddress: AppState.user.address,
+          overridePrice: overridePrice,
         }),
       });
       
@@ -1062,7 +1058,6 @@ const PurchasePage = {
         
       } catch (e) {
         console.error('Failed to confirm sale:', e);
-        // Still count it since we verified on-chain
         confirmedSales.push({
           trackId: track.id,
           trackTitle: track.title,
@@ -1075,9 +1070,6 @@ const PurchasePage = {
     if (confirmedSales.length > 0) {
       updateStatus('Finalizing', 'Completing purchase...');
       
-      // Update release sold_editions via finalize
-      // Note: individual artist payments already happened in broker-sale confirm
-      // The finalize here is just for the album Discord notification + milestone tracking
       const finalPrice = confirmedSales.length === trackCount
         ? albumPrice
         : trackPrice * confirmedSales.length;
@@ -1090,7 +1082,7 @@ const PurchasePage = {
             action: 'finalize',
             releaseId: this.release.id,
             artistAddress: artistAddress,
-            totalPrice: 0, // Artist already paid per-track by broker-sale confirm
+            totalPrice: 0,
             trackCount: confirmedSales.length,
             buyerAddress: AppState.user.address,
           }),
@@ -1113,7 +1105,6 @@ const PurchasePage = {
       throw new Error('No NFTs were transferred');
     }
     
-    // Refresh ownership cache so Buy buttons update to "Owned"
     if (typeof OwnershipHelper !== 'undefined') OwnershipHelper.refresh();
     
     setTimeout(() => {
@@ -1121,7 +1112,6 @@ const PurchasePage = {
       Router.navigate('profile');
     }, 3000);
   },
-  
   showError(message) {
     const content = document.getElementById('page-content');
     content.innerHTML = `
