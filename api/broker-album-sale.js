@@ -39,9 +39,9 @@ const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot
 
 // XRPL nodes to try (fallback if primary drops)
 const XRPL_NODES = [
-  'wss://xrplcluster.com',
   'wss://s1.ripple.com',
   'wss://s2.ripple.com',
+  'wss://xrplcluster.com',
 ];
 let xrplNodeIndex = 0; // Rotate starting node across calls
 
