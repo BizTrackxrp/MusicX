@@ -239,8 +239,7 @@ async function handleAvailabilityCheck(req, res, sql) {
     if (!resolved) return res.status(400).json({ available: false, error: 'No tracks found for this release' });
     
     const { targetTrack } = resolved;
-    const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
-    
+    const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
     if (isLazyMintRelease(release)) {
       const soldCount = targetTrack.sold_count || 0;
       const totalEditions = release.total_editions || 0;
