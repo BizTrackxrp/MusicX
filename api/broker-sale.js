@@ -294,7 +294,7 @@ async function handleAvailabilityCheck(req, res, sql) {
 
 async function handlePrepare(req, res, sql) {
   try {
-    const { releaseId, trackId, buyerAddress } = req.body;
+  const { releaseId, trackId, buyerAddress, overridePrice } = req.body;
     
     if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -314,7 +314,7 @@ async function handlePrepare(req, res, sql) {
     if (!resolved) return res.status(400).json({ error: 'No track found' });
     
     const { targetTrack, targetTrackId } = resolved;
-    const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
+    const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
     const artistAddress = release.artist_address;
     const useLazyMint = isLazyMintRelease(release);
     
