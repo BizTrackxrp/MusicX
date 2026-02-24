@@ -23,7 +23,7 @@ const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
 const SESSION_KEY = 'xrpmusic_session';
 
 // XRPL node for client-side tx lookups (offer index extraction)
-const XRPL_LOOKUP_NODE = 'https://s1.ripple.com:51234';
+const XRPL_LOOKUP_NODE = 'https://xrplcluster.com';
 
 const XamanWallet = {
   sdk: null,
