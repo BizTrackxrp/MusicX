@@ -240,6 +240,7 @@ async function handleAvailabilityCheck(req, res, sql) {
     
     const { targetTrack } = resolved;
     const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
+    console.log('💰 Price debug:', { overridePrice, songPrice: release.song_price, albumPrice: release.album_price, finalPrice: price });
     if (isLazyMintRelease(release)) {
       const soldCount = targetTrack.sold_count || 0;
       const totalEditions = release.total_editions || 0;
