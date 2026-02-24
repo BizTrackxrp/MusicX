@@ -267,7 +267,7 @@ async function handleAvailabilityCheck(req, res, sql) {
     if (targetTrack.metadata_cid) {
       try {
         const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
-        const client = new xrpl.Client('wss://xrplcluster.com');
+        const client = new xrpl.Client('wss://s1.ripple.com');
         await client.connect();
         const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
         await client.disconnect();
@@ -328,7 +328,7 @@ async function handlePrepare(req, res, sql) {
     }
     
     // Connect to XRPL
-    const client = new xrpl.Client('wss://xrplcluster.com');
+    const client = new xrpl.Client('wss://s1.ripple.com');
     await client.connect();
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
     
@@ -544,7 +544,7 @@ async function handleConfirmSale(req, res, sql) {
       try {
         const platformSeed = process.env.PLATFORM_WALLET_SEED;
         const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
-        const client = new xrpl.Client('wss://xrplcluster.com');
+        const client = new xrpl.Client('wss://s1.ripple.com');
         await client.connect();
         const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
         
@@ -695,7 +695,7 @@ async function handleLegacyPurchase(req, res, sql) {
       }
     }
     
-    const client = new xrpl.Client('wss://xrplcluster.com');
+    const client = new xrpl.Client('wss://s1.ripple.com');
     await client.connect();
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
     
