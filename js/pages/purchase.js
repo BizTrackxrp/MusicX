@@ -844,12 +844,13 @@ const PurchasePage = {
     const prepareResponse = await fetch('/api/broker-sale', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'prepare',
-        releaseId: this.release.id,
-        trackId: this.track?.id,
-        buyerAddress: AppState.user.address,
-      }),
+     body: JSON.stringify({
+          action: 'prepare',
+          releaseId: this.release.id,
+          trackId: track.id,
+          buyerAddress: AppState.user.address,
+          overridePrice: initResult.perTrackOfferPrices ? initResult.perTrackOfferPrices[i] : null,
+        }),
     });
     
     const prepareResult = await prepareResponse.json();
