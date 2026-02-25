@@ -660,7 +660,8 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   await sql`
     INSERT INTO nfts (id, nft_token_id, release_id, track_id, edition_number, owner_address, status, created_at)
     VALUES (${nftId}, ${nftTokenId}, ${release.id}, ${track.id}, ${editionNumber}, ${platformAddress}, 'pending', NOW())
-  `;
+    ON CONFLICT (nft_token_id) DO UPDATE SET status = 'pending', owner_address = ${platformAddress}, edition_number = ${editionNumber}
+`;
   
   await sql`UPDATE tracks SET minted_editions = COALESCE(minted_editions, 0) + 1 WHERE id = ${track.id}`;
   await sql`UPDATE releases SET minted_editions = COALESCE(minted_editions, 0) + 1 WHERE id = ${release.id}`;
