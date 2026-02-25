@@ -1074,7 +1074,7 @@ const PurchasePage = {
       if (discountRefund > 0 && confirmedSales.length === trackCount) {
         updateStatus('Processing Discount', `Refunding ${discountRefund.toFixed(2)} XRP album discount...`);
         try {
-          await fetch('/api/broker-album-sale', {
+        await fetch('/api/broker-sale', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
