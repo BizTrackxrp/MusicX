@@ -949,7 +949,8 @@ const PurchasePage = {
           releaseId: this.release.id,
           trackId: track.id,
           buyerAddress: AppState.user.address,
-          overridePrice: overridePrice,
+          // No overridePrice — Xaman 5.0 crashes on discounted sell offers
+          // Buyer pays full song_price per track, platform refunds discount after
         }),
       });
       
@@ -1065,8 +1066,31 @@ const PurchasePage = {
       }
     }
     
-    // Step 3: Send album-level Discord notification + milestones
+    // Step 3: Refund album discount (buyer paid full song_price per track)
     if (confirmedSales.length > 0) {
+      const fullTotal = trackPrice * confirmedSales.length;
+      const discountRefund = fullTotal - albumPrice;
+      
+      if (discountRefund > 0 && confirmedSales.length === trackCount) {
+        updateStatus('Processing Discount', `Refunding ${discountRefund.toFixed(2)} XRP album discount...`);
+        try {
+          await fetch('/api/broker-album-sale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'refund-discount',
+              buyerAddress: AppState.user.address,
+              refundAmount: discountRefund,
+              releaseId: this.release.id,
+            }),
+          });
+          console.log(`✅ Refunded ${discountRefund} XRP album discount`);
+        } catch (e) {
+          console.error('Discount refund failed:', e);
+        }
+      }
+      
+      // Step 4: Send album-level Discord notification + milestones
       updateStatus('Finalizing', 'Completing purchase...');
       
       const finalPrice = confirmedSales.length === trackCount
