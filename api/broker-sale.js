@@ -222,6 +222,7 @@ export default async function handler(req, res) {
   if (action === 'check') return handleAvailabilityCheck(req, res, sql);
   if (action === 'prepare') return handlePrepare(req, res, sql);
   if (action === 'confirm') return handleConfirmSale(req, res, sql);
+  if (action === 'refund-discount') return handleRefundDiscount(req, res, sql);
   
   // Legacy fallback: old 2-signature flow (still works if needed)
   return handleLegacyPurchase(req, res, sql);
@@ -668,7 +669,62 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   
   return { nftTokenId, editionNumber, nftRecordId: nftId };
 }
+// ─── Refund album discount to buyer ──────────────────────────────────
+// Xaman 5.0 crashes on discounted sell offers (amount < song_price),
+// so album purchases charge full song_price per track. After all tracks
+// complete, this refunds the difference between what buyer paid and album price.
 
+async function handleRefundDiscount(req, res, sql) {
+  try {
+    const { buyerAddress, refundAmount, releaseId } = req.body;
+    
+    if (!buyerAddress || !refundAmount || parseFloat(refundAmount) <= 0) {
+      return res.status(400).json({ error: 'Invalid refund request' });
+    }
+    
+    const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
+    const platformSeed = process.env.PLATFORM_WALLET_SEED;
+    if (!platformAddress || !platformSeed) {
+      return res.status(500).json({ error: 'Platform not configured' });
+    }
+    
+    const amount = parseFloat(refundAmount);
+    console.log(`💸 Album discount refund: ${amount} XRP to ${buyerAddress} for release ${releaseId}`);
+    
+    const client = new xrpl.Client('wss://s1.ripple.com');
+    await client.connect();
+    const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
+    
+    const paymentTx = await client.autofill({
+      TransactionType: 'Payment',
+      Account: platformAddress,
+      Destination: buyerAddress,
+      Amount: xrpl.xrpToDrops(amount.toFixed(6)),
+      Memos: [{
+        Memo: {
+          MemoType: xrpl.convertStringToHex('XRPMusic'),
+          MemoData: xrpl.convertStringToHex(`Album discount refund: ${amount} XRP`),
+        }
+      }],
+    });
+    
+    const signed = platformWallet.sign(paymentTx);
+    const result = await client.submitAndWait(signed.tx_blob);
+    await client.disconnect();
+    
+    if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
+      console.error('❌ Refund tx failed:', result.result.meta.TransactionResult);
+      return res.status(500).json({ error: 'Refund transaction failed on-chain' });
+    }
+    
+    console.log(`✅ Album discount refund sent: ${amount} XRP, tx: ${result.result.hash}`);
+    
+    return res.json({ success: true, txHash: result.result.hash, refundAmount: amount });
+  } catch (error) {
+    console.error('❌ Discount refund failed:', error);
+    return res.status(500).json({ error: error.message || 'Refund failed' });
+  }
+}
 // ─── Legacy 2-signature flow (fallback) ──────────────────────────────
 // Kept for backward compatibility. Uses the old Payment + Accept pattern.
 
