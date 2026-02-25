@@ -19,6 +19,9 @@
  * FIX: Stale trackId fallback - if frontend sends a cached/stale trackId
  * that doesn't match any track in the release, we fall back to the first
  * track instead of returning "Track not found in release" error.
+ * 
+ * FIX: overridePrice support in handlePrepare for album discount pricing.
+ * handleAvailabilityCheck uses release.song_price only (no override needed).
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -225,6 +228,8 @@ export default async function handler(req, res) {
 }
 
 // ─── PRE-CHECK: Verify availability BEFORE purchase ──────────────────
+// NOTE: This only checks availability. Price is determined at prepare time.
+// No overridePrice needed here — we just use the release's stored price for display.
 
 async function handleAvailabilityCheck(req, res, sql) {
   try {
@@ -239,8 +244,8 @@ async function handleAvailabilityCheck(req, res, sql) {
     if (!resolved) return res.status(400).json({ available: false, error: 'No tracks found for this release' });
     
     const { targetTrack } = resolved;
-    const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
-    console.log('💰 Price debug:', { overridePrice, songPrice: release.song_price, albumPrice: release.album_price, finalPrice: price });
+    const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
+    
     if (isLazyMintRelease(release)) {
       const soldCount = targetTrack.sold_count || 0;
       const totalEditions = release.total_editions || 0;
@@ -291,10 +296,11 @@ async function handleAvailabilityCheck(req, res, sql) {
 }
 
 // ─── NEW: Prepare purchase (mint + create priced sell offer) ─────────
+// overridePrice is used here for album discount pricing (per-track price < song_price)
 
 async function handlePrepare(req, res, sql) {
   try {
-  const { releaseId, trackId, buyerAddress, overridePrice } = req.body;
+    const { releaseId, trackId, buyerAddress, overridePrice } = req.body;
     
     if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -315,6 +321,7 @@ async function handlePrepare(req, res, sql) {
     
     const { targetTrack, targetTrackId } = resolved;
     const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
+    console.log('💰 Price debug:', { overridePrice, songPrice: release.song_price, albumPrice: release.album_price, finalPrice: price });
     const artistAddress = release.artist_address;
     const useLazyMint = isLazyMintRelease(release);
     
