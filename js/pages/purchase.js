@@ -949,7 +949,7 @@ const PurchasePage = {
           releaseId: this.release.id,
           trackId: track.id,
           buyerAddress: AppState.user.address,
-          // overridePrice: overridePrice,  // TEMP DISABLED - testing if price causes Xaman crash
+          overridePrice: overridePrice,
         }),
       });
       
