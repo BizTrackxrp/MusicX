@@ -420,15 +420,18 @@ async function handlePrepare(req, res, sql) {
       // so the buyer's NFTokenAcceptOffer both pays AND receives the NFT
       const priceInDrops = xrpl.xrpToDrops(price.toFixed(6));
       
-      const createOfferTx = await client.autofill({
+     console.log('🔍 Creating sell offer:', { nftTokenId, priceInDrops, buyerAddress, buyerAddressType: typeof buyerAddress, buyerAddressLength: buyerAddress?.length });
+      
+      const offerFields = {
         TransactionType: 'NFTokenCreateOffer',
         Account: platformAddress,
         NFTokenID: nftTokenId,
         Amount: priceInDrops,
-        Flags: 1, // tfSellNFToken
-        Destination: buyerAddress,
-      });
+        Flags: 1,
+        Destination: buyerAddress.trim(),
+      };
       
+      const createOfferTx = await client.autofill(offerFields);
       const signedOffer = platformWallet.sign(createOfferTx);
       const offerResult = await client.submitAndWait(signedOffer.tx_blob);
       
