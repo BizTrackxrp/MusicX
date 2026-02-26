@@ -2418,8 +2418,35 @@ const Modals = {
               `;
             }).join('') || ''}
           </div>
-          
-         <!-- Availability Info -->
+
+          <!-- Comments Section -->
+          <div class="release-comments-section" id="release-comments-section" data-release-id="${release.id}">
+            <div class="comments-header">
+              <h3>Comments</h3>
+              <span class="comments-count" id="comments-count"></span>
+            </div>
+            ${AppState.user?.address ? `
+              <div class="comment-input-row">
+                <div class="comment-avatar">
+                  ${AppState.profile?.avatarUrl 
+                    ? `<img src="${AppState.profile.avatarUrl}" alt="">`
+                    : `<span>${(AppState.profile?.displayName || AppState.user.address)[0].toUpperCase()}</span>`
+                  }
+                </div>
+                <div class="comment-input-wrap">
+                  <input type="text" id="comment-input" class="comment-input" placeholder="Add a comment..." maxlength="280">
+                  <span class="comment-char-count" id="comment-char-count">280</span>
+                </div>
+                <button class="comment-submit-btn" id="comment-submit-btn" disabled>Post</button>
+              </div>
+            ` : `
+              <div class="comment-login-prompt">Connect wallet to comment</div>
+            `}
+            <div id="comments-preview" class="comments-preview">
+              <div class="comments-loading">Loading comments...</div>
+            </div>
+            <button class="view-all-comments-btn" id="view-all-comments-btn" style="display:none;">View all comments</button>
+          </div>
           
         </div>
       </div>
@@ -2922,10 +2949,85 @@ const Modals = {
     min-width: 180px;
   }
 }
+
+/* === Comments Section === */
+.release-comments-section { padding: 20px 24px 24px; border-top: 1px solid var(--border-color); }
+.comments-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.comments-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.comments-count { font-size: 13px; color: var(--text-muted); }
+.comment-input-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.comment-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-gradient, var(--accent)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; font-size: 14px; color: white; font-weight: 600; }
+.comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.comment-input-wrap { flex: 1; position: relative; }
+.comment-input { width: 100%; padding: 10px 50px 10px 14px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 20px; color: var(--text-primary); font-size: 14px; outline: none; transition: border-color 150ms; box-sizing: border-box; }
+.comment-input:focus { border-color: var(--accent); }
+.comment-input::placeholder { color: var(--text-muted); }
+.comment-char-count { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text-muted); pointer-events: none; }
+.comment-char-count.warn { color: var(--warning); }
+.comment-char-count.over { color: var(--error); }
+.comment-submit-btn { padding: 8px 16px; background: var(--accent); border: none; border-radius: 20px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: opacity 150ms; }
+.comment-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.comment-submit-btn:not(:disabled):hover { opacity: 0.9; }
+.comment-login-prompt { padding: 12px; text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.comments-preview { display: flex; flex-direction: column; gap: 0; }
+.comments-loading { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
+.comment-item { display: flex; gap: 10px; padding: 10px 0; }
+.comment-item-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-tertiary, var(--bg-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.comment-item-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.comment-item-body { flex: 1; min-width: 0; }
+.comment-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; flex-wrap: wrap; }
+.comment-item-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.comment-draft-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; background: rgba(124, 58, 237, 0.2); color: var(--accent); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.comment-item-time { font-size: 11px; color: var(--text-muted); }
+.comment-item-text { font-size: 14px; color: var(--text-secondary); line-height: 1.4; word-break: break-word; }
+.comment-delete-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 2px 4px; margin-left: auto; opacity: 0; transition: opacity 150ms; }
+.comment-item:hover .comment-delete-btn { opacity: 1; }
+.comment-delete-btn:hover { color: var(--error); }
+.view-all-comments-btn { width: 100%; padding: 10px; background: none; border: 1px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; margin-top: 12px; transition: all 150ms; }
+.view-all-comments-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.no-comments { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
+@media (max-width: 600px) {
+  .release-comments-section { padding: 16px; }
+  .comment-input-row { gap: 8px; }
+  .comment-avatar { width: 28px; height: 28px; }
+  .comment-submit-btn { padding: 8px 12px; font-size: 12px; }
+}
       </style>
     `;
     this.show(html);
     this.bindReleaseModalEvents(release);
+
+    // ─── Comments ────────────────────────────────────────────────
+    this.loadCommentPreview(release.id, release.artistAddress);
+    
+    setTimeout(() => {
+      const commentInput = document.getElementById('comment-input');
+      const commentSubmit = document.getElementById('comment-submit-btn');
+      const charCount = document.getElementById('comment-char-count');
+      
+      if (commentInput) {
+        commentInput.addEventListener('input', () => {
+          const len = commentInput.value.length;
+          charCount.textContent = 280 - len;
+          charCount.className = 'comment-char-count' + (len > 250 ? (len > 280 ? ' over' : ' warn') : '');
+          commentSubmit.disabled = len === 0 || len > 280;
+        });
+        commentInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !commentSubmit.disabled) {
+            Modals.submitComment(release.id, release.artistAddress);
+          }
+        });
+      }
+      if (commentSubmit) {
+        commentSubmit.addEventListener('click', () => {
+          Modals.submitComment(release.id, release.artistAddress);
+        });
+      }
+      document.getElementById('view-all-comments-btn')?.addEventListener('click', () => {
+        Modals.openCommentsPanel(release.id, release.artistAddress);
+      });
+    }, 100);
+
     // --- Scroll to shared track if ?track= is in URL ---
     try {
       const urlParams = new URLSearchParams(window.location.search);
