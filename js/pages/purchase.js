@@ -964,6 +964,12 @@ const PurchasePage = {
         }
         continue;
       }
+      // Override pendingSale price with album per-track price
+      // Sell offer is full song_price (Xaman workaround) but artist
+      // should only be paid based on the actual album price
+      const albumPerTrackPrice = albumPrice / trackCount;
+      prepareResult.pendingSale.price = albumPerTrackPrice;
+      prepareResult.pendingSale.platformFee = albumPerTrackPrice * 0.02;
       
       // MOBILE FIX: Show button for user to tap before signature
       await this.showAcceptNFTStep(
