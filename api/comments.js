@@ -56,10 +56,10 @@ async function handleList(req, res, sql) {
         c.content,
         c.is_draft_comment,
         c.created_at,
-        p.display_name,
+        p.name as display_name,
         p.avatar_url
       FROM comments c
-      LEFT JOIN profiles p ON p.address = c.commenter_address
+      LEFT JOIN profiles p ON p.wallet_address = c.commenter_address
       WHERE c.release_id = ${releaseId}
       ORDER BY c.created_at DESC
       LIMIT ${parseInt(limit)}
@@ -110,10 +110,10 @@ async function handlePreview(req, res, sql) {
         c.content,
         c.is_draft_comment,
         c.created_at,
-        p.display_name,
+        p.name as display_name,
         p.avatar_url
       FROM comments c
-      LEFT JOIN profiles p ON p.address = c.commenter_address
+      LEFT JOIN profiles p ON p.wallet_address = c.commenter_address
       WHERE c.release_id = ${releaseId}
       ORDER BY c.created_at DESC
       LIMIT 3
@@ -173,7 +173,6 @@ async function handleAdd(req, res, sql) {
     }
 
     // Determine if this is a draft comment
-    // Draft = release hasn't been minted/finalized yet
     const isLive = release.is_minted === true || 
                    release.mint_fee_paid === true || 
                    release.status === 'live';
@@ -199,7 +198,7 @@ async function handleAdd(req, res, sql) {
 
     // Fetch the commenter's profile for the response
     const profiles = await sql`
-      SELECT display_name, avatar_url FROM profiles WHERE address = ${commenterAddress}
+      SELECT name as display_name, avatar_url FROM profiles WHERE wallet_address = ${commenterAddress}
     `;
     const profile = profiles[0];
 
@@ -226,7 +225,6 @@ async function handleAdd(req, res, sql) {
 }
 
 // ─── Delete a comment ────────────────────────────────────────────────
-// Only the commenter or the release artist can delete
 
 async function handleDelete(req, res, sql) {
   try {
@@ -236,7 +234,6 @@ async function handleDelete(req, res, sql) {
       return res.status(400).json({ error: 'Missing commentId or requesterAddress' });
     }
 
-    // Get the comment and its release
     const comments = await sql`
       SELECT c.id, c.commenter_address, c.release_id, r.artist_address
       FROM comments c
@@ -250,7 +247,6 @@ async function handleDelete(req, res, sql) {
 
     const comment = comments[0];
 
-    // Check permission: commenter or artist can delete
     const isCommenter = comment.commenter_address === requesterAddress;
     const isArtist = comment.artist_address === requesterAddress;
 
