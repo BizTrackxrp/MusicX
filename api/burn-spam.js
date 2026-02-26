@@ -1,21 +1,17 @@
 /**
- * XRP Music - Burn Spam NFTs
+ * XRP Music - Burn Spam NFTs (Vercel version)
  * 
- * One-off utility to burn the 5,626 "Elevated Spaceman" NFTs that were
- * accidentally batch-minted on 1/13/26. These clog the platform wallet
- * and lock up ~1,125 XRP in reserve.
+ * Burns "Elevated Spaceman" NFTs from platform wallet.
+ * Maximizes throughput within Vercel's 60s timeout.
  * 
- * Usage: POST /api/burn-spam with { action: 'count' } to preview,
- *        POST /api/burn-spam with { action: 'burn', batchSize: 25 } to burn a batch.
- * 
- * The target URI (hex-encoded) for Elevated Spaceman metadata.
- * Run multiple times until count reaches 0.
+ * POST /api/burn-spam { action: "count", adminKey: "..." }
+ * POST /api/burn-spam { action: "burn", adminKey: "..." }
  */
 
 import * as xrpl from 'xrpl';
 
-// The IPFS URI of the spam NFT (Elevated Spaceman)
 const SPAM_URI_HEX = xrpl.convertStringToHex('ipfs://QmZw9HdDHPZrvJwqrhfM9is3YaxSNLYvQUuav15LqMgHjh');
+const MAX_RUNTIME_MS = 50000; // Stop at 50s to leave buffer for response
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,9 +21,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
-  const { action, batchSize = 25, adminKey } = req.body;
+  const { action, adminKey } = req.body;
   
-  // Simple admin protection — set ADMIN_KEY in your Vercel env vars
   const expectedKey = process.env.ADMIN_KEY || 'burn-elevated-spaceman-2026';
   if (adminKey !== expectedKey) {
     return res.status(403).json({ error: 'Unauthorized' });
@@ -44,7 +39,6 @@ export default async function handler(req, res) {
   
   try {
     if (action === 'count') {
-      // Count how many spam NFTs remain
       let totalSpam = 0;
       let totalNfts = 0;
       let marker = undefined;
@@ -60,88 +54,125 @@ export default async function handler(req, res) {
       } while (marker);
       
       await client.disconnect();
-      
-      const reserveLocked = (totalSpam * 0.2).toFixed(1);
       return res.json({
         totalNfts,
         spamNfts: totalSpam,
-        reserveLockedXRP: reserveLocked,
-        message: `Found ${totalSpam} Elevated Spaceman NFTs locking ${reserveLocked} XRP in reserve`,
+        reserveLockedXRP: (totalSpam * 0.2).toFixed(1),
       });
     }
     
     if (action === 'burn') {
-      const limit = Math.min(batchSize, 50); // Cap at 50 per request to stay under Vercel timeout
+      const startTime = Date.now();
+      const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
       
-      // Find spam NFTs (just fetch first page — spam NFTs are spread across pages)
-      let spamNfts = [];
+      // Collect ALL spam NFT IDs first
+      let spamIds = [];
       let marker = undefined;
       
-      // Paginate until we have enough to burn
-      while (spamNfts.length < limit) {
+      do {
         const request = { command: 'account_nfts', account: platformAddress, limit: 400 };
         if (marker) request.marker = marker;
         const response = await client.request(request);
         const nfts = response.result.account_nfts || [];
-        const spam = nfts.filter(n => n.URI === SPAM_URI_HEX);
-        spamNfts = spamNfts.concat(spam);
+        spamIds = spamIds.concat(nfts.filter(n => n.URI === SPAM_URI_HEX).map(n => n.NFTokenID));
         marker = response.result.marker;
-        if (!marker) break; // No more pages
-      }
+      } while (marker);
       
-      spamNfts = spamNfts.slice(0, limit);
-      
-      if (spamNfts.length === 0) {
+      if (spamIds.length === 0) {
         await client.disconnect();
-        return res.json({ burned: 0, message: 'No more spam NFTs found! All clean.' });
+        return res.json({ submitted: 0, remaining: 0, message: 'All clean! No spam NFTs left.' });
       }
       
-      const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-      let burned = 0;
+      // Get sequence and ledger
+      let acctInfo = await client.request({ command: 'account_info', account: platformAddress });
+      let sequence = acctInfo.result.account_data.Sequence;
+      let currentLedger = await client.getLedgerIndex();
+      
+      let submitted = 0;
       let errors = 0;
       
-      for (const nft of spamNfts) {
+      for (let i = 0; i < spamIds.length; i++) {
+        // Time check — stop before Vercel kills us
+        if (Date.now() - startTime > MAX_RUNTIME_MS) {
+          console.log(`⏰ Hitting time limit at ${submitted} submissions`);
+          break;
+        }
+        
         try {
-          const burnTx = await client.autofill({
+          const burnTx = {
             TransactionType: 'NFTokenBurn',
             Account: platformAddress,
-            NFTokenID: nft.NFTokenID,
-          });
-          const signed = platformWallet.sign(burnTx);
-          const result = await client.submitAndWait(signed.tx_blob);
+            NFTokenID: spamIds[i],
+            Fee: '15',
+            Sequence: sequence,
+            LastLedgerSequence: currentLedger + 500,
+          };
           
-          if (result.result.meta.TransactionResult === 'tesSUCCESS') {
-            burned++;
+          const signed = platformWallet.sign(burnTx);
+          const result = await client.submit(signed.tx_blob);
+          const engineResult = result.result?.engine_result;
+          
+          if (engineResult === 'tesSUCCESS' || engineResult === 'terQUEUED' || engineResult === 'terPRE_SEQ') {
+            submitted++;
+            sequence++;
+          } else if (engineResult === 'telCAN_NOT_QUEUE_FULL') {
+            // Queue full — wait for ledger close
+            await new Promise(r => setTimeout(r, 4000));
+            acctInfo = await client.request({ command: 'account_info', account: platformAddress });
+            sequence = acctInfo.result.account_data.Sequence;
+            currentLedger = await client.getLedgerIndex();
+            i--; // retry
+            continue;
+          } else if (engineResult === 'tefPAST_SEQ') {
+            acctInfo = await client.request({ command: 'account_info', account: platformAddress });
+            sequence = acctInfo.result.account_data.Sequence;
+            i--;
+            continue;
           } else {
-            console.error(`Burn failed for ${nft.NFTokenID}: ${result.result.meta.TransactionResult}`);
             errors++;
+            sequence++;
           }
         } catch (e) {
-          console.error(`Burn error for ${nft.NFTokenID}: ${e.message}`);
           errors++;
-          // If we hit rate limits, stop early
           if (e.message?.includes('slowDown') || e.message?.includes('tooBusy')) {
-            console.warn('Rate limited, stopping batch early');
-            break;
+            await new Promise(r => setTimeout(r, 5000));
+            acctInfo = await client.request({ command: 'account_info', account: platformAddress });
+            sequence = acctInfo.result.account_data.Sequence;
+            currentLedger = await client.getLedgerIndex();
+            i--;
+            continue;
           }
+        }
+        
+        // Tiny delay to not spam the node
+        if (submitted % 25 === 0 && submitted > 0) {
+          await new Promise(r => setTimeout(r, 300));
+          currentLedger = await client.getLedgerIndex();
         }
       }
       
       await client.disconnect();
       
+      const remaining = spamIds.length - submitted;
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      
       return res.json({
-        burned,
+        submitted,
         errors,
-        message: `Burned ${burned} Elevated Spaceman NFTs (${errors} errors). Run again to continue.`,
+        remaining,
+        elapsed: `${elapsed}s`,
+        freedXRP: (submitted * 0.2).toFixed(1),
+        message: remaining > 0 
+          ? `Burned ${submitted} in ${elapsed}s. ${remaining} left — run again!` 
+          : `Done! All ${submitted} Elevated Spaceman NFTs burned. ${(submitted * 0.2).toFixed(1)} XRP freed.`,
       });
     }
     
     await client.disconnect();
-    return res.status(400).json({ error: 'Invalid action. Use "count" or "burn".' });
+    return res.status(400).json({ error: 'Use action: "count" or "burn"' });
     
   } catch (error) {
     try { await client.disconnect(); } catch (e) {}
-    console.error('Burn error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
