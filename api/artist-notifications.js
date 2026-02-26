@@ -2,7 +2,14 @@
  * XRP Music - Artist Notifications API
  * /api/artist-notifications
  * 
- * Handles fetching and managing artist notifications (sales, milestones, etc.)
+ * Handles fetching and managing notifications (sales, comments, replies, milestones).
+ * Now serves ALL users, not just artists — anyone can get reply notifications.
+ * 
+ * Notification types:
+ *   sale           — Someone bought your track
+ *   comment        — Someone commented on your release
+ *   reply          — Someone replied to your comment
+ *   milestone      — Sales milestone reached
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -10,7 +17,6 @@ import { neon } from '@neondatabase/serverless';
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -20,9 +26,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // GET - Fetch notifications for an artist
+    // GET - Fetch notifications for a user
     if (req.method === 'GET') {
-      const { address, limit = 20, unreadOnly } = req.query;
+      const { address, limit = 30, unreadOnly } = req.query;
       
       if (!address) {
         return res.status(400).json({ success: false, error: 'Address required' });
@@ -54,12 +60,25 @@ export default async function handler(req, res) {
       
       return res.json({ 
         success: true, 
-        notifications,
+        notifications: notifications.map(n => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          releaseId: n.release_id,
+          trackId: n.track_id,
+          commentId: n.comment_id,
+          senderAddress: n.sender_address,
+          senderName: n.sender_name,
+          amount: n.amount,
+          isRead: n.is_read,
+          createdAt: n.created_at,
+        })),
         unreadCount: parseInt(unreadCount[0]?.count || 0)
       });
     }
     
-    // POST - Create notification or mark as read
+    // POST - Actions
     if (req.method === 'POST') {
       const { action } = req.body;
       
@@ -97,9 +116,9 @@ export default async function handler(req, res) {
         return res.json({ success: true });
       }
       
-      // Create a new notification (internal use - called from purchase flow)
+      // Create a notification (internal use - called from purchase flow, etc.)
       if (action === 'create') {
-        const { artistAddress, type, title, message, releaseId, trackId, amount } = req.body;
+        const { artistAddress, type, title, message, releaseId, trackId, commentId, amount, senderAddress, senderName } = req.body;
         
         if (!artistAddress || !type || !title) {
           return res.status(400).json({ success: false, error: 'Artist address, type, and title required' });
@@ -108,8 +127,8 @@ export default async function handler(req, res) {
         const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         await sql`
-          INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, amount, created_at)
-          VALUES (${id}, ${artistAddress}, ${type}, ${title}, ${message || null}, ${releaseId || null}, ${trackId || null}, ${amount || null}, NOW())
+          INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, comment_id, amount, sender_address, sender_name, is_read, created_at)
+          VALUES (${id}, ${artistAddress}, ${type}, ${title}, ${message || null}, ${releaseId || null}, ${trackId || null}, ${commentId || null}, ${amount || null}, ${senderAddress || null}, ${senderName || null}, false, NOW())
         `;
         
         return res.json({ success: true, notificationId: id });
@@ -121,7 +140,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
     
   } catch (error) {
-    console.error('Artist notifications API error:', error);
+    console.error('Notifications API error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }
