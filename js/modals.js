@@ -6861,5 +6861,197 @@ async loadArtistCollectors(artistAddress) {
       buyBtn.innerHTML = svgHtml + ' ' + (price ? price + ' XRP' : 'Buy');
     }
   },
+// ─── Comment Helpers ──────────────────────────────────────────
 
+  commentTimeAgo(dateStr) {
+    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  },
+
+  escapeCommentHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+
+  renderComment(comment, artistAddress) {
+    const name = comment.display_name || comment.displayName || Helpers.truncateAddress(comment.commenter_address || comment.commenterAddress, 6, 4);
+    const addr = comment.commenter_address || comment.commenterAddress;
+    const initial = (name || addr || 'A')[0].toUpperCase();
+    const avatar = comment.avatar_url || comment.avatarUrl;
+    const time = this.commentTimeAgo(comment.created_at || comment.createdAt);
+    const isDraftComment = comment.is_draft_comment || comment.isDraftComment;
+    const canDelete = AppState.user?.address === addr || AppState.user?.address === artistAddress;
+    
+    return `
+      <div class="comment-item" data-comment-id="${comment.id}">
+        <div class="comment-item-avatar">
+          ${avatar ? `<img src="${avatar}" alt="">` : initial}
+        </div>
+        <div class="comment-item-body">
+          <div class="comment-item-header">
+            <span class="comment-item-name">${this.escapeCommentHtml(name)}</span>
+            ${isDraftComment ? '<span class="comment-draft-badge">Early Listener</span>' : ''}
+            <span class="comment-item-time">${time}</span>
+            ${canDelete ? `<button class="comment-delete-btn" data-comment-id="${comment.id}" title="Delete">✕</button>` : ''}
+          </div>
+          <div class="comment-item-text">${this.escapeCommentHtml(comment.content)}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  async loadCommentPreview(releaseId, artistAddress) {
+    try {
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview', releaseId }),
+      });
+      const data = await response.json();
+      
+      const container = document.getElementById('comments-preview');
+      const countEl = document.getElementById('comments-count');
+      const viewAllBtn = document.getElementById('view-all-comments-btn');
+      if (!container) return;
+      
+      if (countEl && data.total > 0) countEl.textContent = `(${data.total})`;
+      if (viewAllBtn && data.total > 3) {
+        viewAllBtn.style.display = 'block';
+        viewAllBtn.textContent = `View all ${data.total} comments`;
+      }
+      
+      if (!data.comments || data.comments.length === 0) {
+        container.innerHTML = '<div class="no-comments">No comments yet — be the first!</div>';
+        return;
+      }
+      
+      container.innerHTML = data.comments.map(c => this.renderComment(c, artistAddress)).join('');
+      this.bindCommentDeleteButtons(releaseId, artistAddress);
+    } catch (error) {
+      console.error('Failed to load comments:', error);
+      const container = document.getElementById('comments-preview');
+      if (container) container.innerHTML = '';
+    }
+  },
+
+  async submitComment(releaseId, artistAddress) {
+    const input = document.getElementById('comment-input');
+    const btn = document.getElementById('comment-submit-btn');
+    if (!input || !input.value.trim()) return;
+    
+    btn.disabled = true;
+    btn.textContent = '...';
+    
+    try {
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add',
+          releaseId,
+          commenterAddress: AppState.user.address,
+          content: input.value.trim(),
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        input.value = '';
+        document.getElementById('comment-char-count').textContent = '280';
+        document.getElementById('comment-char-count').className = 'comment-char-count';
+        await this.loadCommentPreview(releaseId, artistAddress);
+      } else {
+        alert(data.error || 'Failed to post comment');
+      }
+    } catch (error) {
+      console.error('Submit comment error:', error);
+    }
+    
+    btn.disabled = false;
+    btn.textContent = 'Post';
+  },
+
+  bindCommentDeleteButtons(releaseId, artistAddress) {
+    document.querySelectorAll('.comment-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const commentId = btn.dataset.commentId;
+        if (!confirm('Delete this comment?')) return;
+        
+        try {
+          await fetch('/api/comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', commentId, requesterAddress: AppState.user.address }),
+          });
+          await this.loadCommentPreview(releaseId, artistAddress);
+        } catch (error) {
+          console.error('Delete comment error:', error);
+        }
+      });
+    });
+  },
+
+  async openCommentsPanel(releaseId, artistAddress) {
+    // Remove existing panel if open
+    document.querySelector('.comments-panel')?.remove();
+    
+    const panel = document.createElement('div');
+    panel.className = 'comments-panel';
+    panel.innerHTML = `
+      <div class="comments-panel-header">
+        <h3>Comments</h3>
+        <button class="comments-panel-close" onclick="document.querySelector('.comments-panel')?.remove()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="comments-panel-list" id="comments-panel-list">
+        <div class="comments-loading">Loading...</div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    
+    // Inject panel styles once
+    if (!document.getElementById('comments-panel-styles')) {
+      const style = document.createElement('style');
+      style.id = 'comments-panel-styles';
+      style.textContent = `
+        .comments-panel { position: fixed; top: 0; right: 0; width: 380px; max-width: 100vw; height: 100vh; background: var(--bg-primary); border-left: 1px solid var(--border-color); z-index: 10001; display: flex; flex-direction: column; animation: slideInRight 0.2s ease; box-shadow: -4px 0 20px rgba(0,0,0,0.3); }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .comments-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
+        .comments-panel-header h3 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
+        .comments-panel-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; }
+        .comments-panel-close:hover { color: var(--text-primary); }
+        .comments-panel-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 0; }
+        @media (max-width: 600px) { .comments-panel { width: 100vw; } }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    try {
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list', releaseId, limit: 100 }),
+      });
+      const data = await response.json();
+      const list = document.getElementById('comments-panel-list');
+      
+      if (!data.comments || data.comments.length === 0) {
+        list.innerHTML = '<div class="no-comments">No comments yet</div>';
+      } else {
+        list.innerHTML = data.comments.map(c => this.renderComment(c, artistAddress)).join('');
+        this.bindCommentDeleteButtons(releaseId, artistAddress);
+      }
+    } catch (error) {
+      console.error('Load comments panel error:', error);
+    }
+  },
 };
