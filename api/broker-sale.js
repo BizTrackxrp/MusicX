@@ -234,19 +234,11 @@ async function cancelExistingOffers(client, platformWallet, platformAddress, nft
 async function createSellOfferWithRetry(client, platformWallet, platformAddress, nftTokenId, priceInDrops, buyerAddress, maxAttempts = 3) {
   let lastError = null;
   
-  // PRE-FLIGHT: Diagnose potential tecNO_ENTRY causes before wasting tx fees
+  // PRE-FLIGHT: Check buyer account and platform reserve (skip NFT check — 
+  // account_nfts has a 400 limit and platform holds 6000+ NFTs, so paginated
+  // lookup is too slow. We trust the DB/mint result instead.)
   try {
-    // 1. Verify the NFT exists on the platform wallet
-    const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-    const platformNfts = nftsResponse.result.account_nfts || [];
-    const nftExists = platformNfts.some(n => n.NFTokenID === nftTokenId);
-    console.log(`🔍 Pre-flight: NFT ${nftTokenId.substring(0, 16)}... exists on platform: ${nftExists} (platform holds ${platformNfts.length} NFTs)`);
-    
-    if (!nftExists) {
-      throw new Error(`NFT ${nftTokenId} not found on platform wallet — cannot create sell offer`);
-    }
-    
-    // 2. Verify buyer account exists on ledger
+    // 1. Verify buyer account exists on ledger
     try {
       const buyerInfo = await client.request({ command: 'account_info', account: buyerAddress });
       const buyerBalance = buyerInfo.result.account_data?.Balance;
@@ -258,7 +250,7 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
       console.warn('⚠️ Could not verify buyer account:', e.message);
     }
     
-    // 3. Check platform reserve
+    // 2. Check platform reserve
     try {
       const platformInfo = await client.request({ command: 'account_info', account: platformAddress });
       const balance = parseInt(platformInfo.result.account_data?.Balance || '0');
@@ -269,12 +261,11 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
       const available = balance - totalReserve;
       console.log(`🔍 Pre-flight: Platform balance: ${balance/1000000} XRP, ownerCount: ${ownerCount}, reserve: ${totalReserve/1000000} XRP, available: ${available/1000000} XRP`);
       
-      if (available < 200000) { // Need at least 0.2 XRP for the new offer object
-        console.error(`❌ Platform wallet reserve too low! Available: ${available/1000000} XRP, need 0.2 XRP for offer object`);
+      if (available < 200000) {
         throw new Error(`Platform wallet reserve too low (${(available/1000000).toFixed(2)} XRP available). Cannot create sell offer.`);
       }
     } catch (e) {
-      if (e.message?.includes('reserve')) throw e; // Re-throw reserve errors
+      if (e.message?.includes('reserve')) throw e;
       console.warn('⚠️ Could not check platform reserve:', e.message);
     }
   } catch (preflightError) {
@@ -490,101 +481,41 @@ async function handlePrepare(req, res, sql) {
     
     try {
       // STEP 1: Get or mint NFT
-      // First, check DB for pre-minted available NFTs
-      // BUT verify they still exist on-chain (ghost NFTs from failed purchases cause tecNO_ENTRY)
+      // Trust the DB records — do NOT try to verify via account_nfts because
+      // the platform holds 6000+ NFTs and account_nfts only returns 400 per page.
+      // Paginating would be too slow for a purchase flow.
       const availableNfts = await sql`
         SELECT * FROM nfts 
         WHERE track_id = ${targetTrackId} AND status = 'available'
-        ORDER BY edition_number ASC LIMIT 5
+        ORDER BY edition_number ASC LIMIT 1
       `;
       
-      // Load platform's on-chain NFTs once (needed for verification)
-      let platformOnChainNfts = null;
-      
       if (availableNfts.length > 0) {
-        // Verify at least one of these NFTs still exists on platform wallet
-        try {
-          const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-          platformOnChainNfts = new Set((nftsResponse.result.account_nfts || []).map(n => n.NFTokenID));
-        } catch (e) {
-          console.warn('⚠️ Could not fetch on-chain NFTs for verification:', e.message);
-          // If we can't verify, we'll try anyway and let the sell offer fail gracefully
-          platformOnChainNfts = null;
-        }
+        const nftRecord = availableNfts[0];
+        nftTokenId = nftRecord.nft_token_id;
+        editionNumber = nftRecord.edition_number;
+        nftRecordId = nftRecord.id;
+        console.log('📦 Using NFT from database:', nftTokenId);
+        await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
         
-        // Find the first DB NFT that actually exists on-chain
-        for (const nftRecord of availableNfts) {
-          if (platformOnChainNfts && !platformOnChainNfts.has(nftRecord.nft_token_id)) {
-            // Ghost NFT — mark it and skip
-            console.warn(`👻 Ghost NFT detected: ${nftRecord.nft_token_id} not on platform wallet, marking as gone`);
-            await sql`UPDATE nfts SET status = 'gone', owner_address = 'unknown' WHERE id = ${nftRecord.id}`;
-            continue;
-          }
-          
-          // This one looks good
-          nftTokenId = nftRecord.nft_token_id;
-          editionNumber = nftRecord.edition_number;
-          nftRecordId = nftRecord.id;
-          console.log('📦 Using verified NFT from database:', nftTokenId);
-          await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
-          break;
-        }
-      }
-      
-      // If no valid DB NFT found, try legacy on-chain or lazy mint
-      if (!nftTokenId && !useLazyMint) {
-        // Legacy: find on-chain by metadata CID
+      } else if (!useLazyMint) {
+        // Legacy without DB records: this shouldn't happen for batch-minted releases
+        // but handle gracefully
         if (!targetTrack.metadata_cid) {
           await client.disconnect();
           return res.status(400).json({ error: 'Track missing metadata' });
         }
+        await client.disconnect();
+        return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
         
-        // Reuse the on-chain list if we already fetched it
-        if (!platformOnChainNfts) {
-          try {
-            const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-            platformOnChainNfts = new Set((nftsResponse.result.account_nfts || []).map(n => n.NFTokenID));
-          } catch (e) {
-            await client.disconnect();
-            return res.status(500).json({ error: 'Could not check on-chain NFTs' });
-          }
-        }
-        
-        // We need the full NFT objects for URI matching, re-fetch
-        const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-        const expectedUri = xrpl.convertStringToHex(`ipfs://${targetTrack.metadata_cid}`);
-        const matchingNft = (nftsResponse.result.account_nfts || []).find(n => n.URI === expectedUri);
-        
-        if (!matchingNft) {
-          await client.disconnect();
-          return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
-        }
-        
-        nftTokenId = matchingNft.NFTokenID;
-        const salesCount = await sql`SELECT COUNT(*) as count FROM sales WHERE track_id = ${targetTrackId}`;
-        editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
-        
-        nftRecordId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await sql`
-          INSERT INTO nfts (id, nft_token_id, release_id, track_id, edition_number, owner_address, status, created_at)
-          VALUES (${nftRecordId}, ${nftTokenId}, ${releaseId}, ${targetTrackId}, ${editionNumber}, ${platformAddress}, 'pending', NOW())
-        `;
-      }
-      
-      // If still no NFT and this is a lazy mint release, mint fresh
-      if (!nftTokenId && useLazyMint) {
+      } else {
+        // Lazy mint a fresh NFT
         const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
         nftTokenId = mintResult.nftTokenId;
         editionNumber = mintResult.editionNumber;
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
         console.log('✅ Lazy minted NFT:', nftTokenId);
-      }
-      
-      // Final check — if we still have no NFT, it's sold out
-      if (!nftTokenId) {
-        await client.disconnect();
-        return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
       }
       
       // STEP 2: Cancel any existing sell offers for this NFT
@@ -915,74 +846,31 @@ async function handleLegacyPurchase(req, res, sql) {
     let nftTokenId = null, editionNumber = null, nftRecordId = null, didLazyMint = false;
     
     try {
-      // Get available NFTs from DB, verify on-chain
+      // Trust DB records — no on-chain verification (platform has 6000+ NFTs, 
+      // account_nfts limit:400 gives false negatives)
       const availableNfts = await sql`
-        SELECT * FROM nfts WHERE track_id = ${targetTrackId} AND status = 'available' ORDER BY edition_number ASC LIMIT 5
+        SELECT * FROM nfts WHERE track_id = ${targetTrackId} AND status = 'available' ORDER BY edition_number ASC LIMIT 1
       `;
       
       if (availableNfts.length > 0) {
-        // Verify on-chain
-        try {
-          const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-          const onChainIds = new Set((nftsResponse.result.account_nfts || []).map(n => n.NFTokenID));
-          
-          for (const nftRecord of availableNfts) {
-            if (!onChainIds.has(nftRecord.nft_token_id)) {
-              console.warn(`👻 Ghost NFT in legacy flow: ${nftRecord.nft_token_id}, marking gone`);
-              await sql`UPDATE nfts SET status = 'gone', owner_address = 'unknown' WHERE id = ${nftRecord.id}`;
-              continue;
-            }
-            nftTokenId = nftRecord.nft_token_id;
-            editionNumber = nftRecord.edition_number;
-            nftRecordId = nftRecord.id;
-            await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
-            break;
-          }
-        } catch (e) {
-          // Can't verify, try first one and hope for the best
-          const nftRecord = availableNfts[0];
-          nftTokenId = nftRecord.nft_token_id;
-          editionNumber = nftRecord.edition_number;
-          nftRecordId = nftRecord.id;
-          await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
-        }
-      }
-      
-      if (!nftTokenId && !useLazyMint) {
+        const nftRecord = availableNfts[0];
+        nftTokenId = nftRecord.nft_token_id;
+        editionNumber = nftRecord.edition_number;
+        nftRecordId = nftRecord.id;
+        await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
+      } else if (!useLazyMint) {
         if (!targetTrack.metadata_cid) {
           await client.disconnect();
           return res.status(400).json({ error: 'Track missing metadata' });
         }
-        const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
-        const expectedUri = xrpl.convertStringToHex(`ipfs://${targetTrack.metadata_cid}`);
-        const matchingNft = (nftsResponse.result.account_nfts || []).find(n => n.URI === expectedUri);
-        
-        if (!matchingNft) {
-          await client.disconnect();
-          return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
-        }
-        
-        nftTokenId = matchingNft.NFTokenID;
-        const salesCount = await sql`SELECT COUNT(*) as count FROM sales WHERE track_id = ${targetTrackId}`;
-        editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
-        nftRecordId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await sql`
-          INSERT INTO nfts (id, nft_token_id, release_id, track_id, edition_number, owner_address, status, created_at)
-          VALUES (${nftRecordId}, ${nftTokenId}, ${releaseId}, ${targetTrackId}, ${editionNumber}, ${platformAddress}, 'pending', NOW())
-        `;
-      }
-      
-      if (!nftTokenId && useLazyMint) {
+        await client.disconnect();
+        return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
+      } else {
         const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
         nftTokenId = mintResult.nftTokenId;
         editionNumber = mintResult.editionNumber;
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
-      }
-      
-      if (!nftTokenId) {
-        await client.disconnect();
-        return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
       }
       
       // Cancel existing offers
