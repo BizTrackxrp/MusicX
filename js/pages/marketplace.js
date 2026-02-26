@@ -99,7 +99,7 @@ const MarketplacePage = {
   /**
    * Aggregate artist data from all releases
    */
-  _buildArtistMap() {
+_buildArtistMap() {
     const artistMap = {};
     this.releases.forEach(r => {
       const key = r.artistAddress;
@@ -117,12 +117,28 @@ const MarketplacePage = {
         };
       }
       const a = artistMap[key];
-      a.totalSold += r.soldEditions || 0;
-      a.totalVolume += (r.soldEditions || 0) * (parseFloat(r.songPrice) || 0);
+      
+      // Only count published releases
+      if (r.status === 'draft') return;
+      
       a.releaseCount++;
       a.trackCount += r.tracks?.length || 0;
       if (r.coverUrl) a.coverUrl = r.coverUrl;
       if (r.artistAvatar) a.avatar = r.artistAvatar;
+      
+      // Sum actual per-track sales instead of release-level estimate
+      if (r.tracks?.length > 0) {
+        r.tracks.forEach(t => {
+          const trackSold = t.soldCount || 0;
+          const trackPrice = parseFloat(t.price) || parseFloat(r.songPrice) || 0;
+          a.totalSold += trackSold;
+          a.totalVolume += trackSold * trackPrice;
+        });
+      } else {
+        // Single with no tracks array
+        a.totalSold += r.soldEditions || 0;
+        a.totalVolume += (r.soldEditions || 0) * (parseFloat(r.songPrice) || 0);
+      }
     });
     return artistMap;
   },
