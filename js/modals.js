@@ -5620,10 +5620,21 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
     }
   },
 
-  showEditProfile() {
+  // ============================================================
+// REPLACE your existing showEditProfile() and bindEditProfileEvents()
+// in modals.js with the code below.
+//
+// DB MIGRATION (run once):
+//   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS comment_policy VARCHAR(20) DEFAULT 'anyone';
+//
+// Also deploy the updated api/profile.js that accepts commentPolicy.
+// ============================================================
+
+showEditProfile() {
     if (!AppState.user?.address) return;
     this.activeModal = 'edit-profile';
     const profile = AppState.profile || {};
+    const commentPolicy = profile.commentPolicy || 'anyone';
     
     const html = `
       <div class="modal-overlay">
@@ -5716,6 +5727,51 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
                 </div>
                 <input type="hidden" name="genrePrimary" id="genre-primary" value="${profile.genrePrimary || ''}">
                 <input type="hidden" name="genreSecondary" id="genre-secondary" value="${profile.genreSecondary || ''}">
+              </div>
+              
+              <!-- Comment Policy (only shown if artist) -->
+              <div class="form-group artist-only" id="comment-policy-section" style="display: ${profile.isArtist ? 'block' : 'none'};">
+                <label class="form-label">Who can comment on your releases?</label>
+                <div class="comment-policy-options" id="comment-policy-options">
+                  <button type="button" class="comment-policy-btn ${commentPolicy === 'anyone' ? 'active' : ''}" data-policy="anyone">
+                    <div class="comment-policy-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                    </div>
+                    <div class="comment-policy-text">
+                      <span class="comment-policy-label">Anyone</span>
+                      <span class="comment-policy-desc">Any logged-in user can comment</span>
+                    </div>
+                  </button>
+                  <button type="button" class="comment-policy-btn ${commentPolicy === 'holders' ? 'active' : ''}" data-policy="holders">
+                    <div class="comment-policy-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      </svg>
+                    </div>
+                    <div class="comment-policy-text">
+                      <span class="comment-policy-label">NFT Holders Only</span>
+                      <span class="comment-policy-desc">Must own one of your NFTs</span>
+                    </div>
+                  </button>
+                  <button type="button" class="comment-policy-btn ${commentPolicy === 'none' ? 'active' : ''}" data-policy="none">
+                    <div class="comment-policy-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                      </svg>
+                    </div>
+                    <div class="comment-policy-text">
+                      <span class="comment-policy-label">No Comments</span>
+                      <span class="comment-policy-desc">Disable comments entirely</span>
+                    </div>
+                  </button>
+                </div>
+                <input type="hidden" name="commentPolicy" id="comment-policy-value" value="${commentPolicy}">
               </div>
               
               <!-- Social Links -->
@@ -5882,6 +5938,68 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         }
         .form-actions { display: flex; gap: 12px; margin-top: 24px; }
         .form-actions .btn { flex: 1; }
+        
+        /* Comment Policy Styles */
+        .comment-policy-options {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .comment-policy-btn {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          width: 100%;
+          padding: 12px 16px;
+          background: var(--bg-hover);
+          border: 2px solid transparent;
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: all 150ms;
+          text-align: left;
+        }
+        .comment-policy-btn:hover {
+          background: rgba(255, 255, 255, 0.06);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+        .comment-policy-btn.active {
+          border-color: var(--accent);
+          background: rgba(99, 102, 241, 0.08);
+        }
+        .comment-policy-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.06);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          color: var(--text-muted);
+          transition: all 150ms;
+        }
+        .comment-policy-btn.active .comment-policy-icon {
+          background: rgba(99, 102, 241, 0.15);
+          color: var(--accent);
+        }
+        .comment-policy-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .comment-policy-label {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .comment-policy-desc {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .comment-policy-btn.active .comment-policy-label {
+          color: var(--accent);
+        }
       </style>
     `;
     
@@ -5895,9 +6013,11 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
     if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
     if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
     
-    // Artist toggle - show/hide genres
+    // Artist toggle - show/hide genres AND comment policy
     document.getElementById('is-artist-toggle')?.addEventListener('change', (e) => {
-      document.getElementById('genre-section').style.display = e.target.checked ? 'block' : 'none';
+      const show = e.target.checked ? 'block' : 'none';
+      document.getElementById('genre-section').style.display = show;
+      document.getElementById('comment-policy-section').style.display = show;
     });
     
     // Genre selection
@@ -5919,6 +6039,15 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         }
         document.getElementById('genre-primary').value = selectedGenres[0] || '';
         document.getElementById('genre-secondary').value = selectedGenres[1] || '';
+      });
+    });
+    
+    // Comment policy selection
+    document.querySelectorAll('.comment-policy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.comment-policy-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('comment-policy-value').value = btn.dataset.policy;
       });
     });
     
@@ -5987,6 +6116,7 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         isArtist: isArtist,
         genrePrimary: isArtist ? (formData.get('genrePrimary') || null) : null,
         genreSecondary: isArtist ? (formData.get('genreSecondary') || null) : null,
+        commentPolicy: isArtist ? (formData.get('commentPolicy') || 'anyone') : 'anyone',
       };
       
       console.log('Saving profile updates:', updates);
@@ -6003,127 +6133,6 @@ document.getElementById('mint-success-done')?.addEventListener('click', () => {
         alert('Failed to save profile: ' + error.message);
       }
     });
-  },
-
- showTermsOfService() {
-    this.activeModal = 'terms';
-    const html = `
-      <div class="modal-overlay tos-modal-overlay">
-        <div class="modal tos-modal">
-          <div class="modal-header">
-            <div class="modal-title">Terms of Service</div>
-            <button class="modal-close">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body tos-content">
-            <p class="tos-effective"><em>Effective Date: February 18, 2026</em></p>
-            
-            <h3>1. Introduction</h3>
-            <p>These Terms of Service ("Terms") govern your access to and use of the website located at xrpmusic.io and related services (collectively, the "Platform"). The Platform is owned and operated by Aventra LLC, a Delaware limited liability company ("XRP Music," "we," "us," or "our"). By accessing or using the Platform, you agree to be bound by these Terms. If you do not agree, you must not use the Platform.</p>
-            <p><strong>These Terms include a binding arbitration provision and class action waiver in Section 18.</strong></p>
-            
-            <h3>2. Platform Description</h3>
-            <p>The Platform facilitates the minting, listing, buying, selling, and reselling of music-related non-fungible tokens ("NFTs") recorded on the XRP Ledger ("XRPL"). XRP Music is not a wallet provider, broker, dealer, exchange, financial institution, or money services business. XRP Music does not custody user funds, does not control blockchain transactions, and is not a party to NFT sales except to collect the Platform Fee.</p>
-            
-            <h3>3. Eligibility</h3>
-            <p>You must be at least 18 years old and legally capable of entering into binding contracts. You are responsible for maintaining the security of your wallet, protecting your private keys, and all activity conducted through your wallet.</p>
-            
-            <h3>4. Intellectual Property & NFTs</h3>
-            <p><strong>4.1 NFT Ownership</strong> — Purchasing an NFT transfers ownership of the blockchain token only. It does not transfer copyright, public performance rights, distribution rights, or other commercial exploitation rights unless expressly granted by the Artist in separate written terms.</p>
-            <p><strong>4.2 Limited License</strong> — Unless otherwise specified by the Artist, purchasers receive a limited, non-exclusive, non-transferable license to display associated content for personal, non-commercial purposes.</p>
-            <p><strong>4.3 Artist Content License</strong> — By minting, uploading, listing, or making available any music, artwork, metadata, or other content ("Artist Content") on the Platform, the Artist grants to XRP Music a worldwide, non-exclusive, royalty-free, sublicensable license to host, reproduce, distribute, publicly display, publicly perform, transmit, stream, and otherwise make available the Artist Content on or through the Platform and in connection with the operation, marketing, promotion, and improvement of the Platform. This license includes the right to allow end users to stream or preview Artist Content for free or for a fee, including through any future paid streaming or subscription features. The Artist retains all intellectual property rights in the Artist Content, subject to this license.</p>
-            
-            <h3>5. Creator Royalties & Platform Fees</h3>
-            <p>XRP Music collects a 2% Platform Fee on initial NFT sales conducted through the Platform. XRP Music does not collect a fee on resales. Artists may set a creator royalty percentage applicable to secondary sales. Royalties and fees are automatically deducted and transferred through smart contract functionality.</p>
-            
-            <h3>6. Taxes</h3>
-            <p><strong>6.1</strong> Each Artist is solely responsible for determining, reporting, and paying any and all taxes arising from minting, listing, selling, or reselling NFTs; receiving primary sale proceeds; receiving secondary sale royalties; or any other compensation received through the Platform.</p>
-            <p><strong>6.2</strong> Collectors are solely responsible for determining, reporting, and paying any taxes arising from purchasing, holding, or reselling NFTs, including capital gains taxes and use taxes.</p>
-            <p><strong>6.3</strong> XRP Music is not responsible for determining the tax classification of any User, whether any transaction is taxable, calculating or withholding taxes, filing tax returns, or advising any User regarding tax obligations.</p>
-            <p><strong>6.4</strong> Nothing in these Terms shall be construed to create any agency, partnership, joint venture, or employment relationship. To the extent XRP Music is required by law to collect and remit sales tax as a marketplace facilitator, its responsibility is strictly limited to collecting and remitting such tax as required by statute.</p>
-            <p><strong>6.5</strong> Each User agrees to indemnify and hold harmless XRP Music from any tax liabilities, penalties, interest, assessments, audits, claims, or governmental actions arising from that User's failure to properly report or pay taxes.</p>
-            <p><strong>6.6</strong> XRP Music acts solely as a technology service provider and does not act as an agent, broker, intermediary, trustee, escrow agent, advisor, or fiduciary for any User. Each User acknowledges that XRP Music owes no fiduciary duties of any kind.</p>
-            
-            <h3>7. Content and NFT Disclaimers</h3>
-            <p>XRP Music does not review, pre-screen, verify, monitor, endorse, guarantee, or assume responsibility for any NFT, Artist Content, metadata, artwork, music, or other content on the Platform. XRP Music makes no representations or warranties regarding authenticity, identity, legality, accuracy, ownership, enforceability of licenses or royalties, or market value. All transactions occur directly between Users via blockchain technology. You assume all risk associated with interacting with other Users and acquiring, holding, or transferring NFTs.</p>
-            
-            <h3>8. No Reliance</h3>
-            <p>You acknowledge that you have not relied on any statement, representation, warranty, or guarantee not expressly set forth in these Terms. No oral or written information or advice provided by XRP Music shall create any warranty or obligation not stated in these Terms.</p>
-            
-            <h3>9. Assumption of Risk</h3>
-            <p>You acknowledge risks including price volatility, regulatory changes, smart contract vulnerabilities, blockchain irreversibility, loss of wallet credentials, NFTs becoming unsellable, markets collapsing, royalty enforcement limitations, smart contract bugs, blockchain forks, third-party wallet failures, and XRP Music discontinuing the Platform at any time. NFTs exist independently on the blockchain and XRP Music is not responsible for maintaining ongoing access to the Platform interface.</p>
-            
-            <h3>10. No Investment or Securities Offering</h3>
-            <p>NFTs on the Platform are collectible digital assets. They are not securities, investment contracts, or financial instruments. XRP Music does not market NFTs as investments and makes no representation of profit potential. Nothing on the Platform constitutes investment, financial, legal, or tax advice.</p>
-            
-            <h3>11. Disclaimers</h3>
-            <p>The Platform is provided "AS IS" and "AS AVAILABLE." XRP Music disclaims all warranties to the fullest extent permitted by law.</p>
-            
-            <h3>12. Limitation of Liability</h3>
-            <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, XRP MUSIC SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, PUNITIVE, OR SPECULATIVE DAMAGES. XRP MUSIC'S TOTAL CUMULATIVE LIABILITY SHALL NOT EXCEED $100 USD. This limitation applies whether the claim is based in contract, tort, strict liability, statute, equity, or otherwise.</p>
-            
-            <h3>13. Limitation Period</h3>
-            <p>Any claim arising out of the Platform or these Terms must be filed within one (1) year after the claim arose or it is permanently barred.</p>
-            
-            <h3>14. Indemnification</h3>
-            <p>You agree to indemnify, defend, and hold harmless XRP Music from any claims, damages, liabilities, costs, and expenses (including attorneys' fees) arising from your use of the Platform; any NFT or content you mint, list, sell, or transfer; disputes between Users; intellectual property violations; your violation of applicable law; or your tax obligations.</p>
-            
-            <h3>15. DMCA Policy</h3>
-            <p>XRP Music complies with the Digital Millennium Copyright Act. Designated DMCA Agent: Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:dmca@xrpmusic.io" style="color:var(--accent);">dmca@xrpmusic.io</a></p>
-            
-            <h3>16. Right to Discontinue</h3>
-            <p>XRP Music reserves the right to suspend, restrict, modify, or permanently discontinue the Platform or any feature at any time, without liability.</p>
-            
-            <h3>17. Governing Law</h3>
-            <p>These Terms are governed by the laws of the State of Washington.</p>
-            
-            <h3>18. Dispute Resolution</h3>
-            <p><strong>18.1 Binding Arbitration</strong> — All disputes shall be resolved by binding arbitration administered by JAMS in King County, Washington.</p>
-            <p><strong>18.2 Class Action Waiver</strong> — Disputes must be brought individually.</p>
-            <p><strong>18.3 Jury Trial Waiver</strong> — Both parties waive the right to a jury trial.</p>
-            
-            <h3>19. Modifications</h3>
-            <p>XRP Music may modify these Terms at any time. Modifications are effective immediately upon posting. Continued use constitutes acceptance. Modifications will not alter terms applicable to completed blockchain transactions executed prior to the effective date.</p>
-            
-            <h3>20. Contact</h3>
-            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:legal@xrpmusic.io" style="color:var(--accent);">legal@xrpmusic.io</a></p>
-            
-            <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.</em></p>
-          </div>
-        </div>
-      </div>
-      
-      <style>
-        .tos-modal { max-width: 600px; max-height: 80vh; }
-        .tos-content { 
-          overflow-y: auto; 
-          max-height: 60vh; 
-          padding-right: 8px;
-          font-size: 14px;
-          line-height: 1.6;
-          color: var(--text-secondary);
-        }
-        .tos-content h3 { 
-          font-size: 15px; 
-          font-weight: 600; 
-          color: var(--text-primary); 
-          margin: 20px 0 8px 0; 
-        }
-        .tos-content p { margin: 8px 0; }
-        .tos-content ul { margin: 8px 0 8px 20px; }
-        .tos-content li { margin: 4px 0; }
-        .tos-effective { color: var(--text-muted); margin-bottom: 16px; }
-        .tos-agreement { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); }
-        .tos-content::-webkit-scrollbar { width: 6px; }
-        .tos-content::-webkit-scrollbar-track { background: var(--bg-hover); border-radius: 3px; }
-        .tos-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-      </style>
-    `;
-    this.show(html);
   },
 
   showPrivacyPolicy() {
