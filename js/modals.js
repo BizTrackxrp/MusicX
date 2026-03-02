@@ -5076,8 +5076,9 @@ if (editions > 10000) {
         };
         
        let result;
-        if (isEditMode && existingDraft?.id) {
+       if (isEditMode && existingDraft?.id) {
           // Update existing draft
+         console.log('📝 Saving draft tracks:', uploadedTracks.map(t => t.title));
          await API.updateRelease(existingDraft.id, {
     title: releaseTitle,
     description: releaseDescription,
