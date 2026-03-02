@@ -5032,16 +5032,13 @@ if (editions > 10000) {
             });
           }
           
-          uploadedTracks.push({
+        uploadedTracks.push({
             title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
             audioCid: audioResult.cid,
             audioUrl: audioResult.url,
             price: tracks[i].price || 5,
-            genre: selectedGenres[0] || null,
-            genreSecondary: selectedGenres[1] || null,
-            genreTertiary: selectedGenres[2] || null,
             ...(tracks[i].videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
           });
         }
