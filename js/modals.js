@@ -5078,18 +5078,23 @@ if (editions > 10000) {
        let result;
         if (isEditMode && existingDraft?.id) {
           // Update existing draft
-          await API.updateRelease(existingDraft.id, {
-            title: releaseTitle,
-            description: releaseDescription,
-            songPrice: defaultTrackPrice,
-            albumPrice: releaseType !== 'single' ? albumPriceValue : null,
-            totalEditions: editions,
-            royaltyPercent: royaltyPercent,
-            coverUrl: coverResult.url,
-            coverCid: coverResult.cid,
-            visibility: draftVisibility,
-            draftGenres: selectedGenres,
-          });
+         await API.updateRelease(existingDraft.id, {
+    title: releaseTitle,
+    description: releaseDescription,
+    songPrice: defaultTrackPrice,
+    albumPrice: releaseType !== 'single' ? albumPriceValue : null,
+    totalEditions: editions,
+    royaltyPercent: royaltyPercent,
+    coverUrl: coverResult.url,
+    coverCid: coverResult.cid,
+    visibility: draftVisibility,
+    draftGenres: selectedGenres,
+    tracks: uploadedTracks.map((t, i) => ({
+      ...t,
+      price: tracks[i]?.price || t.price,
+      ...(tracks[i]?.videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
+    })),
+  });
           result = { releaseId: existingDraft.id, trackIds: existingDraft.tracks?.map(t => t.id) || [] };
         } else {
           result = await API.saveRelease(draftData);
