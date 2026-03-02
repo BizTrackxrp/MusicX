@@ -1,10 +1,13 @@
 /**
  * XRP Music - Profile API
  * Vercel Serverless Function
+ * 
+ * UPDATED: comment_policy field — artists can control who comments on their releases
+ *   'anyone'  = any logged-in user can comment (default)
+ *   'holders' = only users holding one of the artist's NFTs can comment
+ *   'none'    = comments disabled
  */
-
 import { neon } from '@neondatabase/serverless';
-
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
@@ -47,17 +50,22 @@ export default async function handler(req, res) {
         twitter,
         genrePrimary,
         genreSecondary,
-        isArtist
+        isArtist,
+        commentPolicy
       } = req.body;
       
       if (!address) {
         return res.status(400).json({ error: 'Address required' });
       }
       
-      console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist });
+      console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist, commentPolicy });
       
       // Convert isArtist to proper boolean
       const isArtistBool = isArtist === true || isArtist === 'true';
+      
+      // Validate comment policy
+      const validPolicies = ['anyone', 'holders', 'none'];
+      const cleanCommentPolicy = validPolicies.includes(commentPolicy) ? commentPolicy : null;
       
       // Upsert profile - update ALL fields that are provided
       const [profile] = await sql`
@@ -72,6 +80,7 @@ export default async function handler(req, res) {
           genre_primary,
           genre_secondary,
           is_artist,
+          comment_policy,
           updated_at
         ) VALUES (
           ${address},
@@ -84,6 +93,7 @@ export default async function handler(req, res) {
           ${genrePrimary || null},
           ${genreSecondary || null},
           ${isArtistBool},
+          ${cleanCommentPolicy || 'anyone'},
           NOW()
         )
         ON CONFLICT (wallet_address) DO UPDATE SET
@@ -96,6 +106,7 @@ export default async function handler(req, res) {
           genre_primary = ${genrePrimary || null},
           genre_secondary = ${genreSecondary || null},
           is_artist = ${isArtistBool},
+          comment_policy = COALESCE(${cleanCommentPolicy}, profiles.comment_policy, 'anyone'),
           updated_at = NOW()
         RETURNING *
       `;
@@ -111,7 +122,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
-
 function formatProfile(row) {
   return {
     address: row.wallet_address,
@@ -129,6 +139,7 @@ function formatProfile(row) {
     genrePrimary: row.genre_primary,
     genreSecondary: row.genre_secondary,
     isArtist: row.is_artist,
+    commentPolicy: row.comment_policy || 'anyone',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
