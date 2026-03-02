@@ -13,6 +13,8 @@
  * FIX: Retry logic on sell offer creation (intermittent xrpl.js validation errors)
  * FIX: Batch cancel of stale offers with ledger settle delay
  * FIX: Address validation before XRPL calls
+ * FIX: tecNO_ENTRY recovery — stale DB NFTs auto-invalidated, fresh lazy mint retry
+ * FIX: Post-mint ledger propagation delay to prevent race conditions
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -21,6 +23,7 @@ import * as xrpl from 'xrpl';
 const PLATFORM_FEE_PERCENT = 2;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
+const POST_MINT_DELAY_MS = 2500; // Wait for ledger propagation after minting
 
 // ─── Notification Helpers ────────────────────────────────────────────
 
@@ -229,6 +232,7 @@ async function cancelExistingOffers(client, platformWallet, platformAddress, nft
 /**
  * Create a sell offer with retry logic.
  * Handles intermittent xrpl.js validation errors by reconnecting and retrying.
+ * Now also treats tecNO_ENTRY as a non-retryable error (caller should handle recovery).
  * Returns { sellOfferIndex, offerResult } on success, throws on failure.
  */
 async function createSellOfferWithRetry(client, platformWallet, platformAddress, nftTokenId, priceInDrops, buyerAddress, maxAttempts = 3) {
@@ -312,9 +316,21 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
           buyerAddress,
           txHash: offerResult.result.hash,
         }));
+        
+        // tecNO_ENTRY means the NFT doesn't exist on-chain — retrying won't help.
+        // Throw immediately so the caller can handle recovery (e.g. fresh lazy mint).
+        if (txResult === 'tecNO_ENTRY') {
+          throw lastError;
+        }
       }
     } catch (offerError) {
       lastError = offerError;
+      
+      // tecNO_ENTRY: bail out immediately — caller handles recovery
+      if (offerError.message?.includes('tecNO_ENTRY')) {
+        throw offerError;
+      }
+      
       console.warn(`⚠️ Attempt ${attempt} error: ${offerError.message}`);
       
       // If validation error, reconnect — stale connection state can cause this
@@ -478,6 +494,7 @@ async function handlePrepare(req, res, sql) {
     let editionNumber = null;
     let nftRecordId = null;
     let didLazyMint = false;
+    let usedDbRecord = false;
     
     try {
       // STEP 1: Get or mint NFT
@@ -495,6 +512,7 @@ async function handlePrepare(req, res, sql) {
         nftTokenId = nftRecord.nft_token_id;
         editionNumber = nftRecord.edition_number;
         nftRecordId = nftRecord.id;
+        usedDbRecord = true;
         console.log('📦 Using NFT from database:', nftTokenId);
         await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
         
@@ -516,6 +534,10 @@ async function handlePrepare(req, res, sql) {
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
         console.log('✅ Lazy minted NFT:', nftTokenId);
+        
+        // Wait for ledger to fully propagate the new NFT before creating sell offer
+        console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation...`);
+        await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
       }
       
       // STEP 2: Cancel any existing sell offers for this NFT
@@ -524,10 +546,48 @@ async function handlePrepare(req, res, sql) {
       // STEP 3: Create sell offer with retry
       const priceInDrops = xrpl.xrpToDrops(price.toFixed(6));
       
-      const { sellOfferIndex } = await createSellOfferWithRetry(
-        client, platformWallet, platformAddress,
-        nftTokenId, priceInDrops, cleanBuyerAddress
-      );
+      let sellOfferIndex;
+      try {
+        const result = await createSellOfferWithRetry(
+          client, platformWallet, platformAddress,
+          nftTokenId, priceInDrops, cleanBuyerAddress
+        );
+        sellOfferIndex = result.sellOfferIndex;
+      } catch (sellOfferError) {
+        // ─── tecNO_ENTRY RECOVERY ─────────────────────────────────────
+        // If the NFT came from the DB (not freshly minted) and doesn't exist
+        // on-chain, the DB record is stale. Mark it dead and lazy mint a new one.
+        if (sellOfferError.message?.includes('tecNO_ENTRY') && usedDbRecord && useLazyMint) {
+          console.warn(`⚠️ tecNO_ENTRY: DB NFT ${nftTokenId} not on-chain. Marking dead and lazy minting fresh...`);
+          await sql`UPDATE nfts SET status = 'dead' WHERE id = ${nftRecordId}`;
+          
+          // Mint a fresh NFT
+          const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
+          nftTokenId = mintResult.nftTokenId;
+          editionNumber = mintResult.editionNumber;
+          nftRecordId = mintResult.nftRecordId;
+          didLazyMint = true;
+          usedDbRecord = false;
+          
+          // Wait for ledger propagation
+          console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation after recovery mint...`);
+          await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
+          
+          // Cancel any offers (shouldn't exist for fresh mint, but be safe)
+          await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
+          
+          // Retry sell offer creation
+          const retryResult = await createSellOfferWithRetry(
+            client, platformWallet, platformAddress,
+            nftTokenId, priceInDrops, cleanBuyerAddress
+          );
+          sellOfferIndex = retryResult.sellOfferIndex;
+          console.log('✅ Recovery successful! Sell offer created after fresh mint:', sellOfferIndex);
+        } else {
+          // Not recoverable — rethrow
+          throw sellOfferError;
+        }
+      }
       
       const platformFee = price * (PLATFORM_FEE_PERCENT / 100);
       
@@ -556,7 +616,12 @@ async function handlePrepare(req, res, sql) {
       
     } catch (innerError) {
       console.error('Prepare error:', innerError);
-      if (nftRecordId) await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftRecordId}`;
+      
+      // Reset NFT status if we marked one as pending
+      if (nftRecordId) {
+        const resetStatus = usedDbRecord ? 'available' : 'dead';
+        await sql`UPDATE nfts SET status = ${resetStatus} WHERE id = ${nftRecordId}`;
+      }
       
       try { await client.disconnect(); } catch (e) {}
       const errorMsg = innerError.message || 'Failed to prepare purchase';
@@ -844,6 +909,7 @@ async function handleLegacyPurchase(req, res, sql) {
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
     
     let nftTokenId = null, editionNumber = null, nftRecordId = null, didLazyMint = false;
+    let usedDbRecord = false;
     
     try {
       // Trust DB records — no on-chain verification (platform has 6000+ NFTs, 
@@ -857,6 +923,7 @@ async function handleLegacyPurchase(req, res, sql) {
         nftTokenId = nftRecord.nft_token_id;
         editionNumber = nftRecord.edition_number;
         nftRecordId = nftRecord.id;
+        usedDbRecord = true;
         await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
       } else if (!useLazyMint) {
         if (!targetTrack.metadata_cid) {
@@ -871,16 +938,51 @@ async function handleLegacyPurchase(req, res, sql) {
         editionNumber = mintResult.editionNumber;
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
+        
+        // Wait for ledger propagation
+        console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation...`);
+        await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
       }
       
       // Cancel existing offers
       await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
       
-      // Create 0-amount sell offer (old flow) with retry
-      const { sellOfferIndex } = await createSellOfferWithRetry(
-        client, platformWallet, platformAddress,
-        nftTokenId, '1', cleanBuyerAddress
-      );
+      // Create 0-amount sell offer (old flow) with retry + tecNO_ENTRY recovery
+      let sellOfferIndex;
+      try {
+        const result = await createSellOfferWithRetry(
+          client, platformWallet, platformAddress,
+          nftTokenId, '1', cleanBuyerAddress
+        );
+        sellOfferIndex = result.sellOfferIndex;
+      } catch (sellOfferError) {
+        // tecNO_ENTRY recovery for legacy flow too
+        if (sellOfferError.message?.includes('tecNO_ENTRY') && usedDbRecord && useLazyMint) {
+          console.warn(`⚠️ tecNO_ENTRY (legacy): DB NFT ${nftTokenId} not on-chain. Marking dead and lazy minting fresh...`);
+          await sql`UPDATE nfts SET status = 'dead' WHERE id = ${nftRecordId}`;
+          
+          const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
+          nftTokenId = mintResult.nftTokenId;
+          editionNumber = mintResult.editionNumber;
+          nftRecordId = mintResult.nftRecordId;
+          didLazyMint = true;
+          usedDbRecord = false;
+          
+          console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation after recovery mint...`);
+          await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
+          
+          await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
+          
+          const retryResult = await createSellOfferWithRetry(
+            client, platformWallet, platformAddress,
+            nftTokenId, '1', cleanBuyerAddress
+          );
+          sellOfferIndex = retryResult.sellOfferIndex;
+          console.log('✅ Recovery successful (legacy)! Sell offer:', sellOfferIndex);
+        } else {
+          throw sellOfferError;
+        }
+      }
       
       // Pay artist
       const platformFee = price * (PLATFORM_FEE_PERCENT / 100);
@@ -905,7 +1007,10 @@ async function handleLegacyPurchase(req, res, sql) {
       
     } catch (innerError) {
       console.error('Purchase error:', innerError);
-      if (nftRecordId) await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftRecordId}`;
+      if (nftRecordId) {
+        const resetStatus = usedDbRecord ? 'available' : 'dead';
+        await sql`UPDATE nfts SET status = ${resetStatus} WHERE id = ${nftRecordId}`;
+      }
       try {
         await refundBuyer(client, platformWallet, platformAddress, cleanBuyerAddress, price, innerError.message);
         await client.disconnect();
