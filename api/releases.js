@@ -17,6 +17,10 @@
  * - Artist's own page (includeUnminted=true): show ALL their releases (including drafts)
  * - Artist's public page: show live releases + public drafts (visibility='public')
  * - Single release by ID: always visible (for purchase flow, direct links, draft preview)
+ * 
+ * TRACK UPDATES:
+ * - Tracks are updated IN PLACE (not deleted + re-inserted) to preserve
+ *   foreign key references from plays, sales, and nfts tables.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -458,31 +462,60 @@ async function updateRelease(req, res, sql) {
     return res.status(404).json({ error: 'Release not found' });
   }
   
-  // Update tracks if provided (used by edit mode to swap audio files)
+  // Update tracks if provided
+  // Uses UPDATE in place to preserve foreign key references from plays, sales, nfts tables
   if (updates.tracks && Array.isArray(updates.tracks) && updates.tracks.length > 0) {
-    // Delete existing tracks
-    await sql`DELETE FROM tracks WHERE release_id = ${id}`;
+    // Get existing tracks ordered by track_order so we can match by position
+    const existingTracks = await sql`
+      SELECT id, track_order FROM tracks WHERE release_id = ${id} ORDER BY track_order
+    `;
     
-    // Insert new tracks
     for (let i = 0; i < updates.tracks.length; i++) {
       const track = updates.tracks[i];
-      const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await sql`
-        INSERT INTO tracks (
-          id, release_id, title, track_order, duration,
-          audio_cid, audio_url, metadata_cid, sold_count, minted_editions,
-          track_number, price, video_cid, video_url,
-          genre, genre_secondary, genre_tertiary
-        ) VALUES (
-          ${trackId}, ${id}, ${track.title || 'Untitled'}, ${track.trackNumber || i + 1},
-          ${track.duration || null}, ${track.audioCid || null}, ${track.audioUrl || null},
-          ${track.metadataCid || null}, 0, 0, ${i + 1},
-          ${track.price !== undefined ? track.price : null},
-          ${track.videoCid || null}, ${track.videoUrl || null},
-          ${track.genre || null}, ${track.genreSecondary || null}, ${track.genreTertiary || null}
-        )
-      `;
+      
+      if (i < existingTracks.length) {
+        // Update existing track in place — preserves id so plays/sales/nfts FK stay valid
+        await sql`
+          UPDATE tracks SET
+            title = ${track.title || 'Untitled'},
+            track_order = ${track.trackNumber || i + 1},
+            duration = COALESCE(${track.duration || null}, duration),
+            audio_cid = COALESCE(${track.audioCid || null}, audio_cid),
+            audio_url = COALESCE(${track.audioUrl || null}, audio_url),
+            metadata_cid = COALESCE(${track.metadataCid || null}, metadata_cid),
+            track_number = ${i + 1},
+            price = ${track.price !== undefined && track.price !== null ? track.price : null},
+            video_cid = ${track.videoCid || null},
+            video_url = ${track.videoUrl || null},
+            genre = COALESCE(${track.genre || null}, genre),
+            genre_secondary = COALESCE(${track.genreSecondary || null}, genre_secondary),
+            genre_tertiary = COALESCE(${track.genreTertiary || null}, genre_tertiary)
+          WHERE id = ${existingTracks[i].id}
+        `;
+      } else {
+        // New track added beyond existing count — insert fresh
+        const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await sql`
+          INSERT INTO tracks (
+            id, release_id, title, track_order, duration,
+            audio_cid, audio_url, metadata_cid, sold_count, minted_editions,
+            track_number, price, video_cid, video_url,
+            genre, genre_secondary, genre_tertiary
+          ) VALUES (
+            ${trackId}, ${id}, ${track.title || 'Untitled'}, ${track.trackNumber || i + 1},
+            ${track.duration || null}, ${track.audioCid || null}, ${track.audioUrl || null},
+            ${track.metadataCid || null}, 0, 0, ${i + 1},
+            ${track.price !== undefined && track.price !== null ? track.price : null},
+            ${track.videoCid || null}, ${track.videoUrl || null},
+            ${track.genre || null}, ${track.genreSecondary || null}, ${track.genreTertiary || null}
+          )
+        `;
+      }
     }
+    
+    // If fewer tracks sent than exist, leave orphaned tracks in place
+    // (they have play/sale/nft history that can't be deleted)
+    // They stay in DB but the release display uses track_order to show active ones
   }
   
   return res.json({ 
@@ -526,14 +559,24 @@ async function deleteRelease(req, res, sql) {
     `;
     console.log(`  Deleted ${deletedNfts.length} NFT records`);
     
-    // 2. Delete tracks (references releases)
+    // 2. Delete plays referencing these tracks (so tracks can be deleted)
+    const trackIds = await sql`
+      SELECT id FROM tracks WHERE release_id = ${id}
+    `;
+    if (trackIds.length > 0) {
+      const ids = trackIds.map(t => t.id);
+      await sql`DELETE FROM plays WHERE track_id = ANY(${ids})`;
+      console.log(`  Deleted play records for ${ids.length} tracks`);
+    }
+    
+    // 3. Delete tracks (references releases)
     const deletedTracks = await sql`
       DELETE FROM tracks WHERE release_id = ${id}
       RETURNING id
     `;
     console.log(`  Deleted ${deletedTracks.length} track records`);
     
-    // 3. Delete mint_jobs if table exists
+    // 4. Delete mint_jobs if table exists
     try {
       const deletedJobs = await sql`
         DELETE FROM mint_jobs WHERE release_id = ${id}
@@ -544,7 +587,7 @@ async function deleteRelease(req, res, sql) {
       // Table might not exist, that's fine
     }
     
-    // 4. Delete the release itself
+    // 5. Delete the release itself
     const deletedRelease = await sql`
       DELETE FROM releases WHERE id = ${id}
       RETURNING id
