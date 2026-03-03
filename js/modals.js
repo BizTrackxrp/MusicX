@@ -5098,28 +5098,7 @@ if (editions > 10000) {
           result = await API.saveRelease(draftData);
         }
         
-        // Also save genres to tracks
-        if (selectedGenres.length > 0 && result.trackIds?.length > 0) {
-          try {
-            await fetch('/api/update-track-genres', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                releaseId: result.releaseId,
-                artistAddress: AppState.user.address,
-                tracks: result.trackIds.map(trackId => ({
-                  trackId,
-                  genre: selectedGenres[0] || null,
-                  genreSecondary: selectedGenres[1] || null,
-                  genreTertiary: selectedGenres[2] || null,
-                })),
-              }),
-            });
-          } catch (e) {
-            console.warn('Genre save failed (non-critical):', e);
-          }
-        }
-        
+      
         // Success!
         Modals.close();
         Modals.showToast('Draft saved! Check your Drafts tab.');
