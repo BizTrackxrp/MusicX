@@ -4421,6 +4421,19 @@ const totalPrice = albumPrice;
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        .genre-icon { font-size: 14px; margin-right: 2px; }
+.genre-chip { --genre-color: #6b7280; }
+.genre-chip.selected { border-color: var(--genre-color); background: color-mix(in srgb, var(--genre-color) 15%, transparent); color: var(--genre-color); }
+.btn-show-all-genres {
+  display: block; width: 100%; margin-top: 10px; padding: 10px;
+  background: transparent; border: 1px dashed var(--border-color); border-radius: var(--radius-md);
+  color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all 150ms;
+}
+.btn-show-all-genres:hover { border-color: var(--text-muted); color: var(--text-secondary); }
+.genre-picker-expanded { margin-top: 12px; max-height: 300px; overflow-y: auto; }
+.genre-picker-expanded.hidden { display: none; }
+.genre-group-section { margin-bottom: 14px; }
+.genre-group-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding-left: 2px; }
       </style>
     `;
     
