@@ -4063,30 +4063,40 @@ const totalPrice = albumPrice;
             
                
                <!-- Genre Selector -->
-                <div class="form-group" id="genre-selector-section">
-                  <label class="form-label">Genre(s)</label>
-                  <p class="form-hint" style="margin-bottom: 8px;">Select up to 3 genres for your release</p>
-                  <div class="genre-picker" id="genre-picker">
-                    <button type="button" class="genre-chip" data-genre="hiphop"><span class="genre-dot" style="background:#f97316;"></span>Hip Hop</button>
-                    <button type="button" class="genre-chip" data-genre="rap"><span class="genre-dot" style="background:#ef4444;"></span>Rap</button>
-                    <button type="button" class="genre-chip" data-genre="electronic"><span class="genre-dot" style="background:#3b82f6;"></span>Electronic</button>
-                    <button type="button" class="genre-chip" data-genre="rnb"><span class="genre-dot" style="background:#a855f7;"></span>R&B</button>
-                    <button type="button" class="genre-chip" data-genre="pop"><span class="genre-dot" style="background:#ec4899;"></span>Pop</button>
-                    <button type="button" class="genre-chip" data-genre="rock"><span class="genre-dot" style="background:#84cc16;"></span>Rock</button>
-                    <button type="button" class="genre-chip" data-genre="country"><span class="genre-dot" style="background:#f59e0b;"></span>Country</button>
-                    <button type="button" class="genre-chip" data-genre="jazz"><span class="genre-dot" style="background:#06b6d4;"></span>Jazz</button>
-                    <button type="button" class="genre-chip" data-genre="lofi"><span class="genre-dot" style="background:#8b5cf6;"></span>Lo-Fi</button>
-                    <button type="button" class="genre-chip" data-genre="other"><span class="genre-dot" style="background:#6b7280;"></span>Other</button>
-                  </div>
-                </div>
+<div class="form-group" id="genre-selector-section">
+  <label class="form-label">Genre(s)</label>
+  <p class="form-hint" style="margin-bottom: 8px;">Select up to 3 genres for your release</p>
+  <div class="genre-picker" id="genre-picker">
+    ${Genres.list.slice(0, 10).map(g => `
+      <button type="button" class="genre-chip" data-genre="${g.id}" style="--genre-color: ${g.color}">
+        <span class="genre-icon">${g.icon}</span>${g.name}
+      </button>
+    `).join('')}
+  </div>
+  <button type="button" class="btn-show-all-genres" id="show-all-genres-btn">
+    Show All Genres ▾
+  </button>
+  <div class="genre-picker-expanded hidden" id="genre-picker-expanded">
+    ${Object.entries(Genres.getGrouped()).map(([category, genres]) => `
+      <div class="genre-group-section">
+        <div class="genre-group-label">${category}</div>
+        <div class="genre-picker">
+          ${genres.map(g => `
+            <button type="button" class="genre-chip" data-genre="${g.id}" style="--genre-color: ${g.color}">
+              <span class="genre-icon">${g.icon}</span>${g.name}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `).join('')}
+  </div>
+</div>
 
-               
-                
-                <div class="create-nav">
-                  <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
-                  <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
-                </div>
-              </div>
+<div class="create-nav">
+  <button type="button" class="btn btn-secondary" id="create-back-2">Back</button>
+  <button type="button" class="btn btn-primary" id="create-next-2">Next: Review</button>
+</div>
+</div>
               
              <!-- Step 3: Review & Save -->
               <div class="create-step hidden" id="create-step-3">
