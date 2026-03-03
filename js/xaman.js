@@ -80,9 +80,28 @@ const XamanWallet = {
             UI.updateAuthUI();
             UI.showLoggedInState();
             
-            // Initialize mint notifications
+           // Initialize mint notifications
             if (typeof MintNotifications !== 'undefined') {
               MintNotifications.init();
+            }
+            
+            // If this tab was opened by Xaman for auth, close it
+            const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
+            if (isAuthTab) {
+              sessionStorage.removeItem('xrpmusic_auth_tab');
+              console.log('Auth complete in new tab, closing...');
+              setTimeout(() => {
+                window.close();
+                // If window.close() doesn't work, show a message
+                setTimeout(() => {
+                  document.title = '✅ Signed In — Go back to your music!';
+                  const banner = document.createElement('div');
+                  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+                  banner.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">✅</div><div style="font-size:24px;font-weight:700;margin-bottom:12px;">You\'re signed in!</div><div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">Go back to your other tab to continue listening</div><div style="font-size:14px;color:rgba(255,255,255,0.4);">You can close this tab</div>';
+                  document.body.appendChild(banner);
+                }, 500);
+              }, 300);
+              return;
             }
           }
         } catch (err) {
@@ -107,7 +126,27 @@ const XamanWallet = {
         console.error('Xumm error:', err);
         this.isConnecting = false;
       });
-      
+      // Listen for login from another tab (Xaman opens new tab for auth)
+      window.addEventListener('storage', async (e) => {
+        if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
+          console.log('Login detected from another tab, restoring session...');
+          try {
+            const userData = JSON.parse(e.newValue);
+            if (userData?.address) {
+              saveSession(userData.address);
+              this.saveSessionToTab(userData.address);
+              await this.loadUserData(userData.address);
+              UI.updateAuthUI();
+              UI.showLoggedInState();
+              if (typeof MintNotifications !== 'undefined') {
+                MintNotifications.init();
+              }
+            }
+          } catch (err) {
+            console.error('Failed to restore session from other tab:', err);
+          }
+        }
+      });
       const readyTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
       );
@@ -133,10 +172,14 @@ const XamanWallet = {
    */
   setupAutoLogout() {
     // Clear session when page is being unloaded (closed, refreshed, navigated away)
-    window.addEventListener('beforeunload', () => {
+   window.addEventListener('beforeunload', () => {
       // Clear localStorage session so it doesn't persist
-      localStorage.removeItem('xrpmusic_user');
-      localStorage.removeItem('xrpmusic_profile');
+      // BUT not if this is an auth tab (don't clear the session we just set)
+      const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
+      if (!isAuthTab) {
+        localStorage.removeItem('xrpmusic_user');
+        localStorage.removeItem('xrpmusic_profile');
+      }
     });
     
     // Also handle visibility change (tab hidden for too long)
@@ -164,9 +207,15 @@ const XamanWallet = {
     // Check if this is a fresh page load or same-tab navigation
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     
-    if (!tabSession) {
-      // Fresh page load (new tab or browser reopened) - clear any old sessions
-      console.log('Fresh page load detected - clearing any stale sessions');
+   if (!tabSession) {
+      // Check if this is a new auth tab opened by Xaman
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('xumm') || document.referrer.includes('xumm.app') || document.referrer.includes('xaman.app')) {
+        sessionStorage.setItem('xrpmusic_auth_tab', 'true');
+        console.log('Auth redirect tab detected');
+      } else {
+        // Fresh page load (new tab or browser reopened) - clear any old sessions
+        console.log('Fresh page load detected - clearing any stale sessions');
       localStorage.removeItem('xrpmusic_user');
       localStorage.removeItem('xrpmusic_profile');
       // clearSession may not exist yet if state.js hasn't fully initialized
@@ -177,6 +226,7 @@ const XamanWallet = {
       if (typeof UI !== 'undefined' && UI.updateAuthUI) {
         UI.updateAuthUI();
         UI.showLoggedOutState();
+      }
       }
     } else {
       // Same tab navigation - restore session
@@ -312,7 +362,8 @@ const XamanWallet = {
     
     this.isConnecting = true;
     
-    try {
+   try {
+      sessionStorage.setItem('xrpmusic_return_url', window.location.href);
       await this.sdk.authorize();
     } catch (err) {
       console.error('Failed to connect wallet:', err);
