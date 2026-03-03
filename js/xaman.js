@@ -76,6 +76,8 @@ const XamanWallet = {
             // Use sessionStorage - dies when tab closes
             this.saveSessionToTab(account);
             saveSession(account);
+            // Also write to localStorage so the original tab can detect login
+            localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
             await this.loadUserData(account);
             UI.updateAuthUI();
             UI.showLoggedInState();
