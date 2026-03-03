@@ -4577,24 +4577,41 @@ function calculateMintFee(editions, trackCount = 1) {
     // Initialize mint fee
     updateMintFee();
     
-    // Genre picker
-    document.querySelectorAll('.genre-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const genre = chip.dataset.genre;
-        const idx = selectedGenres.indexOf(genre);
-        if (idx >= 0) {
-          selectedGenres.splice(idx, 1);
-          chip.classList.remove('selected');
-        } else {
-          if (selectedGenres.length >= 3) {
-            const oldest = selectedGenres.shift();
-            document.querySelector(`.genre-chip[data-genre="${oldest}"]`)?.classList.remove('selected');
-          }
-          selectedGenres.push(genre);
-          chip.classList.add('selected');
+// Genre picker — handles both top row and expanded section
+function bindGenreChips() {
+  document.querySelectorAll('#genre-selector-section .genre-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const genre = chip.dataset.genre;
+      const idx = selectedGenres.indexOf(genre);
+      if (idx >= 0) {
+        selectedGenres.splice(idx, 1);
+        document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
+      } else {
+        if (selectedGenres.length >= 3) {
+          const oldest = selectedGenres.shift();
+          document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${oldest}"]`).forEach(c => c.classList.remove('selected'));
         }
-      });
+        selectedGenres.push(genre);
+        document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
+      }
     });
+  });
+}
+bindGenreChips();
+
+// Show All Genres toggle
+document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
+  const expanded = document.getElementById('genre-picker-expanded');
+  const btn = document.getElementById('show-all-genres-btn');
+  if (expanded.classList.contains('hidden')) {
+    expanded.classList.remove('hidden');
+    btn.textContent = 'Show Less ▴';
+    bindGenreChips();
+  } else {
+    expanded.classList.add('hidden');
+    btn.textContent = 'Show All Genres ▾';
+  }
+});
 
    // Visibility toggle (lives inside draft expand panel on step 3)
     let draftVisibility = 'private';
