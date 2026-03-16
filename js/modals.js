@@ -4450,8 +4450,40 @@ const totalPrice = albumPrice;
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
-    const selectedGenres = [];
-    const isEditMode = !!existingDraft;
+   const selectedGenres = existingDraft?.draftGenres || [];
+const isEditMode = !!existingDraft;
+
+// Restore selected state if editing a draft
+document.querySelectorAll('.genre-chip').forEach(chip => {
+  if (selectedGenres.includes(chip.dataset.genre)) {
+    chip.classList.add('selected');
+  }
+});
+
+// Genre chip click handler
+document.querySelectorAll('#genre-picker .genre-chip, #genre-picker-expanded .genre-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const genre = chip.dataset.genre;
+    const idx = selectedGenres.indexOf(genre);
+    if (idx > -1) {
+      selectedGenres.splice(idx, 1);
+      // Deselect all chips with this genre (quick + expanded)
+      document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
+    } else {
+      if (selectedGenres.length >= 3) return; // max 3
+      selectedGenres.push(genre);
+      document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
+    }
+  });
+});
+
+// Show/hide expanded genres
+document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
+  const expanded = document.getElementById('genre-picker-expanded');
+  const btn = document.getElementById('show-all-genres-btn');
+  expanded.classList.toggle('hidden');
+  btn.textContent = expanded.classList.contains('hidden') ? 'Show All Genres ▾' : 'Show Less ▴';
+});
     
     // ============================================
     // EDIT MODE: Pre-populate from existing draft
