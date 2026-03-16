@@ -1168,7 +1168,8 @@ this.updateVolumeIcon();
     const videoSrc = this._getVideoSrc(track);
 
     this._videoViewerMode = 'fullscreen';
-    this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
+document.getElementById('desktop-drawer-btn')?.setAttribute('disabled', 'true'); // ADD
+this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
     this._startVideoSync();
     this._videoTrackHandler = () => this._onTrackChangeViewer();
     document.addEventListener('player:trackchange', this._videoTrackHandler);
@@ -1586,7 +1587,7 @@ this.updateVolumeIcon();
   /**
    * Close desktop viewer (any mode)
    */
-  closeDesktopDrawer() {
+ closeDesktopDrawer() {
     const el = document.getElementById('desktop-np-drawer');
     if (el) {
       if (this._videoViewerMode === 'mini') {
@@ -1602,8 +1603,8 @@ this.updateVolumeIcon();
       document.removeEventListener('player:trackchange', this._videoTrackHandler);
       this._videoTrackHandler = null;
     }
+    document.getElementById('desktop-drawer-btn')?.removeAttribute('disabled');
   },
-
   /**
    * Cleanup video sync interval
    */
