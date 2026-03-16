@@ -98,8 +98,15 @@ const Player = {
       return;
     }
     
-    // Set initial volume
-    this.audio.volume = AppState.player.volume / 100;
+    // Set initial volume from saved state
+this.audio.volume = AppState.player.volume / 100;
+
+// ADD THESE — sync slider UI to saved volume
+const volumeSlider = document.getElementById('volume-slider');
+const expVolumeSlider = document.getElementById('expanded-volume-slider');
+if (volumeSlider) volumeSlider.value = AppState.player.volume;
+if (expVolumeSlider) expVolumeSlider.value = AppState.player.volume;
+this.updateVolumeIcon();
     // Create persistent background video element
     if (!document.getElementById('persistent-mv')) {
       const vid = document.createElement('video');
