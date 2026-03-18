@@ -130,25 +130,28 @@ const XamanWallet = {
       });
       // Listen for login from another tab (Xaman opens new tab for auth)
       window.addEventListener('storage', async (e) => {
-        if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from another tab, restoring session...');
-          try {
-            const userData = JSON.parse(e.newValue);
-            if (userData?.address) {
-              saveSession(userData.address);
-              this.saveSessionToTab(userData.address);
-              await this.loadUserData(userData.address);
-              UI.updateAuthUI();
-              UI.showLoggedInState();
-              if (typeof MintNotifications !== 'undefined') {
-                MintNotifications.init();
-              }
-            }
-          } catch (err) {
-            console.error('Failed to restore session from other tab:', err);
-          }
+  if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
+    console.log('Login detected from another tab, restoring session...');
+    try {
+      const userData = JSON.parse(e.newValue);
+      if (userData?.address) {
+        saveSession(userData.address);
+        this.saveSessionToTab(userData.address);
+        await this.loadUserData(userData.address);
+        UI.updateAuthUI();
+        UI.showLoggedInState();
+        if (typeof MintNotifications !== 'undefined') {
+          MintNotifications.init();
         }
-      });
+        // Auto-dismiss the Xaman waiting modal on the original tab
+        const modalsContainer = document.getElementById('modals');
+        if (modalsContainer) modalsContainer.innerHTML = '';
+      }
+    } catch (err) {
+      console.error('Failed to restore session from other tab:', err);
+    }
+  }
+});
       const readyTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
       );
