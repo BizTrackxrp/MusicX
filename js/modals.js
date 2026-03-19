@@ -3962,8 +3962,7 @@ const totalPrice = albumPrice;
       if (actionsEl) actionsEl.style.display = 'flex';
     }
   },
-  
- showCreate(existingDraft) {
+showCreate(existingDraft) {
     if (!AppState.user?.address) { this.showAuth(); return; }
     this.activeModal = 'create';
     const isEditMode = !!existingDraft;
@@ -4060,8 +4059,6 @@ const totalPrice = albumPrice;
                   <div class="track-list-upload" id="track-list-upload"></div>
                 </div>
                 
-            
-               
                <!-- Genre Selector -->
 <div class="form-group" id="genre-selector-section">
   <label class="form-label">Genre(s)</label>
@@ -4272,36 +4269,18 @@ const totalPrice = albumPrice;
         .video-upload-pct { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--warning); font-weight: 700; white-space: nowrap; }
         .video-check { position: absolute; top: -4px; right: -4px; font-size: 8px; background: #22c55e; color: white; border-radius: 50%; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; line-height: 1; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        
-        /* Track list header */
-.track-list-header-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 8px;
-}
-.track-header-num { width: 24px; text-align: center; }
-.track-header-title { flex: 1; }
-.track-header-price { width: 90px; text-align: right; color: var(--accent); }
-.track-header-duration { width: 50px; text-align: right; }
-.track-header-spacer { width: 24px; }
-
-/* Per-track price inputs */
+        .track-list-header-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); margin-bottom: 8px; }
+        .track-header-num { width: 24px; text-align: center; }
+        .track-header-title { flex: 1; }
+        .track-header-price { width: 90px; text-align: right; color: var(--accent); }
+        .track-header-duration { width: 50px; text-align: right; }
+        .track-header-spacer { width: 24px; }
         .track-price-input-wrap { display: flex; align-items: center; gap: 4px; min-width: 90px; flex-shrink: 0; }
         .track-price-input { width: 70px; padding: 4px 6px; background: var(--bg-card); border: 1px solid transparent; border-radius: 4px; color: var(--text-primary); font-size: 13px; text-align: right; outline: none; -moz-appearance: textfield; }
         .track-price-input::-webkit-outer-spin-button, .track-price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .track-price-input:hover { border-color: var(--border); }
         .track-price-input:focus { border-color: var(--accent); background: var(--bg-card); }
         .track-price-label { font-size: 11px; color: var(--text-muted); }
-        
-        /* Album price section */
         .album-price-section { margin-top: 16px; }
         .album-price-box { padding: 16px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: var(--radius-lg); }
         .album-price-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; }
@@ -4315,7 +4294,6 @@ const totalPrice = albumPrice;
         .album-savings { font-size: 13px; font-weight: 600; }
         .album-savings.discount-active { color: #22c55e; }
         .album-savings.no-discount { color: var(--text-muted); font-weight: 400; font-size: 12px; }
-        
         .create-nav { display: flex; gap: 12px; margin-top: 24px; }
         .create-nav .btn { flex: 1; }
         .btn-full { width: 100%; margin-top: 24px; }
@@ -4356,7 +4334,6 @@ const totalPrice = albumPrice;
         .mint-success-msg { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
         .mint-success-actions { display: flex; gap: 12px; justify-content: center; }
         .mint-success-actions .btn { min-width: 120px; }
-        
         @media (max-width: 480px) {
           .album-price-row { flex-direction: column; gap: 8px; }
           .track-price-input-wrap { min-width: 70px; }
@@ -4365,102 +4342,58 @@ const totalPrice = albumPrice;
           .track-upload-item .track-name-input { font-size: 13px; }
         }
         .genre-picker { display: flex; flex-wrap: wrap; gap: 8px; }
-        .genre-chip {
-          display: inline-flex; align-items: center; gap: 6px;
-          padding: 8px 14px; background: var(--bg-hover); border: 1.5px solid var(--border-color);
-          border-radius: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 500;
-          cursor: pointer; transition: all 150ms;
-        }
+        .genre-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--bg-hover); border: 1.5px solid var(--border-color); border-radius: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms; }
         .genre-chip:hover { border-color: var(--text-muted); }
         .genre-chip.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--text-primary); }
         .genre-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .visibility-toggle { display: flex; gap: 8px; }
-        .visibility-option {
-          display: flex; align-items: center; gap: 8px; flex: 1;
-          padding: 12px 16px; background: var(--bg-hover); border: 1.5px solid var(--border-color);
-          border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px; font-weight: 500;
-          cursor: pointer; transition: all 150ms;
-        }
+        .visibility-option { display: flex; align-items: center; gap: 8px; flex: 1; padding: 12px 16px; background: var(--bg-hover); border: 1.5px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms; }
         .visibility-option:hover { border-color: var(--text-muted); }
         .visibility-option.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); color: var(--text-primary); }
-        .draft-recommend-box {
-          margin: 20px 0; padding: 16px 20px;
-          background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25);
-          border-radius: var(--radius-lg);
-        }
-        .draft-recommend-header {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 14px; font-weight: 600; color: #22c55e; margin-bottom: 8px;
-        }
-        .draft-recommend-text {
-          font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0;
-        }
         .create-nav-draft { gap: 8px; }
-        .btn-save-draft {
-          flex: 2 !important; display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
+        .btn-save-draft { flex: 2 !important; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .btn-mint-now { flex: 1 !important; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
-        .expand-panel {
-          padding: 20px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          margin-bottom: 16px;
-          animation: expandIn 200ms ease;
-        }
+        .expand-panel { padding: 20px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-bottom: 16px; animation: expandIn 200ms ease; }
         .expand-panel.hidden { display: none; }
-        .expand-panel-header {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;
-        }
+        .expand-panel-header { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
         .expand-panel-header svg { color: var(--accent); }
-        .expand-panel-hint {
-          font-size: 13px; color: var(--text-muted); margin: 0 0 12px 0; line-height: 1.4;
-        }
-        @keyframes expandIn {
-          from { opacity: 0; transform: translateY(-8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        .expand-panel-hint { font-size: 13px; color: var(--text-muted); margin: 0 0 12px 0; line-height: 1.4; }
+        @keyframes expandIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .genre-icon { font-size: 14px; margin-right: 2px; }
-.genre-chip { --genre-color: #6b7280; }
-.genre-chip.selected { border-color: var(--genre-color); background: color-mix(in srgb, var(--genre-color) 15%, transparent); color: var(--genre-color); }
-.btn-show-all-genres {
-  display: block; width: 100%; margin-top: 10px; padding: 10px;
-  background: transparent; border: 1px dashed var(--border-color); border-radius: var(--radius-md);
-  color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all 150ms;
-}
-.btn-show-all-genres:hover { border-color: var(--text-muted); color: var(--text-secondary); }
-.genre-picker-expanded { margin-top: 12px; max-height: 300px; overflow-y: auto; }
-.genre-picker-expanded.hidden { display: none; }
-.genre-group-section { margin-bottom: 14px; }
-.genre-group-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding-left: 2px; }
+        .genre-chip { --genre-color: #6b7280; }
+        .genre-chip.selected { border-color: var(--genre-color); background: color-mix(in srgb, var(--genre-color) 15%, transparent); color: var(--genre-color); }
+        .btn-show-all-genres { display: block; width: 100%; margin-top: 10px; padding: 10px; background: transparent; border: 1px dashed var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all 150ms; }
+        .btn-show-all-genres:hover { border-color: var(--text-muted); color: var(--text-secondary); }
+        .genre-picker-expanded { margin-top: 12px; max-height: 300px; overflow-y: auto; }
+        .genre-picker-expanded.hidden { display: none; }
+        .genre-group-section { margin-bottom: 14px; }
+        .genre-group-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding-left: 2px; }
       </style>
     `;
     
-   this.show(html);
+    this.show(html);
     this.bindCreateEvents(existingDraft || null);
   },
 
-
   showFinalizeMint(release) {
-    // Open the create wizard in edit mode, pre-populated with draft data
     this.showCreate(release);
   },
+
   bindCreateEvents(existingDraft) {
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
-   const selectedGenres = existingDraft?.draftGenres || [];
-const isEditMode = !!existingDraft;
+    const selectedGenres = existingDraft?.draftGenres 
+      ? (Array.isArray(existingDraft.draftGenres) ? [...existingDraft.draftGenres] : [])
+      : [];
+    const isEditMode = !!existingDraft;
 
-// Restore selected state if editing a draft
-document.querySelectorAll('.genre-chip').forEach(chip => {
-  if (selectedGenres.includes(chip.dataset.genre)) {
-    chip.classList.add('selected');
-  }
-});
+    // Restore selected state if editing a draft
+    selectedGenres.forEach(g => {
+      document.querySelectorAll(`.genre-chip[data-genre="${g}"]`).forEach(c => c.classList.add('selected'));
+    });
 
-// Genre chip click - delegated to parent so it survives updateTrackList() rerenders
+    // Genre chip click - delegated to parent so it survives updateTrackList() rerenders
     document.getElementById('genre-selector-section')?.addEventListener('click', (e) => {
       const chip = e.target.closest('.genre-chip');
       if (!chip) return;
@@ -4476,25 +4409,23 @@ document.querySelectorAll('.genre-chip').forEach(chip => {
       }
     });
 
-// Show/hide expanded genres
-document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
-  const expanded = document.getElementById('genre-picker-expanded');
-  const btn = document.getElementById('show-all-genres-btn');
-  expanded.classList.toggle('hidden');
-  btn.textContent = expanded.classList.contains('hidden') ? 'Show All Genres ▾' : 'Show Less ▴';
-});
-    
+    // Show/hide expanded genres
+    document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
+      const expanded = document.getElementById('genre-picker-expanded');
+      const btn = document.getElementById('show-all-genres-btn');
+      expanded.classList.toggle('hidden');
+      btn.textContent = expanded.classList.contains('hidden') ? 'Show All Genres ▾' : 'Show Less ▴';
+    });
+
     // ============================================
     // EDIT MODE: Pre-populate from existing draft
     // ============================================
     if (isEditMode) {
-      // Step 1 fields
       document.getElementById('release-title').value = existingDraft.title || '';
       document.getElementById('release-description').value = existingDraft.description || '';
       document.getElementById('release-editions').value = existingDraft.totalEditions || 100;
       document.getElementById('release-royalty').value = existingDraft.royaltyPercent || 5;
       
-      // Cover art - show existing
       if (existingDraft.coverUrl) {
         const coverPreviewImg = document.getElementById('cover-preview-img');
         if (coverPreviewImg) {
@@ -4503,15 +4434,13 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
           document.getElementById('cover-preview')?.classList.remove('hidden');
           document.getElementById('cover-upload-zone')?.classList.add('has-file');
         }
-        // Mark cover as already uploaded (no file object, but we have the CID)
         coverFile = '__existing__';
       }
       
-      // Audio tracks - populate from existing
       if (existingDraft.tracks?.length > 0) {
         existingDraft.tracks.forEach((t, i) => {
           tracks.push({
-            file: null, // Already uploaded
+            file: null,
             title: existingDraft.type === 'single' ? existingDraft.title : (t.title || `Track ${i+1}`),
             duration: t.duration || 0,
             status: 'done',
@@ -4527,7 +4456,6 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
         });
       }
       
-      // Delay track list render so all variables (audioZone etc.) are declared first
       setTimeout(() => {
         if (isEditMode && tracks.length > 0) {
           updateTrackList();
@@ -4535,19 +4463,6 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
         }
       }, 50);
       
-      // Genres - pre-select
-      const draftGenres = existingDraft.draftGenres || [];
-      if (typeof draftGenres === 'string') {
-        try { draftGenres = JSON.parse(draftGenres); } catch(e) {}
-      }
-      if (Array.isArray(draftGenres)) {
-        draftGenres.forEach(g => {
-          selectedGenres.push(g);
-          document.querySelector(`.genre-chip[data-genre="${g}"]`)?.classList.add('selected');
-        });
-      }
-      
-      // Album price
       if (existingDraft.albumPrice && existingDraft.tracks?.length > 1) {
         setTimeout(() => {
           const albumInput = document.getElementById('album-discount-price');
