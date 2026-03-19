@@ -4460,22 +4460,21 @@ document.querySelectorAll('.genre-chip').forEach(chip => {
   }
 });
 
-// Genre chip click handler
-document.querySelectorAll('#genre-picker .genre-chip, #genre-picker-expanded .genre-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const genre = chip.dataset.genre;
-    const idx = selectedGenres.indexOf(genre);
-    if (idx > -1) {
-      selectedGenres.splice(idx, 1);
-      // Deselect all chips with this genre (quick + expanded)
-      document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
-    } else {
-      if (selectedGenres.length >= 3) return; // max 3
-      selectedGenres.push(genre);
-      document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
-    }
-  });
-});
+// Genre chip click - delegated to parent so it survives updateTrackList() rerenders
+    document.getElementById('genre-selector-section')?.addEventListener('click', (e) => {
+      const chip = e.target.closest('.genre-chip');
+      if (!chip) return;
+      const genre = chip.dataset.genre;
+      const idx = selectedGenres.indexOf(genre);
+      if (idx > -1) {
+        selectedGenres.splice(idx, 1);
+        document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
+      } else {
+        if (selectedGenres.length >= 3) return;
+        selectedGenres.push(genre);
+        document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
+      }
+    });
 
 // Show/hide expanded genres
 document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
@@ -4669,173 +4668,10 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
       document.getElementById('mint-expand-panel')?.classList.add('hidden');
       document.getElementById('create-nav-3').style.display = 'flex';
     }
-    // Step navigation
-    document.getElementById('create-next-1')?.addEventListener('click', () => {
-  const title = document.getElementById('release-title').value.trim();
-  if (!title) { alert('Please enter a title'); return; }
-      document.getElementById('create-step-1').classList.add('hidden');
-      document.getElementById('create-step-2').classList.remove('hidden');
-    });
-    
-    document.getElementById('create-back-2')?.addEventListener('click', () => {
-      document.getElementById('create-step-2').classList.add('hidden');
-      document.getElementById('create-step-1').classList.remove('hidden');
-    });
-    
-   document.getElementById('create-next-2')?.addEventListener('click', () => {
-      if (!coverFile) { alert('Please upload cover art'); return; }
-      if (tracks.length === 0) { alert('Please upload at least one audio file'); return; }
-      if (tracks.some(t => t.videoUploading)) { alert('Please wait for video upload to finish'); return; }
-      
-   // Validate edition limit (10000 max)
-const editions = parseInt(document.getElementById('release-editions').value) || 1;
-if (editions > 10000) {
-  alert('Maximum 10,000 editions per minting session due to server limits. If an album, you can have a 10 song album and give it 1000 copies!');
-  document.getElementById('release-editions').value = 10000;
-  return;
-}
-      const totalNFTs = tracks.length * editions;
-      
-      const royalty = document.getElementById('release-royalty').value;
-      
-      const mintFee = calculateMintFee(editions, tracks.length);
-      
-      // Auto-detect type based on track count
-      const releaseType = tracks.length === 1 ? 'single' : 'album';
-      document.getElementById('release-type').value = releaseType;
-      
-     // Update review
-      const coverPreviewSrc = coverFile === '__existing__' 
-        ? Modals.getImageUrl(existingDraft?.coverUrl) 
-        : URL.createObjectURL(coverFile);
-      document.getElementById('review-cover').innerHTML = `<img src="${coverPreviewSrc}" alt="Cover">`;
-      document.getElementById('review-title').textContent = document.getElementById('release-title').value;
-      document.getElementById('review-type').textContent = releaseType.toUpperCase();
-      document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
-      
-      // Price review - show per-track or album discount
-      const reviewPriceEl = document.getElementById('review-price');
-      if (tracks.length === 1) {
-        reviewPriceEl.textContent = `${tracks[0].price} XRP`;
-      } else {
-        const individualTotal = tracks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
-        const albumPriceVal = parseFloat(document.getElementById('album-discount-price')?.value) || individualTotal;
-        const savings = individualTotal - albumPriceVal;
-        
-        let priceText = `Album: ${albumPriceVal} XRP`;
-        if (savings > 0) {
-          priceText += ` (save ${savings.toFixed(2)} XRP vs individual)`;
-        }
-        reviewPriceEl.textContent = priceText;
-      }
-      
-      document.getElementById('review-editions').textContent = `${editions} editions × ${tracks.length} tracks = ${totalNFTs} NFTs`;
-      document.getElementById('review-royalty').textContent = `${royalty}%`;
-    
-      // Show genres in review
-      const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
-      const reviewGenresEl = document.getElementById('review-genres');
-      if (reviewGenresEl) {
-        reviewGenresEl.textContent = selectedGenres.length > 0 ? selectedGenres.map(g => genreNames[g] || g).join(', ') : 'No genres selected';
-      }
-    
-      document.getElementById('create-step-2').classList.add('hidden');
-      document.getElementById('create-step-3').classList.remove('hidden');
-    });
-  document.getElementById('create-back-3')?.addEventListener('click', () => {
-      closeExpandPanels();
-      document.getElementById('create-step-3').classList.add('hidden');
-      document.getElementById('create-step-2').classList.remove('hidden');
-    });
-    
-    // Cover upload
-    const coverZone = document.getElementById('cover-upload-zone');
-    const coverInput = document.getElementById('cover-input');
-    
-    coverZone?.addEventListener('click', () => coverInput?.click());
-    coverZone?.addEventListener('dragover', (e) => { e.preventDefault(); coverZone.classList.add('dragover'); });
-    coverZone?.addEventListener('dragleave', () => coverZone.classList.remove('dragover'));
-    coverZone?.addEventListener('drop', (e) => {
-      e.preventDefault();
-      coverZone.classList.remove('dragover');
-      if (e.dataTransfer.files[0]) handleCoverFile(e.dataTransfer.files[0]);
-    });
-    
-    coverInput?.addEventListener('change', () => {
-      if (coverInput.files[0]) handleCoverFile(coverInput.files[0]);
-    });
-    
-    document.getElementById('cover-remove')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      coverFile = null;
-      document.getElementById('cover-placeholder').classList.remove('hidden');
-      document.getElementById('cover-preview').classList.add('hidden');
-      coverZone.classList.remove('has-file');
-    });
-
-   
-    function handleCoverFile(file) {
-      if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return; }
-      if (file.size > 10 * 1024 * 1024) { alert('File too large (max 10MB)'); return; }
-      
-      coverFile = file;
-      const preview = document.getElementById('cover-preview-img');
-      preview.src = URL.createObjectURL(file);
-      document.getElementById('cover-placeholder').classList.add('hidden');
-      document.getElementById('cover-preview').classList.remove('hidden');
-      coverZone.classList.add('has-file');
-    }
-    
-    // Audio upload
-    const audioZone = document.getElementById('audio-upload-zone');
-    const audioInput = document.getElementById('audio-input');
-    
-    audioZone?.addEventListener('click', () => audioInput?.click());
-    audioZone?.addEventListener('dragover', (e) => { e.preventDefault(); audioZone.classList.add('dragover'); });
-    audioZone?.addEventListener('dragleave', () => audioZone.classList.remove('dragover'));
-    audioZone?.addEventListener('drop', (e) => {
-      e.preventDefault();
-      audioZone.classList.remove('dragover');
-      Array.from(e.dataTransfer.files).forEach(handleAudioFile);
-    });
-    
-    audioInput?.addEventListener('change', () => {
-      Array.from(audioInput.files).forEach(handleAudioFile);
-    });
-    
-    function handleAudioFile(file) {
-      if (!file.type.startsWith('audio/')) { alert('Please upload an audio file'); return; }
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      if (file.size > 500 * 1024 * 1024) { 
-        alert(`File "${file.name}" is ${sizeMB}MB which exceeds the 500MB limit.`); 
-        return; 
-      }
-      
-      const trackNum = tracks.length + 1;
-      const track = {
-        file,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        duration: 0,
-        status: 'pending',
-      };
-      tracks.push(track);
-      
-      // Get duration
-      const audio = new Audio();
-      audio.src = URL.createObjectURL(file);
-      audio.addEventListener('loadedmetadata', () => {
-        track.duration = audio.duration;
-        updateTrackList();
-      });
-      
-      updateTrackList();
-    }
-    
-    function updateTrackList() {
+function updateTrackList() {
       const container = document.getElementById('track-list-upload');
-      const defaultPrice = 5; // Default price when no price input exists
+      const defaultPrice = 5;
       
-      // Add header row if tracks exist
       let headerHtml = '';
       if (tracks.length > 0) {
         headerHtml = `
@@ -4850,7 +4686,6 @@ if (editions > 10000) {
       }
       
       container.innerHTML = headerHtml + tracks.map((track, idx) => {
-        // Initialize track price from default if not set
         if (track.price === undefined || track.price === null) {
           track.price = parseFloat(defaultPrice) || 0;
         }
@@ -4863,7 +4698,7 @@ if (editions > 10000) {
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
-        <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''} ${track.videoUploading ? 'uploading' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
+          <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''} ${track.videoUploading ? 'uploading' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="23 7 16 12 23 17 23 7"></polygon>
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
@@ -4874,7 +4709,7 @@ if (editions > 10000) {
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
       `}).join('');
-      
+
       // Show album price section when multiple tracks
       let albumPriceSection = document.getElementById('album-price-section');
       if (tracks.length > 1) {
@@ -4912,7 +4747,6 @@ if (editions > 10000) {
       } else if (albumPriceSection) {
         albumPriceSection.remove();
       }
-      
       // Track name editing
       document.querySelectorAll('.track-name-input').forEach(input => {
         input.addEventListener('input', () => {
