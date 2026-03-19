@@ -17,31 +17,29 @@ const EditGenresModal = {
     
     // Fetch current genres from database (not from stale release object)
     try {
-    const response = await fetch(`/api/get-track-genres?releaseId=${release.id}`);
-const data = await response.json();
+      const response = await fetch(`/api/get-track-genres?releaseId=${release.id}`);
+      const data = await response.json();
 
-// Prefer release-level draftGenres as canonical source
-const draftGenres = release.draftGenres 
-  ? (Array.isArray(release.draftGenres) ? release.draftGenres : JSON.parse(release.draftGenres))
-  : null;
+      // Prefer release-level draftGenres as canonical source
+      const draftGenres = release.draftGenres 
+        ? (Array.isArray(release.draftGenres) ? release.draftGenres : JSON.parse(release.draftGenres))
+        : null;
 
-if (data.success && data.tracks) {
-  data.tracks.forEach(track => {
-    if (draftGenres && draftGenres.length > 0) {
-      // Use release-level draftGenres as canonical
-      this.trackGenres[track.id] = [...draftGenres];
-    } else {
-      const genres = [];
-      if (track.genre) genres.push(track.genre);
-      if (track.genreSecondary) genres.push(track.genreSecondary);
-      if (track.genreTertiary) genres.push(track.genreTertiary);
-      this.trackGenres[track.id] = genres;
-    }
-  });
-}
+      if (data.success && data.tracks) {
+        data.tracks.forEach(track => {
+          if (draftGenres && draftGenres.length > 0) {
+            this.trackGenres[track.id] = [...draftGenres];
+          } else {
+            const genres = [];
+            if (track.genre) genres.push(track.genre);
+            if (track.genreSecondary) genres.push(track.genreSecondary);
+            if (track.genreTertiary) genres.push(track.genreTertiary);
+            this.trackGenres[track.id] = genres;
+          }
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch track genres:', error);
-      // Fall back to release data if fetch fails
       if (release.tracks) {
         release.tracks.forEach(track => {
           const genres = [];
@@ -226,7 +224,6 @@ if (data.success && data.tracks) {
           pointer-events: none;
         }
         
-        /* Expandable genre selector */
         .genre-selector-expand {
           background: none;
           border: 1px dashed var(--border-color);
@@ -280,7 +277,6 @@ if (data.success && data.tracks) {
     
     container.innerHTML = html;
     
-    // Show with animation
     requestAnimationFrame(() => {
       container.querySelector('.modal-overlay')?.classList.add('visible');
     });
@@ -292,7 +288,6 @@ if (data.success && data.tracks) {
    * Render the track list with genre selectors
    */
   renderTrackList(tracks) {
-    // Get popular/common genres for quick selection
     const quickGenres = ['hiphop', 'rap', 'rnb', 'pop', 'rock', 'electronic', 'country', 'jazz', 'classical', 'lofi', 'ambient', 'instrumental'];
     
     return tracks.map((track, idx) => {
@@ -371,26 +366,19 @@ if (data.success && data.tracks) {
    * Bind event handlers
    */
   bindEvents() {
-    // Close button
     document.getElementById('edit-genres-close')?.addEventListener('click', () => this.close());
     document.getElementById('edit-genres-cancel')?.addEventListener('click', () => this.close());
     
-    // Click outside to close
     document.querySelector('.edit-genres-modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target.classList.contains('edit-genres-modal-overlay')) {
-        this.close();
-      }
+      if (e.target.classList.contains('edit-genres-modal-overlay')) this.close();
     });
     
-    // Save button
     document.getElementById('edit-genres-save')?.addEventListener('click', () => this.save());
     
-    // Genre chip clicks
     document.querySelectorAll('.edit-genre-chip').forEach(chip => {
       chip.addEventListener('click', (e) => this.toggleGenre(e));
     });
     
-    // Expand buttons
     document.querySelectorAll('.genre-selector-expand').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const trackId = e.target.dataset.trackId;
@@ -417,50 +405,28 @@ if (data.success && data.tracks) {
     
     if (!trackId || !genreId) return;
     
-    // Initialize if needed
-    if (!this.trackGenres[trackId]) {
-      this.trackGenres[trackId] = [];
-    }
+    if (!this.trackGenres[trackId]) this.trackGenres[trackId] = [];
     
     const currentGenres = this.trackGenres[trackId];
     const isSelected = currentGenres.includes(genreId);
     
     if (isSelected) {
-      // Remove genre
       this.trackGenres[trackId] = currentGenres.filter(g => g !== genreId);
     } else {
-      // Add genre (max 3)
       if (currentGenres.length >= 3) {
-        // Remove oldest, add new
         this.trackGenres[trackId] = [currentGenres[1], currentGenres[2], genreId];
       } else {
         this.trackGenres[trackId] = [...currentGenres, genreId];
       }
     }
     
-    // Update UI - find all chips with this genre for this track and update them
     const trackContainer = document.querySelector(`.edit-genres-track[data-track-id="${trackId}"]`);
     if (trackContainer) {
-      // Update all chips in both quick selector and expanded
-      trackContainer.querySelectorAll(`.edit-genre-chip[data-genre="${genreId}"]`).forEach(c => {
-        if (this.trackGenres[trackId].includes(genreId)) {
-          c.classList.add('selected');
-        } else {
-          c.classList.remove('selected');
-        }
-      });
-      
-      // Also update other chips if we removed one due to max 3 limit
       trackContainer.querySelectorAll('.edit-genre-chip').forEach(c => {
         const gId = c.dataset.genre;
-        if (this.trackGenres[trackId].includes(gId)) {
-          c.classList.add('selected');
-        } else {
-          c.classList.remove('selected');
-        }
+        c.classList.toggle('selected', this.trackGenres[trackId].includes(gId));
       });
       
-      // Update the "current genre" text
       const currentText = trackContainer.querySelector('.edit-genres-track-current');
       if (currentText) {
         const selectedGenres = this.trackGenres[trackId];
@@ -482,39 +448,39 @@ if (data.success && data.tracks) {
     saveBtn.innerHTML = '<span>Saving...</span>';
     
     try {
-      // Prepare the data
       const updates = Object.entries(this.trackGenres).map(([trackId, genres]) => ({
         trackId: trackId,
         genre: genres[0] || null,
         genreSecondary: genres[1] || null,
         genreTertiary: genres[2] || null
       }));
-      
-      // Call API to update
+
+      // Use first track's genres as canonical release-level draftGenres
+      const firstTrackGenres = Object.values(this.trackGenres)[0] || [];
+
       const response = await fetch('/api/update-track-genres', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           releaseId: this.currentRelease.id,
-          tracks: updates
+          tracks: updates,
+          draftGenres: firstTrackGenres
         })
       });
       
       const data = await response.json();
       
       if (data.success) {
-        Modals.showToast('Genres updated successfully!');
-        
-        // Clear genre playlist cache so it refreshes
-        if (typeof GenrePlaylists !== 'undefined') {
-          GenrePlaylists.clearCache();
+        // Update local release object so reopening reflects the change
+        if (this.currentRelease) {
+          this.currentRelease.draftGenres = firstTrackGenres;
         }
-        
+        Modals.showToast('Genres updated successfully!');
+        if (typeof GenrePlaylists !== 'undefined') GenrePlaylists.clearCache();
         this.close();
       } else {
         throw new Error(data.error || 'Failed to save');
       }
-      
     } catch (error) {
       console.error('Failed to save genres:', error);
       Modals.showToast('Failed to save genres');
@@ -530,16 +496,13 @@ if (data.success && data.tracks) {
     const overlay = document.querySelector('.edit-genres-modal-overlay');
     if (overlay) {
       overlay.classList.remove('visible');
-      setTimeout(() => {
-        overlay.remove();
-      }, 200);
+      setTimeout(() => overlay.remove(), 200);
     }
     this.currentRelease = null;
     this.trackGenres = {};
   }
 };
 
-// Export
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = EditGenresModal;
 }
