@@ -1,23 +1,17 @@
 // /api/update-track-genres.js
-// API endpoint for updating track genres (artist only)
 import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
+
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
   
   try {
-    const { releaseId, tracks, artistAddress } = req.body;
+    const { releaseId, tracks, artistAddress, draftGenres } = req.body;
     
     if (!releaseId || !tracks || !Array.isArray(tracks)) {
       return res.status(400).json({ 
@@ -26,7 +20,6 @@ export default async function handler(req, res) {
       });
     }
     
-    // Verify the release exists and optionally check ownership
     const releaseCheck = await sql`
       SELECT id, artist_address FROM releases WHERE id = ${releaseId}
     `;
@@ -35,7 +28,6 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: 'Release not found' });
     }
     
-    // Optional: Verify artist ownership if artistAddress is provided
     if (artistAddress && releaseCheck[0].artist_address !== artistAddress) {
       return res.status(403).json({ 
         success: false, 
@@ -43,10 +35,9 @@ export default async function handler(req, res) {
       });
     }
     
-    // Update each track's genre (primary, secondary, and tertiary)
+    // Update each track's genre columns
     for (const track of tracks) {
       if (!track.trackId) continue;
-      
       await sql`
         UPDATE tracks 
         SET genre = ${track.genre || null},
@@ -56,14 +47,18 @@ export default async function handler(req, res) {
       `;
     }
     
-    // Also update the release's primary genre based on first track
-    if (tracks.length > 0 && tracks[0].genre) {
-      await sql`
-        UPDATE releases 
-        SET genre_primary = ${tracks[0].genre}
-        WHERE id = ${releaseId}
-      `;
-    }
+    // Update release-level genre fields
+    const primaryGenre = draftGenres?.[0] || tracks[0]?.genre || null;
+    const genresJson = draftGenres && draftGenres.length > 0 
+      ? JSON.stringify(draftGenres) 
+      : JSON.stringify(tracks.slice(0, 3).map(t => t.genre).filter(Boolean));
+
+    await sql`
+      UPDATE releases 
+      SET genre_primary = ${primaryGenre},
+          draft_genres = ${genresJson}::jsonb
+      WHERE id = ${releaseId}
+    `;
     
     return res.status(200).json({
       success: true,
