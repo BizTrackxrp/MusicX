@@ -4379,7 +4379,8 @@ showCreate(existingDraft) {
     this.showCreate(release);
   },
 
-  bindCreateEvents(existingDraft) {
+ bindCreateEvents(existingDraft) {
+    try {
     const form = document.getElementById('create-release-form');
     const tracks = [];
     let coverFile = null;
@@ -4416,7 +4417,6 @@ showCreate(existingDraft) {
       expanded.classList.toggle('hidden');
       btn.textContent = expanded.classList.contains('hidden') ? 'Show All Genres ▾' : 'Show Less ▴';
     });
-
     // ============================================
     // EDIT MODE: Pre-populate from existing draft
     // ============================================
