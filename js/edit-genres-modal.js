@@ -17,18 +17,28 @@ const EditGenresModal = {
     
     // Fetch current genres from database (not from stale release object)
     try {
-      const response = await fetch(`/api/get-track-genres?releaseId=${release.id}`);
-      const data = await response.json();
-      
-      if (data.success && data.tracks) {
-        data.tracks.forEach(track => {
-          const genres = [];
-          if (track.genre) genres.push(track.genre);
-          if (track.genreSecondary) genres.push(track.genreSecondary);
-          if (track.genreTertiary) genres.push(track.genreTertiary);
-          this.trackGenres[track.id] = genres;
-        });
-      }
+    const response = await fetch(`/api/get-track-genres?releaseId=${release.id}`);
+const data = await response.json();
+
+// Prefer release-level draftGenres as canonical source
+const draftGenres = release.draftGenres 
+  ? (Array.isArray(release.draftGenres) ? release.draftGenres : JSON.parse(release.draftGenres))
+  : null;
+
+if (data.success && data.tracks) {
+  data.tracks.forEach(track => {
+    if (draftGenres && draftGenres.length > 0) {
+      // Use release-level draftGenres as canonical
+      this.trackGenres[track.id] = [...draftGenres];
+    } else {
+      const genres = [];
+      if (track.genre) genres.push(track.genre);
+      if (track.genreSecondary) genres.push(track.genreSecondary);
+      if (track.genreTertiary) genres.push(track.genreTertiary);
+      this.trackGenres[track.id] = genres;
+    }
+  });
+}
     } catch (error) {
       console.error('Failed to fetch track genres:', error);
       // Fall back to release data if fetch fails
