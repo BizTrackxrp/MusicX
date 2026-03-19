@@ -4607,28 +4607,21 @@ function calculateMintFee(editions, trackCount = 1) {
     
     // Initialize mint fee
     updateMintFee();
-    
-// Genre picker — handles both top row and expanded section
-function bindGenreChips() {
-  document.querySelectorAll('#genre-selector-section .genre-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const genre = chip.dataset.genre;
-      const idx = selectedGenres.indexOf(genre);
-      if (idx >= 0) {
-        selectedGenres.splice(idx, 1);
-        document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
-      } else {
-        if (selectedGenres.length >= 3) {
-          const oldest = selectedGenres.shift();
-          document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${oldest}"]`).forEach(c => c.classList.remove('selected'));
-        }
-        selectedGenres.push(genre);
-        document.querySelectorAll(`#genre-selector-section .genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
-      }
-    });
-  });
-}
-bindGenreChips();
+// Genre chip click - delegated to parent so it survives updateTrackList() rerenders
+document.getElementById('genre-selector-section')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.genre-chip');
+  if (!chip) return;
+  const genre = chip.dataset.genre;
+  const idx = selectedGenres.indexOf(genre);
+  if (idx > -1) {
+    selectedGenres.splice(idx, 1);
+    document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.remove('selected'));
+  } else {
+    if (selectedGenres.length >= 3) return;
+    selectedGenres.push(genre);
+    document.querySelectorAll(`.genre-chip[data-genre="${genre}"]`).forEach(c => c.classList.add('selected'));
+  }
+});
 
 // Show All Genres toggle
 document.getElementById('show-all-genres-btn')?.addEventListener('click', () => {
@@ -4637,14 +4630,13 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
   if (expanded.classList.contains('hidden')) {
     expanded.classList.remove('hidden');
     btn.textContent = 'Show Less ▴';
-    bindGenreChips();
   } else {
     expanded.classList.add('hidden');
     btn.textContent = 'Show All Genres ▾';
   }
 });
 
-   // Visibility toggle (lives inside draft expand panel on step 3)
+    // Visibility toggle (lives inside draft expand panel on step 3)
     let draftVisibility = 'private';
     function bindVisibilityToggle() {
       document.querySelectorAll('.visibility-option').forEach(btn => {
@@ -4668,7 +4660,8 @@ document.getElementById('show-all-genres-btn')?.addEventListener('click', () => 
       document.getElementById('mint-expand-panel')?.classList.add('hidden');
       document.getElementById('create-nav-3').style.display = 'flex';
     }
-function updateTrackList() {
+
+    function updateTrackList() {
       const container = document.getElementById('track-list-upload');
       const defaultPrice = 5;
       
@@ -4747,6 +4740,7 @@ function updateTrackList() {
       } else if (albumPriceSection) {
         albumPriceSection.remove();
       }
+
       // Track name editing
       document.querySelectorAll('.track-name-input').forEach(input => {
         input.addEventListener('input', () => {
@@ -4755,25 +4749,26 @@ function updateTrackList() {
         });
       });
       
-     // Track price editing
+      // Track price editing
       document.querySelectorAll('.track-price-input').forEach(input => {
         input.addEventListener('input', () => {
           const idx = parseInt(input.dataset.idx);
           tracks[idx].price = parseFloat(input.value) || 0;
-          tracks[idx].priceCustomized = true;  // Mark as customized
+          tracks[idx].priceCustomized = true;
           updateAlbumSavings();
           updateMintFee();
         });
       });
+
       // Album price editing
       document.getElementById('album-discount-price')?.addEventListener('input', updateAlbumSavings);
+
       // Per-track video upload
       document.querySelectorAll('.track-video-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const idx = parseInt(btn.dataset.idx);
           const track = tracks[idx];
           if (track.videoCid) {
-            // Already has video - remove it
             if (confirm('Remove video from this track?')) {
               track.videoCid = null;
               track.videoUrl = null;
@@ -4781,7 +4776,6 @@ function updateTrackList() {
             }
             return;
           }
-          // Open file picker
           const input = document.createElement('input');
           input.type = 'file';
           input.accept = 'video/mp4,video/quicktime';
@@ -4792,7 +4786,6 @@ function updateTrackList() {
               alert('Video too large (max 10GB)');
               return;
             }
-           // Show uploading state
             track.videoUploading = true;
             track.videoProgress = 0;
             updateTrackList();
@@ -4816,6 +4809,7 @@ function updateTrackList() {
           input.click();
         });
       });
+
       document.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           tracks.splice(parseInt(btn.dataset.idx), 1);
@@ -4830,7 +4824,6 @@ function updateTrackList() {
       }
       
       updateMintFee();
-      
     }
     
     // Calculate and display album savings
@@ -4859,32 +4852,8 @@ function updateTrackList() {
         }
       }
     }
-      
-      // Track name editing - save on every keystroke
-      document.querySelectorAll('.track-name-input').forEach(input => {
-        input.addEventListener('input', () => {
-          const idx = parseInt(input.dataset.idx);
-          tracks[idx].title = input.value.trim() || `Track ${idx + 1}`;
-        });
-      });
-      
-      document.querySelectorAll('.track-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-          tracks.splice(parseInt(btn.dataset.idx), 1);
-          updateTrackList();
-        });
-      });
-      
-      if (tracks.length > 0) {
-        audioZone.classList.add('has-file');
-      } else {
-        audioZone.classList.remove('has-file');
-      }
-      
-     // Recalculate mint fee when tracks change
-      updateMintFee();
-   
-   // Save Draft button — opens visibility picker panel
+
+    // Save Draft button — opens visibility picker panel
     document.getElementById('save-draft-btn')?.addEventListener('click', () => {
       document.getElementById('mint-expand-panel')?.classList.add('hidden');
       document.getElementById('draft-expand-panel')?.classList.remove('hidden');
