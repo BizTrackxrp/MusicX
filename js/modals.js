@@ -2154,11 +2154,7 @@ const Modals = {
               </div>
             </button>
             <button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
-              <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#FF6B35,#FF8C55);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
-                  <path d="M20 5 L35 32 H5 Z" fill="white" opacity="0.95"/>
-                </svg>
-              </div>
+            <img src="/bifrost-logo.png" alt="Bifrost" style="width:48px;height:48px;border-radius:12px;object-fit:contain;background:#1B3BE8;padding:6px;">
               <div class="xaman-btn-info">
                 <span class="xaman-btn-title">Bifrost Wallet</span>
                 <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
