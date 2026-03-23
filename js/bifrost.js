@@ -172,9 +172,9 @@ const BifrostWallet = {
 
   async _loadSDK() {
     if (window.SignClient) return;
-    await loadScript(
-      'https://cdn.jsdelivr.net/npm/@walletconnect/sign-client@2.17.0/dist/index.umd.js'
-    );
+   await loadScript(
+  'https://unpkg.com/@walletconnect/sign-client@2.17.0/dist/index.umd.js'
+);
     if (!window.SignClient) throw new Error('WalletConnect SignClient failed to load');
   },
 
