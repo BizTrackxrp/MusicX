@@ -2154,7 +2154,7 @@ const Modals = {
               </div>
             </button>
             <button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
-            <img src="/public/bifrost-logo.png" alt="Bifrost" style="width:48px;height:48px;border-radius:12px;object-fit:contain;background:#1B3BE8;padding:6px;">
+            <img src="/public/bifrost-logo.png" alt="Bifrost" style="width:48px;height:48px;border-radius:12px;object-fit:contain;">
               <div class="xaman-btn-info">
                 <span class="xaman-btn-title">Bifrost Wallet</span>
                 <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
