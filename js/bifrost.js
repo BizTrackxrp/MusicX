@@ -4,14 +4,16 @@
  * Supports Bifrost and any other WalletConnect-compatible XRPL wallet.
  * Uses WalletConnect v2 (Reown) SignClient with the XRPL namespace.
  * 
- * XRPL WalletConnect chain ID: xrpl:1 (mainnet)
+ * XRPL WalletConnect chain IDs:
+ *   xrpl:0 = mainnet
+ *   xrpl:1 = testnet
  * 
  * RPC methods used:
  *   xrpl_signTransaction  — sign + submit a tx, returns { tx_json }
  * 
  * Flow:
  *   1. connect() → generates WC URI → shows QR modal → user scans with Bifrost
- *   2. Session established → extract XRPL address from account "xrpl:1:rADDRESS"
+ *   2. Session established → extract XRPL address from account "xrpl:0:rADDRESS"
  *   3. All subsequent signing is a push to the active WC session (no new QR)
  * 
  * Project ID is fetched from /api/upload-config (stored in Vercel env as REOWN_PROJECT_ID)
@@ -19,7 +21,7 @@
  */
 
 const WC_RELAY_URL   = 'wss://relay.walletconnect.com';
-const XRPL_CHAIN     = 'xrpl:1'; // mainnet
+const XRPL_CHAIN     = 'xrpl:0'; // mainnet (xrpl:1 = testnet)
 const WC_SESSION_KEY = 'xrpmusic_wc_session';
 
 // ─── QR Modal HTML ────────────────────────────────────────────────────────────
@@ -216,7 +218,8 @@ const BifrostWallet = {
   _extractAddress(session) {
     try {
       const accounts = session.namespaces?.xrpl?.accounts || [];
-      const entry = accounts.find(a => a.startsWith('xrpl:1:'));
+      // mainnet accounts are prefixed xrpl:0:rADDRESS
+      const entry = accounts.find(a => a.startsWith('xrpl:0:'));
       return entry ? entry.split(':')[2] : null;
     } catch {
       return null;
@@ -261,7 +264,7 @@ const BifrostWallet = {
         requiredNamespaces: {
           xrpl: {
             methods: ['xrpl_signTransaction'],
-            chains: [XRPL_CHAIN],
+            chains: [XRPL_CHAIN], // xrpl:0 mainnet
             events: [],
           },
         },
@@ -364,7 +367,7 @@ const BifrostWallet = {
     try {
       const result = await this.client.request({
         topic: this.session.topic,
-        chainId: XRPL_CHAIN,
+        chainId: XRPL_CHAIN, // xrpl:0 mainnet
         request: {
           method: 'xrpl_signTransaction',
           params: { tx_json: txJson },
