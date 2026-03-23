@@ -1,9 +1,9 @@
 /**
  * XRP Music - Upload Config API
  * Returns Lighthouse API key for direct browser uploads
+ * Also returns Reown project ID for WalletConnect (Bifrost)
  * Security: Only allows requests from your domain
  */
-
 export default async function handler(req, res) {
   // CORS - restrict to your domains
   const allowedOrigins = [
@@ -47,5 +47,6 @@ export default async function handler(req, res) {
   return res.json({
     key: lighthouseApiKey,
     endpoint: 'https://upload.lighthouse.storage/api/v0/add',
+    reownProjectId: process.env.REOWN_PROJECT_ID,
   });
 }
