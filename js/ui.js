@@ -65,7 +65,7 @@ const UI = {
     });
     
     document.getElementById('logout-btn')?.addEventListener('click', () => {
-      XamanWallet.disconnect();
+     ActiveWallet.disconnect();
     });
     
     // Nav items
