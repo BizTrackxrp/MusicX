@@ -2153,14 +2153,14 @@ const Modals = {
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
               </div>
             </button>
-            <button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
-            <img src="/public/bifrost-logo.png" alt="Bifrost" style="width:48px;height:48px;border-radius:12px;object-fit:contain;">
-              <div class="xaman-btn-info">
-                <span class="xaman-btn-title">Bifrost Wallet</span>
-                <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
-              </div>
-              <div id="bifrost-spinner" class="spinner hidden"></div>
-            </button>
+           <button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
+  <img src="https://avatars.githubusercontent.com/u/37784886" alt="WalletConnect" style="width:48px;height:48px;border-radius:12px;object-fit:contain;">
+  <div class="xaman-btn-info">
+    <span class="xaman-btn-title">WalletConnect</span>
+    <span class="xaman-btn-subtitle">Bifrost, Joey & more · XRPL</span>
+  </div>
+  <div id="bifrost-spinner" class="spinner hidden"></div>
+</button>
             <div class="auth-waiting hidden" id="auth-waiting">
               <div class="spinner"></div>
               <p>Waiting for Xaman approval...</p>
@@ -2213,7 +2213,7 @@ const Modals = {
     await BifrostWallet.connect();
   } catch (err) {
     console.error('Bifrost connect failed:', err);
-    Modals.showToast('Could not connect Bifrost wallet. Please try again.');
+    Modals.showToast('Could not connect wallet. Please try again.');
   } finally {
     if (btn) btn.disabled = false;
     if (spinner) spinner.classList.add('hidden');
