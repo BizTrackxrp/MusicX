@@ -2153,18 +2153,18 @@ const Modals = {
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
               </div>
             </button>
-            button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
-  <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#FF6B35,#FF8C55);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-    <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
-      <path d="M20 5 L35 32 H5 Z" fill="white" opacity="0.95"/>
-    </svg>
-  </div>
-  <div class="xaman-btn-info">
-    <span class="xaman-btn-title">Bifrost Wallet</span>
-    <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
-  </div>
-  <div id="bifrost-spinner" class="spinner hidden"></div>
-</button>
+            <button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
+              <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#FF6B35,#FF8C55);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
+                  <path d="M20 5 L35 32 H5 Z" fill="white" opacity="0.95"/>
+                </svg>
+              </div>
+              <div class="xaman-btn-info">
+                <span class="xaman-btn-title">Bifrost Wallet</span>
+                <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
+              </div>
+              <div id="bifrost-spinner" class="spinner hidden"></div>
+            </button>
             <div class="auth-waiting hidden" id="auth-waiting">
               <div class="spinner"></div>
               <p>Waiting for Xaman approval...</p>
@@ -2183,7 +2183,6 @@ const Modals = {
       </style>
     `;
     this.show(html);
-    
     document.getElementById('xaman-connect-btn')?.addEventListener('click', async () => {
       // Show waiting state
       document.getElementById('xaman-connect-btn')?.classList.add('hidden');
