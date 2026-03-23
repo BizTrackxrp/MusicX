@@ -76,6 +76,7 @@ const XamanWallet = {
             // Use sessionStorage - dies when tab closes
             this.saveSessionToTab(account);
             saveSession(account);
+            AppState.walletType = 'xaman';
             // Also write to localStorage so the original tab can detect login
             localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
             await this.loadUserData(account);
@@ -380,6 +381,7 @@ const XamanWallet = {
    * Disconnect wallet
    */
   disconnect() {
+    AppState.walletType = null;
     if (this.sdk) {
       this.sdk.logout();
     }
