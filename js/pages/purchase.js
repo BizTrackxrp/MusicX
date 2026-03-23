@@ -1,7 +1,7 @@
 /**
  * XRP Music - Purchase Page
  * Dedicated full-screen purchase flow
- * Clear Xaman instructions, can't accidentally close
+ * Clear wallet instructions, can't accidentally close
  * 
  * XAMAN 5.0 FIX: Uses priced sell offers instead of Payment + 0-drop accept.
  * - SINGLE TRACK: 1 signature (NFTokenAcceptOffer with full price embedded)
@@ -26,6 +26,9 @@
  *
  * VERIFY FIX: After each NFT accept, verifies on-chain transfer before confirming
  * Prevents silent failures from being reported as success
+ *
+ * BIFROST FIX: Uses ActiveWallet instead of XamanWallet so Bifrost users
+ * can purchase. UI is wallet-aware (logo, title, button text).
  */
 
 const PurchasePage = {
@@ -127,11 +130,26 @@ const PurchasePage = {
     const albumPrice = parseFloat(release.albumPrice) || individualTotal;
     return { trackPrice, trackCount, individualTotal, albumPrice };
   },
+
+  isBifrost() {
+    return AppState.walletType === 'bifrost';
+  },
+
+  walletName() {
+    return this.isBifrost() ? 'Bifrost' : 'Xaman';
+  },
+
+  walletLogo() {
+    return this.isBifrost() ? '/public/bifrost-logo.png' : '/public/Xaman-logo.png';
+  },
   
   render() {
     const release = this.release;
     const track = this.track;
     const isAlbum = this.isAlbum;
+    const isBifrost = this.isBifrost();
+    const walletName = this.walletName();
+    const walletLogo = this.walletLogo();
     
     const { trackPrice, trackCount, individualTotal, albumPrice } = this.getAlbumPrice();
     const totalPrice = isAlbum ? albumPrice : trackPrice;
@@ -213,12 +231,12 @@ const PurchasePage = {
                 </div>
               </div>
               
-              <!-- Xaman Instructions -->
+              <!-- Wallet Instructions -->
               <div class="xaman-instructions">
                 <div class="xaman-header">
-                  <img src="/xaman-logo.png" alt="Xaman" class="xaman-logo" onerror="this.style.display='none'">
+                  <img src="${walletLogo}" alt="${walletName}" class="xaman-logo" onerror="this.style.display='none'">
                   <div>
-                    <h4>Xaman Wallet Required</h4>
+                    <h4>${walletName} Wallet Required</h4>
                     <p>${totalSignatures} signature${totalSignatures > 1 ? 's' : ''} needed</p>
                   </div>
                 </div>
@@ -252,7 +270,10 @@ const PurchasePage = {
                   </svg>
                   <div>
                     <strong>Mobile Users</strong>
-                    <p>You'll need to tap a button between each track to open Xaman. Pull down on the <strong>Events</strong> tab in Xaman to refresh.</p>
+                    <p>${isBifrost
+                      ? "Check your Bifrost app for push notifications between each signature."
+                      : "You'll need to tap a button between each track to open Xaman. Pull down on the <strong>Events</strong> tab in Xaman to refresh."
+                    }</p>
                   </div>
                 </div>
                 ` : ''}
@@ -481,6 +502,7 @@ const PurchasePage = {
           width: 48px;
           height: 48px;
           border-radius: 12px;
+          object-fit: contain;
         }
         
         .xaman-header h4 {
@@ -741,6 +763,8 @@ const PurchasePage = {
       const iconEl = statusEl.querySelector('.status-icon');
       const textEl = document.getElementById('status-text');
       const subEl = document.getElementById('status-sub');
+      const isBifrost = this.isBifrost();
+      const walletName = this.walletName();
       
       if (this.isAlbum && trackTitle) {
         this.updateAlbumProgress(current - 1, total, trackTitle, 'ready');
@@ -757,6 +781,11 @@ const PurchasePage = {
       const label = trackTitle 
         ? `Buy NFT ${current}/${total}: "${trackTitle}"`
         : `Buy & Receive Your NFT`;
+
+      const btnLabel = isBifrost ? `Sign in Bifrost` : `Tap to Open Xaman`;
+      const subText = isBifrost
+        ? 'Check your Bifrost app for a signing notification'
+        : 'Tap the button above to sign in Xaman';
       
       textEl.innerHTML = `
         <span style="display:block;margin-bottom:16px;">${label}</span>
@@ -764,10 +793,10 @@ const PurchasePage = {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          Tap to Open Xaman
+          ${btnLabel}
         </button>
       `;
-      subEl.textContent = 'Tap the button above to sign in Xaman';
+      subEl.textContent = subText;
       
       document.getElementById('accept-nft-btn').onclick = () => {
         resolve();
@@ -837,6 +866,7 @@ const PurchasePage = {
    */
   async processSinglePurchase(updateStatus) {
     const totalPrice = parseFloat(this.release.songPrice) || 0;
+    const walletName = this.walletName();
     
     // STEP 1: Prepare (API mints NFT + creates priced sell offer)
     updateStatus('Preparing Your NFT', 'Minting and creating offer...');
@@ -844,12 +874,12 @@ const PurchasePage = {
     const prepareResponse = await fetch('/api/broker-sale', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-    action: 'prepare',
-    releaseId: this.release.id,
-    trackId: this.track?.id || null,
-    buyerAddress: AppState.user.address,
-}),
+      body: JSON.stringify({
+        action: 'prepare',
+        releaseId: this.release.id,
+        trackId: this.track?.id || null,
+        buyerAddress: AppState.user.address,
+      }),
     });
     
     const prepareResult = await prepareResponse.json();
@@ -861,12 +891,13 @@ const PurchasePage = {
     // STEP 2: Show tap button, then buyer signs NFTokenAcceptOffer (ONLY signature!)
     await this.showAcceptNFTStep(updateStatus, 1, 1);
     
-    updateStatus('Sign in Xaman', `Accept NFT offer for ${totalPrice} XRP`);
+    updateStatus(`Sign in ${walletName}`, `Accept NFT offer for ${totalPrice} XRP`);
     
-    const acceptResult = await XamanWallet.acceptSellOffer(prepareResult.sellOfferIndex);
+    // ← ActiveWallet routes to Xaman or Bifrost depending on AppState.walletType
+    const acceptResult = await ActiveWallet.acceptSellOffer(prepareResult.sellOfferIndex);
     
     if (!acceptResult.success) {
-      throw new Error('Transaction cancelled or failed - check Xaman');
+      throw new Error(`Transaction cancelled or failed - check ${walletName}`);
     }
     
     // STEP 3: Confirm sale (API records sale + pays artist)
@@ -901,6 +932,7 @@ const PurchasePage = {
     const tracks = this.release.tracks || [];
     const trackCount = tracks.length;
     const { trackPrice, albumPrice } = this.getAlbumPrice();
+    const walletName = this.walletName();
     
     // Step 1: Initialize purchase session (gets per-track offer prices)
     updateStatus('Initializing', 'Setting up album purchase...');
@@ -982,17 +1014,17 @@ const PurchasePage = {
       this.updateAlbumProgress(i, trackCount, track.title, 'accepting');
       updateStatus(
         `Accepting NFT ${i + 1}/${trackCount}`,
-        `"${track.title}" - sign in Xaman`
+        `"${track.title}" - sign in ${walletName}`
       );
       
-      // Buyer signs NFTokenAcceptOffer (pays track price + gets NFT)
-      const acceptResult = await XamanWallet.acceptSellOffer(prepareResult.sellOfferIndex);
+      // ← ActiveWallet routes to Xaman or Bifrost depending on AppState.walletType
+      const acceptResult = await ActiveWallet.acceptSellOffer(prepareResult.sellOfferIndex);
       
       if (!acceptResult.success) {
         console.error(`Accept failed for track ${i + 1}`);
         failedTracks.push(track.title);
         if (confirmedSales.length === 0 && failedTracks.length === 1) {
-          throw new Error(`Failed to accept "${track.title}" - check Xaman Requests`);
+          throw new Error(`Failed to accept "${track.title}" - check ${walletName} Requests`);
         }
         continue;
       }
@@ -1080,7 +1112,7 @@ const PurchasePage = {
       if (discountRefund > 0 && confirmedSales.length === trackCount) {
         updateStatus('Processing Discount', `Refunding ${discountRefund.toFixed(2)} XRP album discount...`);
         try {
-        await fetch('/api/broker-sale', {
+          await fetch('/api/broker-sale', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1141,6 +1173,7 @@ const PurchasePage = {
       Router.navigate('profile');
     }, 3000);
   },
+
   showError(message) {
     const content = document.getElementById('page-content');
     content.innerHTML = `
@@ -1222,7 +1255,7 @@ const PurchasePage = {
               <line x1="1" y1="10" x2="23" y2="10"></line>
             </svg>
             <h2>Connect Wallet</h2>
-            <p>You need to connect your Xaman wallet to make purchases.</p>
+            <p>Connect your wallet to make purchases.</p>
             <button class="btn btn-primary" onclick="Modals.showAuth()" style="margin-top: 24px;">Connect Wallet</button>
           </div>
         </div>
