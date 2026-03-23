@@ -2153,6 +2153,18 @@ const Modals = {
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
               </div>
             </button>
+            button class="xaman-btn" id="bifrost-connect-btn" style="margin-top: 12px;">
+  <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#FF6B35,#FF8C55);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+    <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
+      <path d="M20 5 L35 32 H5 Z" fill="white" opacity="0.95"/>
+    </svg>
+  </div>
+  <div class="xaman-btn-info">
+    <span class="xaman-btn-title">Bifrost Wallet</span>
+    <span class="xaman-btn-subtitle">WalletConnect · XRPL + Flare</span>
+  </div>
+  <div id="bifrost-spinner" class="spinner hidden"></div>
+</button>
             <div class="auth-waiting hidden" id="auth-waiting">
               <div class="spinner"></div>
               <p>Waiting for Xaman approval...</p>
@@ -2196,6 +2208,22 @@ const Modals = {
         }
       }, 1000);
     });
+    document.getElementById('bifrost-connect-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('bifrost-connect-btn');
+  const spinner = document.getElementById('bifrost-spinner');
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.classList.remove('hidden');
+  try {
+    if (!BifrostWallet.initialized) await BifrostWallet.init();
+    await BifrostWallet.connect();
+  } catch (err) {
+    console.error('Bifrost connect failed:', err);
+    Modals.showToast('Could not connect Bifrost wallet. Please try again.');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.classList.add('hidden');
+  }
+});
   },
   
  showRelease(release) {
