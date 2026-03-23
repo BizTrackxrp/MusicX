@@ -14,13 +14,11 @@
  *   2. Session established → extract XRPL address from account "xrpl:1:rADDRESS"
  *   3. All subsequent signing is a push to the active WC session (no new QR)
  * 
- * NOTE: You need a Reown Project ID — get one free at https://cloud.reown.com
- * Set it in WC_PROJECT_ID below before deploying.
+ * Project ID is fetched from /api/upload-config (stored in Vercel env as REOWN_PROJECT_ID)
  */
 
-const WC_PROJECT_ID = 'YOUR_REOWN_PROJECT_ID'; // <-- replace with your project ID
-const WC_RELAY_URL  = 'wss://relay.walletconnect.com';
-const XRPL_CHAIN    = 'xrpl:1'; // mainnet
+const WC_RELAY_URL   = 'wss://relay.walletconnect.com';
+const XRPL_CHAIN     = 'xrpl:1'; // mainnet
 const WC_SESSION_KEY = 'xrpmusic_wc_session';
 
 // ─── QR Modal HTML ────────────────────────────────────────────────────────────
@@ -80,14 +78,12 @@ function buildQRModalHTML() {
   `;
 }
 
-// ─── QR Code renderer (pure canvas, no deps) ──────────────────────────────────
+// ─── QR Code renderer ─────────────────────────────────────────────────────────
 
-// Minimal QR encoder — loads qrcode-generator from CDN
 async function renderQRToCanvas(canvas, text) {
-  if (typeof qrcode === 'undefined') {
+  if (typeof QRCode === 'undefined') {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
   }
-  // Use QRCode library to draw to a temp div, then copy to canvas
   const tmp = document.createElement('div');
   tmp.style.display = 'none';
   document.body.appendChild(tmp);
@@ -100,7 +96,6 @@ async function renderQRToCanvas(canvas, text) {
       colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M,
     });
-    // Give it a tick to render
     await new Promise(r => setTimeout(r, 100));
     const img = tmp.querySelector('img') || tmp.querySelector('canvas');
     if (img) {
@@ -129,21 +124,25 @@ function loadScript(src) {
 // ─── Main BifrostWallet object ────────────────────────────────────────────────
 
 const BifrostWallet = {
-  client: null,         // SignClient instance
-  session: null,        // Active WC session
+  client: null,
+  session: null,
   initialized: false,
   isConnecting: false,
-  _qrResolve: null,     // Resolves when session established
-  _qrReject: null,
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
   async init() {
     if (this.initialized) return;
     try {
+      // Fetch project ID from server (stored in Vercel env as REOWN_PROJECT_ID)
+      const configRes = await fetch('/api/upload-config');
+      const config = await configRes.json();
+      const projectId = config.reownProjectId;
+      if (!projectId) throw new Error('Reown project ID not configured — add REOWN_PROJECT_ID to Vercel env vars');
+
       await this._loadSDK();
       this.client = await window.SignClient.init({
-        projectId: WC_PROJECT_ID,
+        projectId,
         relayUrl: WC_RELAY_URL,
         metadata: {
           name: 'XRP Music',
@@ -153,9 +152,8 @@ const BifrostWallet = {
         },
       });
 
-      // Handle incoming session events
-      this.client.on('session_event',   (e) => console.log('WC session_event', e));
-      this.client.on('session_update',  ({ topic, params }) => {
+      this.client.on('session_event',  (e) => console.log('WC session_event', e));
+      this.client.on('session_update', ({ topic, params }) => {
         this.session = { ...this.session, namespaces: params.namespaces };
       });
       this.client.on('session_delete', () => {
@@ -163,7 +161,6 @@ const BifrostWallet = {
         this._onDisconnect();
       });
 
-      // Restore persisted session
       await this._restoreSession();
 
       this.initialized = true;
@@ -175,7 +172,6 @@ const BifrostWallet = {
 
   async _loadSDK() {
     if (window.SignClient) return;
-    // Load from CDN — the UMD build of @walletconnect/sign-client
     await loadScript(
       'https://cdn.jsdelivr.net/npm/@walletconnect/sign-client@2.17.0/dist/index.umd.js'
     );
@@ -212,7 +208,6 @@ const BifrostWallet = {
   _extractAddress(session) {
     try {
       const accounts = session.namespaces?.xrpl?.accounts || [];
-      // Format: "xrpl:1:rADDRESS..."
       const entry = accounts.find(a => a.startsWith('xrpl:1:'));
       return entry ? entry.split(':')[2] : null;
     } catch {
@@ -237,7 +232,7 @@ const BifrostWallet = {
 
   async _afterLogin(address) {
     try {
-      await XamanWallet.loadUserData(address); // reuse existing user-data loader
+      await XamanWallet.loadUserData(address);
     } catch (e) {
       console.warn('loadUserData error (bifrost)', e);
     }
@@ -266,10 +261,8 @@ const BifrostWallet = {
 
       if (!uri) throw new Error('No WalletConnect URI generated');
 
-      // Show QR modal
       this._showQRModal(uri);
 
-      // Wait for wallet to approve
       const session = await approval();
       this._dismissQRModal();
       this._saveSession(session);
@@ -282,7 +275,6 @@ const BifrostWallet = {
       localStorage.setItem('xrpmusic_user', JSON.stringify({ address }));
       await this._afterLogin(address);
 
-      // Close auth modal if open
       if (typeof Modals !== 'undefined' && Modals.close) Modals.close();
 
     } catch (err) {
@@ -301,30 +293,28 @@ const BifrostWallet = {
   // ── QR modal helpers ───────────────────────────────────────────────────────
 
   _showQRModal(uri) {
-    // Remove any existing modal
     this._dismissQRModal();
-
     const wrap = document.createElement('div');
     wrap.id = 'wc-qr-root';
     wrap.innerHTML = buildQRModalHTML();
     document.body.appendChild(wrap);
 
-    // Render QR
     const canvas = document.getElementById('wc-qr-canvas');
     if (canvas) renderQRToCanvas(canvas, uri);
 
-    // Close button
     document.getElementById('wc-qr-close')?.addEventListener('click', () => {
       this._dismissQRModal();
       this.isConnecting = false;
     });
 
-    // Copy URI button
     document.getElementById('wc-copy-uri')?.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(uri);
         const btn = document.getElementById('wc-copy-uri');
-        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if(btn) btn.textContent = 'Copy Connection URI'; }, 2000); }
+        if (btn) {
+          btn.textContent = '✓ Copied!';
+          setTimeout(() => { if (btn) btn.textContent = 'Copy Connection URI'; }, 2000);
+        }
       } catch {}
     });
   },
@@ -359,13 +349,6 @@ const BifrostWallet = {
 
   // ── Core signing helper ────────────────────────────────────────────────────
 
-  /**
-   * Sign + submit a transaction via WalletConnect.
-   * Returns { success, txHash } matching the XamanWallet promise shape.
-   *
-   * @param {Object} txJson  - XRPL tx_json (auto-fillable fields optional)
-   * @returns {Promise<{success: boolean, txHash: string|null, error?: string}>}
-   */
   async _signTx(txJson) {
     if (!this.session) throw new Error('No active Bifrost session — please connect first');
     if (!this.client) throw new Error('WalletConnect not initialized');
@@ -376,20 +359,15 @@ const BifrostWallet = {
         chainId: XRPL_CHAIN,
         request: {
           method: 'xrpl_signTransaction',
-          params: {
-            tx_json: txJson,
-            // submit: true is the default per the XRPL WC spec
-          },
+          params: { tx_json: txJson },
         },
       });
 
-      // result.tx_json contains the signed tx with TxnSignature + hash
       const hash = result?.tx_json?.hash || result?.hash || null;
       console.log('WC tx signed & submitted, hash:', hash);
       return { success: true, txHash: hash };
     } catch (err) {
       console.error('WC signTx error:', err);
-      // User rejected → treat as cancelled, not a hard error
       if (err?.message?.toLowerCase().includes('reject') ||
           err?.message?.toLowerCase().includes('cancel') ||
           err?.code === 5000) {
@@ -401,35 +379,22 @@ const BifrostWallet = {
 
   // ── Public signing methods (mirror XamanWallet interface) ─────────────────
 
-  /**
-   * Payment transaction
-   */
   async createPayment(amountXRP, destination, memo) {
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     console.log(`[Bifrost] createPayment: ${amountXRP} XRP → ${destination}`);
-
     const drops = Math.floor(amountXRP * 1_000_000).toString();
     return this._signTx({
       TransactionType: 'Payment',
       Account: AppState.user.address,
       Destination: destination,
       Amount: drops,
-      Memos: [{
-        Memo: {
-          MemoType: this._toHex('XRPMusic'),
-          MemoData: this._toHex(memo || `XRP Music payment: ${amountXRP} XRP`),
-        },
-      }],
+      Memos: [{ Memo: { MemoType: this._toHex('XRPMusic'), MemoData: this._toHex(memo || `XRP Music payment: ${amountXRP} XRP`) } }],
     });
   },
 
-  /**
-   * Create NFT transfer offer (Amount: 0) to send NFT to platform for listing
-   */
   async createTransferOffer(nftTokenId, destination) {
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     console.log('[Bifrost] createTransferOffer:', nftTokenId);
-
     const result = await this._signTx({
       TransactionType: 'NFTokenCreateOffer',
       Account: AppState.user.address,
@@ -439,8 +404,6 @@ const BifrostWallet = {
       Destination: destination,
       Memos: [{ Memo: { MemoType: this._toHex('XRPMusic'), MemoData: this._toHex('NFT listing transfer') } }],
     });
-
-    // Try to extract offer index from tx hash (same pattern as Xaman)
     if (result.success && result.txHash) {
       try {
         const offerIndex = await this._getOfferIndexFromTx(result.txHash);
@@ -452,13 +415,9 @@ const BifrostWallet = {
     return result;
   },
 
-  /**
-   * Accept an NFT sell offer
-   */
   async acceptSellOffer(offerIndex) {
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     console.log('[Bifrost] acceptSellOffer:', offerIndex);
-
     return this._signTx({
       TransactionType: 'NFTokenAcceptOffer',
       Account: AppState.user.address,
@@ -467,13 +426,9 @@ const BifrostWallet = {
     });
   },
 
-  /**
-   * Create a sell offer (secondary market listing by user)
-   */
   async createSellOffer(nftTokenId, priceXRP) {
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     console.log('[Bifrost] createSellOffer:', nftTokenId, priceXRP, 'XRP');
-
     const drops = Math.floor(priceXRP * 1_000_000).toString();
     const result = await this._signTx({
       TransactionType: 'NFTokenCreateOffer',
@@ -483,7 +438,6 @@ const BifrostWallet = {
       Flags: 1,
       Memos: [{ Memo: { MemoType: this._toHex('XRPMusic'), MemoData: this._toHex(`XRP Music listing: ${priceXRP} XRP`) } }],
     });
-
     if (result.success && result.txHash) {
       try {
         const offerIndex = await this._getOfferIndexFromTx(result.txHash);
@@ -495,13 +449,9 @@ const BifrostWallet = {
     return result;
   },
 
-  /**
-   * Cancel a sell offer
-   */
   async cancelSellOffer(offerIndex) {
     if (!AppState.user?.address) throw new Error('Wallet not connected');
     console.log('[Bifrost] cancelSellOffer:', offerIndex);
-
     return this._signTx({
       TransactionType: 'NFTokenCancelOffer',
       Account: AppState.user.address,
@@ -510,17 +460,12 @@ const BifrostWallet = {
     });
   },
 
-  // Mint fee payment (same as createPayment but named to match xaman.js usage)
   async payMintFee(amountXRP, destination, memo) {
     return this.createPayment(amountXRP, destination, memo);
   },
 
   // ── XRPL helpers ──────────────────────────────────────────────────────────
 
-  /**
-   * Look up a transaction on-chain and extract the created offer index.
-   * Matches the pattern in xaman.js getOfferIndexFromTx().
-   */
   async _getOfferIndexFromTx(txHash) {
     const XRPL_NODE = 'https://s1.ripple.com';
     try {
@@ -562,7 +507,5 @@ const BifrostWallet = {
     return Number(drops) / 1_000_000;
   },
 
-  // No-op — Bifrost doesn't need a separate mint-fee-authorize step
-  // (platform minting still goes through the same server-side path)
   stopMintProgress() {},
 };
