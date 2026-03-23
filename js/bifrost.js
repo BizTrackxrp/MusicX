@@ -15,6 +15,7 @@
  *   3. All subsequent signing is a push to the active WC session (no new QR)
  * 
  * Project ID is fetched from /api/upload-config (stored in Vercel env as REOWN_PROJECT_ID)
+ * SDK is loaded via esm.sh dynamic import — no bundler needed, no CDN UMD issues.
  */
 
 const WC_RELAY_URL   = 'wss://relay.walletconnect.com';
@@ -37,10 +38,7 @@ function buildQRModalHTML() {
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
-              <rect width="40" height="40" rx="10" fill="#FF6B35"/>
-              <path d="M20 8 L32 28 H8 Z" fill="white" opacity="0.9"/>
-            </svg>
+            <img src="/public/bifrost-logo.png" alt="Bifrost" style="width:28px;height:28px;border-radius:6px;object-fit:contain;">
             <span style="font-size:16px;font-weight:700;color:var(--text-primary,#fff);">Connect Bifrost</span>
           </div>
           <button id="wc-qr-close" style="
@@ -141,6 +139,7 @@ const BifrostWallet = {
       if (!projectId) throw new Error('Reown project ID not configured — add REOWN_PROJECT_ID to Vercel env vars');
 
       await this._loadSDK();
+
       this.client = await window.SignClient.init({
         projectId,
         relayUrl: WC_RELAY_URL,
@@ -148,7 +147,7 @@ const BifrostWallet = {
           name: 'XRP Music',
           description: 'Music NFT marketplace on the XRP Ledger',
           url: 'https://xrpmusic.io',
-          icons: ['https://xrpmusic.io/icon-192.png'],
+          icons: ['https://xrpmusic.io/public/bifrost-logo.png'],
         },
       });
 
@@ -164,18 +163,27 @@ const BifrostWallet = {
       await this._restoreSession();
 
       this.initialized = true;
+      console.log('BifrostWallet initialized ✓');
     } catch (err) {
       console.error('BifrostWallet init error:', err);
       throw err;
     }
   },
 
+  // ── Load SDK via esm.sh dynamic import (no bundler needed) ────────────────
+
   async _loadSDK() {
     if (window.SignClient) return;
-   await loadScript(
-  'https://unpkg.com/@walletconnect/sign-client@2.17.0/dist/index.umd.js'
-);
-    if (!window.SignClient) throw new Error('WalletConnect SignClient failed to load');
+    try {
+      console.log('Loading WalletConnect SDK via esm.sh...');
+      const module = await import('https://esm.sh/@walletconnect/sign-client@2.17.0');
+      window.SignClient = module.SignClient || module.default?.SignClient || module.default;
+      if (!window.SignClient) throw new Error('SignClient not found in module exports');
+      console.log('WalletConnect SDK loaded ✓');
+    } catch (err) {
+      console.error('esm.sh load failed:', err);
+      throw new Error('WalletConnect SDK failed to load: ' + err.message);
+    }
   },
 
   // ── Session management ─────────────────────────────────────────────────────
