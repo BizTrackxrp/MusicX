@@ -3,6 +3,7 @@
  * Initialization and routing
  * 
  * UPDATED: Added 🎁 Rewards page route for NFT-gated rewards system
+ * UPDATED: Added 📚 Audiobooks and 🎙️ Podcasts page routes
  */
 const Router = {
   params: {},
@@ -66,6 +67,14 @@ const Router = {
     // Rewards page
     if (page === 'rewards') {
       return '/rewards';
+    }
+    // Audiobooks page
+    if (page === 'audiobooks') {
+      return '/audiobooks';
+    }
+    // Podcasts page
+    if (page === 'podcasts') {
+      return '/podcasts';
     }
     return `/${page === 'stream' ? '' : page}`;
   },
@@ -163,6 +172,16 @@ const Router = {
       return { page: 'rewards', params: {} };
     }
     
+    // Audiobooks page
+    if (path === '/audiobooks') {
+      return { page: 'audiobooks', params: {} };
+    }
+    
+    // Podcasts page
+    if (path === '/podcasts') {
+      return { page: 'podcasts', params: {} };
+    }
+    
     // Other pages
     const pageName = path.replace('/', '') || 'stream';
     return { page: pageName, params: {} };
@@ -246,6 +265,24 @@ const Router = {
           RewardsPage.render();
         } else {
           console.error('RewardsPage not loaded');
+          StreamPage.render();
+        }
+        break;
+      // ========== AUDIOBOOKS ROUTE ==========
+      case 'audiobooks':
+        if (typeof AudiobooksPage !== 'undefined') {
+          AudiobooksPage.render();
+        } else {
+          console.error('AudiobooksPage not loaded');
+          StreamPage.render();
+        }
+        break;
+      // ========== PODCASTS ROUTE ==========
+      case 'podcasts':
+        if (typeof PodcastsPage !== 'undefined') {
+          PodcastsPage.render();
+        } else {
+          console.error('PodcastsPage not loaded');
           StreamPage.render();
         }
         break;
