@@ -31,7 +31,7 @@ const StreamPage = {
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
-      this.releases = await Promise.race([API.getReleases(), timeout]);
+     this.releases = await Promise.race([API.getReleases({ feed: true, contentType: 'music' }), timeout]);
       setReleases(this.releases);
       this.extractArtists();
       await this.loadTopTracks();
