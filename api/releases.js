@@ -18,6 +18,12 @@
  * - Artist's public page: show live releases + public drafts (visibility='public')
  * - Single release by ID: always visible (for purchase flow, direct links, draft preview)
  * 
+ * CONTENT TYPE FILTERING:
+ * - contentType='music': music releases only (default for stream page)
+ * - contentType='audiobook': audiobook releases only
+ * - contentType='podcast': podcast releases only
+ * - No contentType: show all content types (used by marketplace)
+ * 
  * TRACK UPDATES:
  * - Tracks are updated IN PLACE (not deleted + re-inserted) to preserve
  *   foreign key references from plays, sales, and nfts tables.
@@ -55,7 +61,7 @@ export default async function handler(req, res) {
 }
 
 async function getReleases(req, res, sql) {
-  const { artist, id, includeUnminted, feed } = req.query;
+  const { artist, id, includeUnminted, feed, contentType } = req.query;
   
   let releases;
   
@@ -180,6 +186,7 @@ async function getReleases(req, res, sql) {
     // FILTERED FEED (Stream cards / Marketplace cards)
     // Only show LIVE releases from artists with >= 20 XRP total sales
     // NEVER show drafts in feeds
+    // Can filter by contentType (music/audiobook/podcast)
     // ============================================================
     releases = await sql`
       SELECT r.*, 
@@ -208,6 +215,7 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
+        ${contentType ? sql`AND r.content_type = ${contentType}` : sql``}
         AND r.artist_address IN (
           SELECT seller_address
           FROM sales
@@ -221,6 +229,7 @@ async function getReleases(req, res, sql) {
     // ============================================================
     // UNFILTERED - All live releases (for artists list, stats, etc.)
     // NEVER show drafts here either
+    // Can filter by contentType (music/audiobook/podcast)
     // ============================================================
     releases = await sql`
       SELECT r.*, 
@@ -249,6 +258,7 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
+        ${contentType ? sql`AND r.content_type = ${contentType}` : sql``}
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
@@ -278,6 +288,8 @@ async function createRelease(req, res, sql) {
     // NEW: draft fields
     visibility,
     draftGenres,
+    // NEW: content type
+    contentType = 'music',
   } = req.body;
   
   if (!artistAddress || !title || !type) {
@@ -311,6 +323,7 @@ async function createRelease(req, res, sql) {
       status,
       visibility,
       draft_genres,
+      content_type,
       created_at
     ) VALUES (
       ${releaseId},
@@ -335,6 +348,7 @@ async function createRelease(req, res, sql) {
       'draft',
       ${visibility || 'private'},
       ${draftGenres ? JSON.stringify(draftGenres) : null},
+      ${contentType},
       NOW()
     )
     RETURNING *
@@ -420,6 +434,7 @@ async function updateRelease(req, res, sql) {
   const status = updates.status || null;
   const visibility = updates.visibility || null;
   const draftGenres = updates.draftGenres !== undefined ? JSON.stringify(updates.draftGenres) : null;
+  const contentType = updates.contentType || null;
   
   // Handle draft field updates (title, description, price, etc.)
   const title = updates.title || null;
@@ -446,6 +461,7 @@ async function updateRelease(req, res, sql) {
       status = COALESCE(${status}, status),
       visibility = COALESCE(${visibility}, visibility),
       draft_genres = COALESCE(${draftGenres}, draft_genres),
+      content_type = COALESCE(${contentType}, content_type),
       title = COALESCE(${title}, title),
       description = COALESCE(${description}, description),
       song_price = COALESCE(${songPrice}, song_price),
@@ -644,6 +660,7 @@ function formatRelease(row) {
     status: row.status || 'draft',
     visibility: row.visibility || 'private',
     draftGenres: row.draft_genres || null,
+    contentType: row.content_type || 'music',
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
