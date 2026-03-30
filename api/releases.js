@@ -215,7 +215,7 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
-        ${contentType ? sql`AND r.content_type = ${contentType}` : sql``}
+        AND (${contentType || null}::text IS NULL OR r.content_type = ${contentType || null})
         AND r.artist_address IN (
           SELECT seller_address
           FROM sales
@@ -258,7 +258,7 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
-        ${contentType ? sql`AND r.content_type = ${contentType}` : sql``}
+        AND (${contentType || null}::text IS NULL OR r.content_type = ${contentType || null})
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
