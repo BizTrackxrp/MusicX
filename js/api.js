@@ -45,9 +45,19 @@ const API = {
   
   /**
    * Get all live releases (unfiltered - for artists list, stats, etc.)
+   * @param {Object} params - Optional query parameters
+   * @param {boolean} params.feed - If true, filter to only artists with >= 20 XRP sales
+   * @param {string} params.contentType - Filter by content type ('music', 'audiobook', 'podcast')
    */
-  async getReleases() {
-    const data = await this.fetch('/api/releases');
+  async getReleases(params = {}) {
+    const queryParams = new URLSearchParams();
+    if (params.feed) queryParams.append('feed', 'true');
+    if (params.contentType) queryParams.append('contentType', params.contentType);
+    
+    const queryString = queryParams.toString();
+    const url = queryString ? `/api/releases?${queryString}` : '/api/releases';
+    
+    const data = await this.fetch(url);
     return data.releases || [];
   },
   
