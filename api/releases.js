@@ -19,10 +19,11 @@
  * - Single release by ID: always visible (for purchase flow, direct links, draft preview)
  * 
  * CONTENT TYPE FILTERING:
- * - contentType='music': music releases only (default for stream page)
- * - contentType='audiobook': audiobook releases only
- * - contentType='podcast': podcast releases only
- * - No contentType: show all content types (used by marketplace)
+ * - Stream/Marketplace pages: show ALL content types (no filter)
+ * - Audiobooks page (?contentType=audiobook): audiobook releases only
+ * - Podcasts page (?contentType=podcast): podcast releases only
+ * - Stats/totals: count ALL content types (no filter)
+ * - Player queue: frontend filters to music only (not handled here)
  * 
  * TRACK UPDATES:
  * - Tracks are updated IN PLACE (not deleted + re-inserted) to preserve
@@ -66,8 +67,6 @@ async function getReleases(req, res, sql) {
   let releases;
   
   if (id) {
-    // Get single release with tracks
-    // No filter - need to see it for purchase flow, direct links, AND draft preview
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -109,7 +108,6 @@ async function getReleases(req, res, sql) {
   
   if (artist) {
     if (includeUnminted === 'true') {
-      // Artist's own profile - show ALL their releases (including drafts)
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -143,7 +141,6 @@ async function getReleases(req, res, sql) {
         ORDER BY r.created_at DESC
       `;
     } else {
-      // Public view of artist - show live releases + public drafts
       releases = await sql`
         SELECT r.*, 
           p.avatar_url as artist_avatar,
@@ -182,12 +179,6 @@ async function getReleases(req, res, sql) {
       `;
     }
   } else if (feed === 'true') {
-    // ============================================================
-    // FILTERED FEED (Stream cards / Marketplace cards)
-    // Only show LIVE releases from artists with >= 20 XRP total sales
-    // NEVER show drafts in feeds
-    // Can filter by contentType (music/audiobook/podcast)
-    // ============================================================
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -215,7 +206,6 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
-        AND (${contentType || null}::text IS NULL OR r.content_type = ${contentType || null})
         AND r.artist_address IN (
           SELECT seller_address
           FROM sales
@@ -226,11 +216,6 @@ async function getReleases(req, res, sql) {
       ORDER BY r.created_at DESC
     `;
   } else {
-    // ============================================================
-    // UNFILTERED - All live releases (for artists list, stats, etc.)
-    // NEVER show drafts here either
-    // Can filter by contentType (music/audiobook/podcast)
-    // ============================================================
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -285,10 +270,8 @@ async function createRelease(req, res, sql) {
     nftTokenIds,
     txHash,
     sellOfferIndex,
-    // NEW: draft fields
     visibility,
     draftGenres,
-    // NEW: content type
     contentType = 'music',
   } = req.body;
   
@@ -298,7 +281,6 @@ async function createRelease(req, res, sql) {
   
   const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  // Insert release - starts as draft, becomes live when mint fee paid
   const [release] = await sql`
     INSERT INTO releases (
       id,
@@ -354,7 +336,6 @@ async function createRelease(req, res, sql) {
     RETURNING *
   `;
   
-  // Insert tracks
   const trackIds = [];
   if (tracks && tracks.length > 0) {
     for (let i = 0; i < tracks.length; i++) {
@@ -410,10 +391,6 @@ async function createRelease(req, res, sql) {
   });
 }
 
-/**
- * Update an existing release
- * Used after mint fee payment to mark as live, or to update draft fields
- */
 async function updateRelease(req, res, sql) {
   const { id } = req.query;
   const updates = req.body;
@@ -422,7 +399,6 @@ async function updateRelease(req, res, sql) {
     return res.status(400).json({ error: 'Missing release ID' });
   }
   
-  // Prepare update values
   const nftTokenIds = updates.nftTokenIds || null;
   const txHash = updates.txHash || null;
   const sellOfferIndex = updates.sellOfferIndex || null;
@@ -436,7 +412,6 @@ async function updateRelease(req, res, sql) {
   const draftGenres = updates.draftGenres !== undefined ? JSON.stringify(updates.draftGenres) : null;
   const contentType = updates.contentType || null;
   
-  // Handle draft field updates (title, description, price, etc.)
   const title = updates.title || null;
   const description = updates.description !== undefined ? updates.description : null;
   const songPrice = updates.songPrice !== undefined ? updates.songPrice : null;
@@ -446,7 +421,6 @@ async function updateRelease(req, res, sql) {
   const coverUrl = updates.coverUrl || null;
   const coverCid = updates.coverCid || null;
   
-  // Update the release
   const [updated] = await sql`
     UPDATE releases
     SET
@@ -478,10 +452,7 @@ async function updateRelease(req, res, sql) {
     return res.status(404).json({ error: 'Release not found' });
   }
   
-  // Update tracks if provided
-  // Uses UPDATE in place to preserve foreign key references from plays, sales, nfts tables
   if (updates.tracks && Array.isArray(updates.tracks) && updates.tracks.length > 0) {
-    // Get existing tracks ordered by track_order so we can match by position
     const existingTracks = await sql`
       SELECT id, track_order FROM tracks WHERE release_id = ${id} ORDER BY track_order
     `;
@@ -490,7 +461,6 @@ async function updateRelease(req, res, sql) {
       const track = updates.tracks[i];
       
       if (i < existingTracks.length) {
-        // Update existing track in place — preserves id so plays/sales/nfts FK stay valid
         await sql`
           UPDATE tracks SET
             title = ${track.title || 'Untitled'},
@@ -509,7 +479,6 @@ async function updateRelease(req, res, sql) {
           WHERE id = ${existingTracks[i].id}
         `;
       } else {
-        // New track added beyond existing count — insert fresh
         const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await sql`
           INSERT INTO tracks (
@@ -528,10 +497,6 @@ async function updateRelease(req, res, sql) {
         `;
       }
     }
-    
-    // If fewer tracks sent than exist, leave orphaned tracks in place
-    // (they have play/sale/nft history that can't be deleted)
-    // They stay in DB but the release display uses track_order to show active ones
   }
   
   return res.json({ 
@@ -540,10 +505,6 @@ async function updateRelease(req, res, sql) {
   });
 }
 
-/**
- * Delete a release and all associated data
- * Used for cleanup when mint fee payment fails, or deleting drafts
- */
 async function deleteRelease(req, res, sql) {
   const { id } = req.query;
   
@@ -554,7 +515,6 @@ async function deleteRelease(req, res, sql) {
   console.log('🗑️ Deleting release:', id);
   
   try {
-    // Check if release has any sales - don't delete if people bought NFTs!
     const sales = await sql`
       SELECT COUNT(*) as count FROM sales WHERE release_id = ${id}
     `;
@@ -566,16 +526,12 @@ async function deleteRelease(req, res, sql) {
       });
     }
     
-    // Delete in order due to foreign key constraints:
-    
-    // 1. Delete NFTs (references tracks and releases)
     const deletedNfts = await sql`
       DELETE FROM nfts WHERE release_id = ${id}
       RETURNING id
     `;
     console.log(`  Deleted ${deletedNfts.length} NFT records`);
     
-    // 2. Delete plays referencing these tracks (so tracks can be deleted)
     const trackIds = await sql`
       SELECT id FROM tracks WHERE release_id = ${id}
     `;
@@ -585,14 +541,12 @@ async function deleteRelease(req, res, sql) {
       console.log(`  Deleted play records for ${ids.length} tracks`);
     }
     
-    // 3. Delete tracks (references releases)
     const deletedTracks = await sql`
       DELETE FROM tracks WHERE release_id = ${id}
       RETURNING id
     `;
     console.log(`  Deleted ${deletedTracks.length} track records`);
     
-    // 4. Delete mint_jobs if table exists
     try {
       const deletedJobs = await sql`
         DELETE FROM mint_jobs WHERE release_id = ${id}
@@ -600,10 +554,9 @@ async function deleteRelease(req, res, sql) {
       `;
       console.log(`  Deleted ${deletedJobs.length} mint job records`);
     } catch (e) {
-      // Table might not exist, that's fine
+      // Table might not exist
     }
     
-    // 5. Delete the release itself
     const deletedRelease = await sql`
       DELETE FROM releases WHERE id = ${id}
       RETURNING id
@@ -666,10 +619,6 @@ function formatRelease(row) {
   };
 }
 
-/**
- * Calculate sold editions based on track sales
- * For albums: use the track with most sales (determines album availability)
- */
 function calculateSoldEditions(row) {
   const tracks = row.tracks || [];
   if (tracks.length === 0) {
