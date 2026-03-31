@@ -215,7 +215,11 @@ async function getReleases(req, res, sql) {
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
-  } else {
+  } else if (contentType) {
+    // ============================================================
+    // CONTENT TYPE FILTERED (Audiobooks or Podcasts pages)
+    // Show only releases matching the specified content type
+    // ============================================================
     releases = await sql`
       SELECT r.*, 
         p.avatar_url as artist_avatar,
@@ -243,7 +247,42 @@ async function getReleases(req, res, sql) {
       LEFT JOIN profiles p ON p.wallet_address = r.artist_address
       WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
         AND r.status != 'draft'
-        AND (${contentType || null}::text IS NULL OR r.content_type = ${contentType || null})
+        AND r.content_type = ${contentType}
+      GROUP BY r.id, p.avatar_url
+      ORDER BY r.created_at DESC
+    `;
+  } else {
+    // ============================================================
+    // UNFILTERED (Stream page, stats, everything else)
+    // Show ALL content types - NO contentType filter
+    // ============================================================
+    releases = await sql`
+      SELECT r.*, 
+        p.avatar_url as artist_avatar,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', t.id,
+              'title', t.title,
+              'trackNumber', t.track_order,
+              'duration', t.duration,
+              'audioCid', t.audio_cid,
+              'audioUrl', t.audio_url,
+              'metadataCid', t.metadata_cid,
+              'soldCount', COALESCE(t.sold_count, 0),
+              'mintedEditions', COALESCE(t.minted_editions, 0),
+              'price', t.price,
+              'videoCid', t.video_cid,
+              'videoUrl', t.video_url
+            ) ORDER BY t.track_order
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as tracks
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      LEFT JOIN profiles p ON p.wallet_address = r.artist_address
+      WHERE (r.is_minted = true OR r.mint_fee_paid = true OR r.status = 'live')
+        AND r.status != 'draft'
       GROUP BY r.id, p.avatar_url
       ORDER BY r.created_at DESC
     `;
