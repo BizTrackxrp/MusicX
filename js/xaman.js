@@ -82,11 +82,18 @@ const XamanWallet = {
   },
 
   /**
-   * Read and clear the saved auth context
+   * Read and clear the saved auth context.
+   * Checks sessionStorage first, then localStorage fallback (survives reload).
    */
   popAuthContext() {
-    const raw = sessionStorage.getItem(AUTH_CONTEXT_KEY);
-    sessionStorage.removeItem(AUTH_CONTEXT_KEY);
+    // After a reload, context is in localStorage (sessionStorage was cleared)
+    let raw = sessionStorage.getItem(AUTH_CONTEXT_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(AUTH_CONTEXT_KEY + '_reload');
+      localStorage.removeItem(AUTH_CONTEXT_KEY + '_reload');
+    } else {
+      sessionStorage.removeItem(AUTH_CONTEXT_KEY);
+    }
     if (!raw) return null;
     try {
       const ctx = JSON.parse(raw);
@@ -210,40 +217,35 @@ const XamanWallet = {
       });
 
       // ── Storage event: detect login from the auth tab (mobile flow) ──
-      // On mobile, Xaman opens a NEW tab. When that tab completes login,
-      // it writes to localStorage. This listener on the ORIGINAL tab picks
-      // that up, logs the user in, closes the waiting modal, and restores
-      // whatever the user was doing before they hit "Connect Wallet".
+      // On mobile, Xaman opens a NEW tab. When that tab completes login
+      // it writes to localStorage. This original tab detects that, saves
+      // context to localStorage (survives reload), then reloads itself.
+      // On reload, handlePageLoad() restores the session automatically,
+      // and restoreAuthContext() re-opens whatever the user was doing.
       window.addEventListener('storage', async (e) => {
         if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from auth tab — restoring session on original tab...');
+          console.log('Login detected from auth tab — reloading original tab...');
           try {
             const userData = JSON.parse(e.newValue);
             if (userData?.address) {
-              saveSession(userData.address);
+              // Persist session to sessionStorage BEFORE reload so handlePageLoad
+              // sees it as a "same tab" session and doesn't clear it
               this.saveSessionToTab(userData.address);
-              AppState.walletType = 'xaman';
-              await this.loadUserData(userData.address);
-              UI.updateAuthUI();
-              UI.showLoggedInState();
 
-              if (typeof MintNotifications !== 'undefined') {
-                MintNotifications.init();
+              // Persist auth context to localStorage so it survives the reload
+              // (sessionStorage is cleared on reload)
+              const ctx = sessionStorage.getItem(AUTH_CONTEXT_KEY);
+              if (ctx) {
+                localStorage.setItem(AUTH_CONTEXT_KEY + '_reload', ctx);
               }
 
-              // Close any open auth/waiting modal
-              const modalsContainer = document.getElementById('modals');
-              if (modalsContainer) modalsContainer.innerHTML = '';
-              if (typeof Modals !== 'undefined') {
-                Modals.activeModal = null;
-                Modals.mintingInProgress = false;
-              }
-
-              // Restore what the user was doing before sign-in
-              await this.restoreAuthContext();
+              // Small delay so the auth tab has time to finish writing
+              setTimeout(() => {
+                location.reload();
+              }, 300);
             }
           } catch (err) {
-            console.error('Failed to restore session from auth tab:', err);
+            console.error('Failed to handle login from auth tab:', err);
           }
         }
       });
@@ -326,9 +328,15 @@ const XamanWallet = {
         }
       }
     } else {
-      // Same tab navigation — restore session
+      // Same tab navigation or post-login reload — restore session
       console.log('Same-tab session found, restoring...');
-      this.checkSession().catch(err => {
+      this.checkSession().then(() => {
+        // After session is restored, check if there's a pre-auth context to restore
+        // (handles the mobile reload case where user was mid-flow before signing in)
+        if (AppState.user?.address) {
+          this.restoreAuthContext();
+        }
+      }).catch(err => {
         console.warn('Session check failed:', err);
       });
     }
