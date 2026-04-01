@@ -66,6 +66,123 @@ const XamanWallet = {
   },
   
   /**
+   * Snapshot everything the user is doing right now to localStorage.
+   * Called just before location.reload() so it survives the page reload.
+   * Captures: current track + timestamp, playback queue, open modal, current page.
+   */
+  savePageState() {
+    try {
+      const state = {
+        timestamp: Date.now(),
+        page: Router?.params?.page || null,
+        openReleaseId: null,
+        player: null,
+      };
+
+      // Capture open release modal via comments section data attribute
+      const commentsSection = document.querySelector('[data-release-id]');
+      if (commentsSection) {
+        state.openReleaseId = commentsSection.dataset.releaseId;
+      }
+
+      // Capture player state
+      if (typeof AppState !== 'undefined' && AppState.player?.currentTrack) {
+        const audio = typeof Player !== 'undefined' ? Player.audio : null;
+        state.player = {
+          currentTrack: AppState.player.currentTrack,
+          currentTime: audio?.currentTime || 0,
+          queue: AppState.player.queue || [],
+          queueIndex: AppState.player.queueIndex || 0,
+          isShuffled: AppState.player.isShuffled || false,
+          isRepeat: AppState.player.isRepeat || false,
+        };
+      }
+
+      localStorage.setItem('xrpmusic_page_state', JSON.stringify(state));
+      console.log('Page state saved:', state);
+    } catch (err) {
+      console.warn('Failed to save page state:', err);
+    }
+  },
+
+  /**
+   * Restore page state after a login-triggered reload.
+   * Re-opens the release modal and resumes playback from exact position.
+   */
+  async restorePageState() {
+    const raw = localStorage.getItem('xrpmusic_page_state');
+    if (!raw) return;
+    localStorage.removeItem('xrpmusic_page_state');
+
+    let state;
+    try {
+      state = JSON.parse(raw);
+      if (Date.now() - state.timestamp > 5 * 60 * 1000) return;
+    } catch {
+      return;
+    }
+
+    console.log('Restoring page state after reload:', state);
+
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    // 1. Restore player at exact timestamp — paused so user chooses to resume
+    if (state.player?.currentTrack && typeof Player !== 'undefined') {
+      try {
+        const { currentTrack, currentTime, queue, queueIndex, isShuffled, isRepeat } = state.player;
+
+        if (typeof QueueManager !== 'undefined') {
+          QueueManager.playNow(currentTrack, {
+            context: 'restore',
+            contextTracks: queue,
+            trackIndex: queueIndex,
+          });
+        } else {
+          Player.playTrack(currentTrack, queue, queueIndex);
+        }
+
+        // Seek to saved position once audio is ready
+        const seekToTime = () => {
+          if (Player.audio && currentTime > 0) {
+            Player.audio.currentTime = currentTime;
+            console.log(`Restored playback to ${currentTime.toFixed(1)}s`);
+          }
+        };
+        if (Player.audio?.readyState >= 2) {
+          seekToTime();
+        } else {
+          Player.audio?.addEventListener('canplay', seekToTime, { once: true });
+        }
+
+        // Pause — don't auto-blast audio on reload
+        setTimeout(() => {
+          Player.audio?.pause();
+          AppState.player.isPlaying = false;
+          if (typeof UI !== 'undefined') UI.updatePlayButton?.();
+        }, 400);
+
+        if (isShuffled && !AppState.player.isShuffled) Player.toggleShuffle?.();
+        if (isRepeat && !AppState.player.isRepeat) Player.toggleRepeat?.();
+
+      } catch (err) {
+        console.warn('Failed to restore player:', err);
+      }
+    }
+
+    // 2. Re-open release modal if one was open
+    if (state.openReleaseId && typeof Modals !== 'undefined' && typeof API !== 'undefined') {
+      try {
+        const data = await API.getRelease(state.openReleaseId);
+        if (data?.release) {
+          setTimeout(() => Modals.showRelease(data.release), 200);
+        }
+      } catch (err) {
+        console.warn('Failed to restore release modal:', err);
+      }
+    }
+  },
+
+  /**
    * Save the current page context before triggering auth
    * so we can restore it after login completes.
    * Called by Modals.showAuth() before opening the auth modal.
@@ -224,25 +341,23 @@ const XamanWallet = {
       // and restoreAuthContext() re-opens whatever the user was doing.
       window.addEventListener('storage', async (e) => {
         if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from auth tab — reloading original tab...');
+          console.log('Login detected from auth tab — snapshotting state and reloading...');
           try {
             const userData = JSON.parse(e.newValue);
             if (userData?.address) {
-              // Persist session to sessionStorage BEFORE reload so handlePageLoad
-              // sees it as a "same tab" session and doesn't clear it
+              // Save session so handlePageLoad sees it as same-tab after reload
               this.saveSessionToTab(userData.address);
 
-              // Persist auth context to localStorage so it survives the reload
-              // (sessionStorage is cleared on reload)
+              // Snapshot everything the user is doing right now
+              this.savePageState();
+
+              // Persist auth context to localStorage (survives reload)
               const ctx = sessionStorage.getItem(AUTH_CONTEXT_KEY);
               if (ctx) {
                 localStorage.setItem(AUTH_CONTEXT_KEY + '_reload', ctx);
               }
 
-              // Small delay so the auth tab has time to finish writing
-              setTimeout(() => {
-                location.reload();
-              }, 300);
+              setTimeout(() => location.reload(), 300);
             }
           } catch (err) {
             console.error('Failed to handle login from auth tab:', err);
@@ -331,10 +446,11 @@ const XamanWallet = {
       // Same tab navigation or post-login reload — restore session
       console.log('Same-tab session found, restoring...');
       this.checkSession().then(() => {
-        // After session is restored, check if there's a pre-auth context to restore
-        // (handles the mobile reload case where user was mid-flow before signing in)
         if (AppState.user?.address) {
+          // Restore pre-auth context (release modal from showAuth flow)
           this.restoreAuthContext();
+          // Restore full page state (track, modal, position from login reload)
+          this.restorePageState();
         }
       }).catch(err => {
         console.warn('Session check failed:', err);
