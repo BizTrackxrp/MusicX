@@ -15,12 +15,24 @@
  * 
  * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
  * due to xrplcluster.com timeouts causing purchase failures.
+ * 
+ * MOBILE AUTH FIX: On mobile, Xaman opens a new tab. The original tab
+ * detects login via the storage event, restores the pre-auth context
+ * (release modal, etc.), and auto-dismisses the waiting modal.
+ * The new auth tab closes itself after login completes.
+ * 
+ * POST-LOGIN CONTEXT: Before triggering auth, the current page state
+ * (open release modal, etc.) is saved to sessionStorage so it can be
+ * restored after login completes — users never lose their place.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
 
 // Session key for this browser tab only
 const SESSION_KEY = 'xrpmusic_session';
+
+// Key for saving pre-auth context (what the user was doing before signing in)
+const AUTH_CONTEXT_KEY = 'xrpmusic_auth_context';
 
 // XRPL node for client-side tx lookups (offer index extraction)
 const XRPL_LOOKUP_NODE = 'https://xrplcluster.com';
@@ -54,6 +66,65 @@ const XamanWallet = {
   },
   
   /**
+   * Save the current page context before triggering auth
+   * so we can restore it after login completes.
+   * Called by Modals.showAuth() before opening the auth modal.
+   */
+  saveAuthContext(context = {}) {
+    const ctx = {
+      page: Router?.params?.page || null,
+      releaseId: context.releaseId || null,
+      action: context.action || null, // 'purchase', 'like', etc.
+      timestamp: Date.now(),
+    };
+    sessionStorage.setItem(AUTH_CONTEXT_KEY, JSON.stringify(ctx));
+    console.log('Auth context saved:', ctx);
+  },
+
+  /**
+   * Read and clear the saved auth context
+   */
+  popAuthContext() {
+    const raw = sessionStorage.getItem(AUTH_CONTEXT_KEY);
+    sessionStorage.removeItem(AUTH_CONTEXT_KEY);
+    if (!raw) return null;
+    try {
+      const ctx = JSON.parse(raw);
+      // Only restore if context is recent (< 10 minutes)
+      if (Date.now() - ctx.timestamp > 10 * 60 * 1000) return null;
+      return ctx;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Restore the pre-auth context after login.
+   * Re-opens the release modal the user was viewing before signing in.
+   */
+  async restoreAuthContext() {
+    const ctx = this.popAuthContext();
+    if (!ctx) return;
+
+    console.log('Restoring auth context:', ctx);
+
+    // If user was viewing a release, re-open it
+    if (ctx.releaseId) {
+      try {
+        const data = await API.getRelease(ctx.releaseId);
+        if (data?.release && typeof Modals !== 'undefined') {
+          // Small delay to let UI settle after login
+          setTimeout(() => {
+            Modals.showRelease(data.release);
+          }, 400);
+        }
+      } catch (err) {
+        console.warn('Could not restore release context:', err);
+      }
+    }
+  },
+
+  /**
    * Initialize Xaman SDK
    */
   async init() {
@@ -77,13 +148,13 @@ const XamanWallet = {
             this.saveSessionToTab(account);
             saveSession(account);
             AppState.walletType = 'xaman';
-            // Also write to localStorage so the original tab can detect login
+            // Write to localStorage so the original tab can detect login via storage event
             localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
             await this.loadUserData(account);
             UI.updateAuthUI();
             UI.showLoggedInState();
             
-           // Initialize mint notifications
+            // Initialize mint notifications
             if (typeof MintNotifications !== 'undefined') {
               MintNotifications.init();
             }
@@ -95,17 +166,25 @@ const XamanWallet = {
               console.log('Auth complete in new tab, closing...');
               setTimeout(() => {
                 window.close();
-                // If window.close() doesn't work, show a message
+                // If window.close() is blocked, show a friendly message
                 setTimeout(() => {
                   document.title = '✅ Signed In — Go back to your music!';
                   const banner = document.createElement('div');
-                  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
-                  banner.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">✅</div><div style="font-size:24px;font-weight:700;margin-bottom:12px;">You\'re signed in!</div><div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">Go back to your other tab to continue listening</div><div style="font-size:14px;color:rgba(255,255,255,0.4);">You can close this tab</div>';
+                  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:24px;';
+                  banner.innerHTML = `
+                    <div style="font-size:64px;margin-bottom:20px;">✅</div>
+                    <div style="font-size:24px;font-weight:700;margin-bottom:12px;">You're signed in!</div>
+                    <div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">Go back to the other tab to continue</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,0.4);">You can close this tab</div>
+                  `;
                   document.body.appendChild(banner);
                 }, 500);
               }, 300);
               return;
             }
+
+            // This is the original tab — restore pre-auth context
+            await this.restoreAuthContext();
           }
         } catch (err) {
           console.error('Error getting account after success:', err);
@@ -129,30 +208,46 @@ const XamanWallet = {
         console.error('Xumm error:', err);
         this.isConnecting = false;
       });
-      // Listen for login from another tab (Xaman opens new tab for auth)
+
+      // ── Storage event: detect login from the auth tab (mobile flow) ──
+      // On mobile, Xaman opens a NEW tab. When that tab completes login,
+      // it writes to localStorage. This listener on the ORIGINAL tab picks
+      // that up, logs the user in, closes the waiting modal, and restores
+      // whatever the user was doing before they hit "Connect Wallet".
       window.addEventListener('storage', async (e) => {
-  if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-    console.log('Login detected from another tab, restoring session...');
-    try {
-      const userData = JSON.parse(e.newValue);
-      if (userData?.address) {
-        saveSession(userData.address);
-        this.saveSessionToTab(userData.address);
-        await this.loadUserData(userData.address);
-        UI.updateAuthUI();
-        UI.showLoggedInState();
-        if (typeof MintNotifications !== 'undefined') {
-          MintNotifications.init();
+        if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
+          console.log('Login detected from auth tab — restoring session on original tab...');
+          try {
+            const userData = JSON.parse(e.newValue);
+            if (userData?.address) {
+              saveSession(userData.address);
+              this.saveSessionToTab(userData.address);
+              AppState.walletType = 'xaman';
+              await this.loadUserData(userData.address);
+              UI.updateAuthUI();
+              UI.showLoggedInState();
+
+              if (typeof MintNotifications !== 'undefined') {
+                MintNotifications.init();
+              }
+
+              // Close any open auth/waiting modal
+              const modalsContainer = document.getElementById('modals');
+              if (modalsContainer) modalsContainer.innerHTML = '';
+              if (typeof Modals !== 'undefined') {
+                Modals.activeModal = null;
+                Modals.mintingInProgress = false;
+              }
+
+              // Restore what the user was doing before sign-in
+              await this.restoreAuthContext();
+            }
+          } catch (err) {
+            console.error('Failed to restore session from auth tab:', err);
+          }
         }
-        // Auto-dismiss the Xaman waiting modal on the original tab
-        const modalsContainer = document.getElementById('modals');
-        if (modalsContainer) modalsContainer.innerHTML = '';
-      }
-    } catch (err) {
-      console.error('Failed to restore session from other tab:', err);
-    }
-  }
-});
+      });
+
       const readyTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
       );
@@ -177,8 +272,7 @@ const XamanWallet = {
    * Set up automatic logout on page close/unload
    */
   setupAutoLogout() {
-    // Clear session when page is being unloaded (closed, refreshed, navigated away)
-   window.addEventListener('beforeunload', () => {
+    window.addEventListener('beforeunload', () => {
       // Clear localStorage session so it doesn't persist
       // BUT not if this is an auth tab (don't clear the session we just set)
       const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
@@ -210,32 +304,29 @@ const XamanWallet = {
    * Handle page load - only restore session if it's a same-tab session
    */
   handlePageLoad() {
-    // Check if this is a fresh page load or same-tab navigation
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     
-   if (!tabSession) {
+    if (!tabSession) {
       // Check if this is a new auth tab opened by Xaman
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('xumm') || document.referrer.includes('xumm.app') || document.referrer.includes('xaman.app')) {
         sessionStorage.setItem('xrpmusic_auth_tab', 'true');
         console.log('Auth redirect tab detected');
       } else {
-        // Fresh page load (new tab or browser reopened) - clear any old sessions
-        console.log('Fresh page load detected - clearing any stale sessions');
-      localStorage.removeItem('xrpmusic_user');
-      localStorage.removeItem('xrpmusic_profile');
-      // clearSession may not exist yet if state.js hasn't fully initialized
-      if (typeof clearSession === 'function') {
-        clearSession();
-      }
-      // UI may not be loaded yet during init - it will check AppState on its own init
-      if (typeof UI !== 'undefined' && UI.updateAuthUI) {
-        UI.updateAuthUI();
-        UI.showLoggedOutState();
-      }
+        // Fresh page load — clear any old sessions
+        console.log('Fresh page load detected — clearing any stale sessions');
+        localStorage.removeItem('xrpmusic_user');
+        localStorage.removeItem('xrpmusic_profile');
+        if (typeof clearSession === 'function') {
+          clearSession();
+        }
+        if (typeof UI !== 'undefined' && UI.updateAuthUI) {
+          UI.updateAuthUI();
+          UI.showLoggedOutState();
+        }
       }
     } else {
-      // Same tab navigation - restore session
+      // Same tab navigation — restore session
       console.log('Same-tab session found, restoring...');
       this.checkSession().catch(err => {
         console.warn('Session check failed:', err);
@@ -293,7 +384,6 @@ const XamanWallet = {
    * Check for existing session
    */
   async checkSession() {
-    // Only check if we have a tab session marker
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     if (!tabSession) {
       console.log('No tab session, skipping session check');
@@ -303,8 +393,6 @@ const XamanWallet = {
     if (AppState.user?.address) {
       await this.loadUserData(AppState.user.address);
       UI.updateAuthUI();
-      
-      // Initialize mint notifications
       if (typeof MintNotifications !== 'undefined') {
         MintNotifications.init();
       }
@@ -318,15 +406,12 @@ const XamanWallet = {
         saveSession(account);
         await this.loadUserData(account);
         UI.updateAuthUI();
-        
-        // Initialize mint notifications
         if (typeof MintNotifications !== 'undefined') {
           MintNotifications.init();
         }
       }
     } catch (err) {
       console.log('No existing SDK session');
-      // Clear stale tab session if SDK session is gone
       this.clearTabSession();
     }
   },
@@ -347,10 +432,8 @@ const XamanWallet = {
       const playlists = await API.getPlaylists(address);
       setPlaylists(playlists);
 
-     // Scan for external music NFTs (runs in background, doesn't block)
       scanExternalMusicNfts(address);
 
-      // Load ownership data for Buy/Owned/Edit button logic
       if (typeof OwnershipHelper !== 'undefined') {
         OwnershipHelper.init();
       }
@@ -368,7 +451,7 @@ const XamanWallet = {
     
     this.isConnecting = true;
     
-   try {
+    try {
       sessionStorage.setItem('xrpmusic_return_url', window.location.href);
       await this.sdk.authorize();
     } catch (err) {
@@ -390,7 +473,6 @@ const XamanWallet = {
     UI.updateAuthUI();
     UI.showLoggedOutState();
     
-    // Cleanup notifications
     if (typeof MintNotifications !== 'undefined') {
       MintNotifications.cleanup();
     }
@@ -460,11 +542,6 @@ const XamanWallet = {
   
   /**
    * Mint NFT - Fire and Forget!
-   * 
-   * After user signs the 2 transactions (pay + authorize), the job is queued
-   * and the user can close the page. The Railway worker handles the rest.
-   * 
-   * Max 10,000 NFTs per batch - no timeout limits!
    */
   async mintNFT(metadataUri, options = {}) {
     if (!this.sdk) {
@@ -486,7 +563,6 @@ const XamanWallet = {
       releaseId = null
     } = options;
     
-    // Validate quantity - max 10,000 NFTs
     if (quantity > 10000) {
       throw new Error('Maximum 10,000 NFTs per batch');
     }
@@ -501,7 +577,6 @@ const XamanWallet = {
     const mintFee = (totalNFTs * 0.000012) + 0.001;
     const mintFeeDrops = Math.ceil(mintFee * 1000000).toString();
     
-    // Get platform address from API
     const configResponse = await fetch('/api/batch-mint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -517,7 +592,6 @@ const XamanWallet = {
     console.log('Starting mint process...', { platformAddress, trackCount, quantity, totalNFTs, mintFee, trackIds, releaseId });
     
     try {
-      // STEP 1: Pay mint fee
       if (onProgress) {
         onProgress({
           stage: 'paying',
@@ -527,7 +601,6 @@ const XamanWallet = {
         });
       }
       
-      // Make sure SDK payload is available
       if (!this.sdk.payload) {
         console.error('SDK payload not available, waiting...');
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -556,13 +629,10 @@ const XamanWallet = {
         throw new Error('Session expired - please refresh the page and reconnect your wallet');
       }
       
-      console.log('Payment payload created:', paymentPayload);
-      
       if (!paymentPayload || !paymentPayload.uuid) {
         throw new Error('Failed to create Xaman request - please refresh and reconnect your wallet');
       }
       
-      // Open Xaman for fee payment
       if (paymentPayload.next?.always) {
         console.log('Opening Xaman for fee payment:', paymentPayload.next.always);
         this.openXamanPopup(paymentPayload.next.always);
@@ -570,7 +640,6 @@ const XamanWallet = {
         throw new Error('No sign URL returned from Xaman');
       }
       
-      // Wait for fee payment
       const paymentResult = await this.waitForPayload(paymentPayload.uuid);
       
       if (!paymentResult.success) {
@@ -579,7 +648,6 @@ const XamanWallet = {
       
       console.log('Mint fee paid:', paymentResult.txHash);
       
-      // STEP 2: Authorize platform as minter
       if (onProgress) {
         onProgress({
           stage: 'authorizing',
@@ -608,13 +676,10 @@ const XamanWallet = {
         throw new Error('Session expired - please refresh the page and reconnect your wallet');
       }
       
-      console.log('Auth payload created:', authPayload);
-      
       if (!authPayload || !authPayload.uuid) {
         throw new Error('Failed to create Xaman request - please refresh and reconnect your wallet');
       }
       
-      // Open Xaman for authorization
       if (authPayload.next?.always) {
         console.log('Opening Xaman for authorization:', authPayload.next.always);
         this.openXamanPopup(authPayload.next.always);
@@ -622,7 +687,6 @@ const XamanWallet = {
         throw new Error('No sign URL returned from Xaman');
       }
       
-      // Wait for authorization
       const authResult = await this.waitForPayload(authPayload.uuid);
       
       if (!authResult.success) {
@@ -631,7 +695,6 @@ const XamanWallet = {
       
       console.log('Authorization successful:', authResult.txHash);
       
-      // STEP 3: Queue the mint job - FIRE AND FORGET!
       if (onProgress) {
         onProgress({
           stage: 'queuing',
@@ -664,12 +727,10 @@ const XamanWallet = {
       
       const jobId = queueData.jobId;
       
-      // Notify the bell service about the new job
       if (typeof MintNotifications !== 'undefined') {
         MintNotifications.addJob(jobId, releaseId, totalNFTs);
       }
       
-      // DONE! User can close the page now
       if (onProgress) {
         onProgress({
           stage: 'queued',
@@ -789,7 +850,6 @@ const XamanWallet = {
     
     console.log('Payment payload created:', payload.uuid);
     
-    // Open Xaman for payment signing
     if (payload.next?.always) {
       console.log('Opening Xaman for payment:', payload.next.always);
       this.openXamanPopup(payload.next.always);
@@ -833,8 +893,6 @@ const XamanWallet = {
       throw new Error('Failed to create transfer payload - please refresh and reconnect your wallet');
     }
     
-    console.log('Transfer offer payload:', payload);
-    
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
@@ -866,11 +924,7 @@ const XamanWallet = {
    * Accept a sell offer to receive an NFT
    * 
    * XAMAN 5.0 WORKAROUND: Added explicit Memos, force_network, identifier,
-   * and expanded blob fields to prevent the "Text Strings must be rendered
-   * within a <Text> component" crash. Xaman 5.0 added NFT offer detail
-   * lookup on the sign request screen which crashes when certain fields
-   * resolve to null/undefined strings. Providing explicit data for every
-   * field gives the renderer something safe to display.
+   * and expanded blob fields to prevent the crash.
    */
   async acceptSellOffer(offerIndex) {
     if (!this.sdk) throw new Error('SDK not initialized');
@@ -909,8 +963,6 @@ const XamanWallet = {
     if (!payload || !payload.uuid) {
       throw new Error('Failed to create accept offer payload - please refresh and reconnect your wallet');
     }
-    
-    console.log('Accept offer payload:', payload);
     
     if (payload.next?.always) {
       console.log('Opening Xaman for accept offer:', payload.next.always);
@@ -956,8 +1008,6 @@ const XamanWallet = {
       throw new Error('Failed to create sell offer payload - please refresh and reconnect your wallet');
     }
     
-    console.log('Create sell offer payload:', payload);
-    
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
@@ -971,12 +1021,10 @@ const XamanWallet = {
         const offerIndex = await this.getOfferIndexFromTx(result.txHash);
         if (offerIndex) {
           result.offerIndex = offerIndex;
-          console.log('Got offer index from transaction:', offerIndex);
         } else {
           const fallbackIndex = await this.getLatestSellOffer(nftTokenId, AppState.user.address);
           if (fallbackIndex) {
             result.offerIndex = fallbackIndex;
-            console.log('Got offer index from fallback:', fallbackIndex);
           }
         }
       } catch (err) {
@@ -1025,8 +1073,6 @@ const XamanWallet = {
       throw new Error('Failed to create cancel offer payload - please refresh and reconnect your wallet');
     }
     
-    console.log('Cancel offer payload:', payload);
-    
     if (payload.next?.always) {
       this.openXamanPopup(payload.next.always);
     } else {
@@ -1053,14 +1099,11 @@ const XamanWallet = {
     
     console.log('Old offer cancelled, creating new offer...');
     
-    const newOfferResult = await this.createSellOffer(nftTokenId, newPrice);
-    
-    return newOfferResult;
+    return this.createSellOffer(nftTokenId, newPrice);
   },
   
   /**
    * Get offer index from transaction metadata
-   * Uses s1.ripple.com JSON-RPC endpoint for reliability
    */
   async getOfferIndexFromTx(txHash) {
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1076,14 +1119,12 @@ const XamanWallet = {
       });
       
       const data = await response.json();
-      console.log('Transaction data for offer lookup:', data.result);
       
       if (data.result?.meta?.AffectedNodes) {
         for (const node of data.result.meta.AffectedNodes) {
           if (node.CreatedNode?.LedgerEntryType === 'NFTokenOffer') {
             let offerIndex = node.CreatedNode.LedgerIndex;
             if (offerIndex && offerIndex.length < 64) {
-              console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
               offerIndex = offerIndex.padStart(64, '0');
             }
             console.log('Found offer index from transaction:', offerIndex);
@@ -1092,7 +1133,6 @@ const XamanWallet = {
         }
       }
       
-      console.log('No NFTokenOffer found in transaction metadata');
       return null;
     } catch (err) {
       console.error('getOfferIndexFromTx error:', err);
@@ -1102,7 +1142,6 @@ const XamanWallet = {
   
   /**
    * Get the latest sell offer for an NFT from a specific owner
-   * Uses s1.ripple.com JSON-RPC endpoint for reliability
    */
   async getLatestSellOffer(nftTokenId, ownerAddress) {
     try {
@@ -1122,10 +1161,8 @@ const XamanWallet = {
         if (ownerOffers.length > 0) {
           let offerIndex = ownerOffers[ownerOffers.length - 1].nft_offer_index;
           if (offerIndex && offerIndex.length < 64) {
-            console.log(`Padding offer_index from ${offerIndex.length} to 64 chars`);
             offerIndex = offerIndex.padStart(64, '0');
           }
-          console.log('Fallback: using most recent offer:', offerIndex);
           return offerIndex;
         }
       }
