@@ -1,6 +1,8 @@
 /**
  * XRP Music - Audiobooks Page
- * Browse and discover audiobooks on the platform
+ * 
+ * Solo spotlight mode: when only 1 audiobook exists, gives it the full hero page.
+ * Grid mode: kicks in when 2+ audiobooks are on the platform.
  */
 
 const AudiobooksPage = {
@@ -8,46 +10,27 @@ const AudiobooksPage = {
   isLoading: false,
 
   async render() {
-    return `
+    UI.renderPage(`
       ${this.getStyles()}
       <div class="audiobooks-page">
-        <div class="audiobooks-header">
-          <div class="section-title-group">
-            <div class="section-icon audiobooks">📚</div>
-            <div>
-              <h1>Audiobooks</h1>
-              <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">
-                Discover audiobooks on XRP Music
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div id="audiobooks-content">
           <div class="loading-spinner">
             <div class="spinner"></div>
-            <p>Loading audiobooks...</p>
           </div>
         </div>
       </div>
-    `;
-  },
-
-  async init() {
+    `);
     await this.loadAudiobooks();
   },
 
   async loadAudiobooks() {
     if (this.isLoading) return;
     this.isLoading = true;
-
     try {
-      const response = await fetch(`/api/releases?contentType=audiobook`);
+      const response = await fetch('/api/releases?contentType=audiobook');
       if (!response.ok) throw new Error('Failed to load audiobooks');
-      
       const data = await response.json();
       this.audiobooks = data.releases || [];
-      
       this.renderContent();
     } catch (error) {
       console.error('Error loading audiobooks:', error);
@@ -62,59 +45,147 @@ const AudiobooksPage = {
     if (!container) return;
 
     if (this.audiobooks.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">📚</div>
-          <h3>No audiobooks yet</h3>
-          <p>Be the first to upload an audiobook!</p>
-          ${AppState.user?.address ? `
-            <button class="btn-primary" onclick="Modals.showCreate()">
-              Upload Audiobook
-            </button>
-          ` : ''}
-        </div>
-      `;
+      container.innerHTML = this.renderEmptyState();
+      this.bindEmptyEvents();
       return;
     }
 
-    container.innerHTML = `
-      <div class="audiobooks-grid">
-        ${this.audiobooks.map(audiobook => this.renderAudiobookCard(audiobook)).join('')}
-      </div>
-    `;
+    if (this.audiobooks.length === 1) {
+      container.innerHTML = this.renderHeroSpotlight(this.audiobooks[0]);
+      this.bindHeroEvents(this.audiobooks[0]);
+      return;
+    }
 
-    this.bindEvents();
+    container.innerHTML = this.renderGrid();
+    this.bindGridEvents();
   },
 
-  renderAudiobookCard(audiobook) {
-    const coverUrl = audiobook.cover_url || '/placeholder.png';
-    const editionsLeft = audiobook.total_editions - (audiobook.sold_editions || 0);
-    
+  renderEmptyState() {
     return `
-      <div class="audiobook-card" data-release-id="${audiobook.id}">
-        <div class="audiobook-cover">
-          <img src="${coverUrl}" alt="${audiobook.title}" loading="lazy">
-          ${editionsLeft > 0 ? `
-            <div class="editions-badge">${editionsLeft} left</div>
-          ` : `
-            <div class="sold-out-badge">Sold Out</div>
-          `}
+      <div class="ab-empty">
+        <div class="ab-empty-icon">📚</div>
+        <h2>Audiobooks are coming to XRP Music</h2>
+        <p>We're waiting for our first narrator to step up.<br>Could that be you?</p>
+        <div class="ab-empty-actions">
+          <button class="btn btn-primary ab-upload-btn" style="font-size:15px;padding:14px 32px;">
+            🎙️ Upload Your Audiobook
+          </button>
+          <p class="ab-empty-sub">Mint as an NFT. Own your distribution. Keep your royalties.</p>
         </div>
-        <div class="audiobook-info">
-          <div class="audiobook-title">${audiobook.title}</div>
-          <div class="audiobook-artist">${audiobook.artist_name || 'Unknown Artist'}</div>
-          ${audiobook.description ? `
-            <div class="audiobook-description">${audiobook.description.substring(0, 100)}${audiobook.description.length > 100 ? '...' : ''}</div>
-          ` : ''}
-          <div class="audiobook-footer">
-            <div class="audiobook-price">${audiobook.album_price || audiobook.song_price || 0} XRP</div>
-            <button class="btn-secondary btn-sm play-audiobook-btn" data-release-id="${audiobook.id}">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-              Preview
+      </div>
+    `;
+  },
+
+  renderHeroSpotlight(book) {
+    const cover = book.coverUrl || book.cover_url || '/placeholder.png';
+    const artist = book.artistName || book.artist_name || 'Unknown Author';
+    const price = book.albumPrice || book.songPrice || book.album_price || book.song_price || 0;
+    const available = (book.totalEditions || book.total_editions || 0) - (book.soldEditions || book.sold_editions || 0);
+    const description = book.description || '';
+    const duration = book.tracks?.[0]?.duration || null;
+
+    return `
+      <div class="ab-hero-wrap">
+        <!-- Page header -->
+        <div class="ab-page-header">
+          <div class="ab-page-icon">📚</div>
+          <div>
+            <h1>Audiobooks</h1>
+            <p>The first title on XRP Music — exclusively available as an NFT</p>
+          </div>
+        </div>
+
+        <!-- Hero spotlight -->
+        <div class="ab-hero">
+          <div class="ab-hero-cover-wrap">
+            <img src="${cover}" alt="${book.title}" class="ab-hero-cover" onerror="this.src='/placeholder.png'">
+            <div class="ab-hero-cover-glow" style="background-image: url('${cover}')"></div>
+          </div>
+          <div class="ab-hero-info">
+            <div class="ab-hero-eyebrow">🎧 Featured Audiobook</div>
+            <h2 class="ab-hero-title">${book.title}</h2>
+            <div class="ab-hero-author">
+              <span>by</span>
+              <strong>${artist}</strong>
+            </div>
+            ${duration ? `<div class="ab-hero-meta">⏱ ${this.formatDuration(duration)}</div>` : ''}
+            <div class="ab-hero-availability">
+              <span class="ab-avail-badge">${available} of ${book.totalEditions || book.total_editions || 100} editions available</span>
+            </div>
+            ${description ? `<p class="ab-hero-desc">${description}</p>` : ''}
+            <div class="ab-hero-actions">
+              <button class="btn ab-play-btn" data-release-id="${book.id}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Preview
+              </button>
+              <button class="btn btn-primary ab-buy-btn" data-release-id="${book.id}" style="font-size:15px;padding:14px 28px;">
+                🛒 Buy NFT · ${price} XRP
+              </button>
+            </div>
+            <p class="ab-hero-footnote">Own this audiobook as an NFT on the XRP Ledger. Resell it. Gift it. It's yours.</p>
+          </div>
+        </div>
+
+        <!-- Bottom CTA for creators -->
+        <div class="ab-creator-cta">
+          <div class="ab-creator-cta-text">
+            <h3>Are you an author or narrator?</h3>
+            <p>XRP Music is one of the first platforms to let you mint audiobooks as NFTs. Be early.</p>
+          </div>
+          <button class="btn btn-secondary ab-upload-btn" style="white-space:nowrap;">
+            Upload Your Audiobook
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  renderGrid() {
+    return `
+      <div class="ab-grid-wrap">
+        <div class="ab-page-header">
+          <div class="ab-page-icon">📚</div>
+          <div>
+            <h1>Audiobooks</h1>
+            <p>Mint-owned audio stories on the XRP Ledger</p>
+          </div>
+        </div>
+        <div class="ab-grid">
+          ${this.audiobooks.map(b => this.renderCard(b)).join('')}
+        </div>
+        <div class="ab-creator-cta" style="margin-top:48px;">
+          <div class="ab-creator-cta-text">
+            <h3>Have an audiobook to share?</h3>
+            <p>Mint it as an NFT and keep your royalties.</p>
+          </div>
+          <button class="btn btn-secondary ab-upload-btn" style="white-space:nowrap;">
+            Upload Your Audiobook
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  renderCard(book) {
+    const cover = book.coverUrl || book.cover_url || '/placeholder.png';
+    const artist = book.artistName || book.artist_name || 'Unknown';
+    const price = book.albumPrice || book.songPrice || book.album_price || book.song_price || 0;
+    const available = (book.totalEditions || book.total_editions || 0) - (book.soldEditions || book.sold_editions || 0);
+    return `
+      <div class="ab-card" data-release-id="${book.id}">
+        <div class="ab-card-cover">
+          <img src="${cover}" alt="${book.title}" onerror="this.src='/placeholder.png'">
+          <div class="ab-card-overlay">
+            <button class="ab-card-play" data-release-id="${book.id}">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </button>
           </div>
+          <div class="ab-card-avail">${available > 0 ? available + ' left' : 'Sold Out'}</div>
+        </div>
+        <div class="ab-card-info">
+          <div class="ab-card-title">${book.title}</div>
+          <div class="ab-card-artist">${artist}</div>
+          <div class="ab-card-price">${price} XRP</div>
         </div>
       </div>
     `;
@@ -123,197 +194,151 @@ const AudiobooksPage = {
   renderError() {
     const container = document.getElementById('audiobooks-content');
     if (!container) return;
-
     container.innerHTML = `
-      <div class="error-state">
-        <div class="error-icon">⚠️</div>
-        <h3>Failed to load audiobooks</h3>
-        <p>Please try again later</p>
-        <button class="btn-primary" onclick="AudiobooksPage.loadAudiobooks()">
-          Retry
-        </button>
+      <div class="ab-empty">
+        <div class="ab-empty-icon">⚠️</div>
+        <h2>Couldn't load audiobooks</h2>
+        <button class="btn btn-primary" onclick="AudiobooksPage.loadAudiobooks()">Retry</button>
       </div>
     `;
   },
 
-  bindEvents() {
-    // Card clicks - open release modal
-    document.querySelectorAll('.audiobook-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.play-audiobook-btn')) return;
-        const releaseId = card.dataset.releaseId;
-        Modals.showRelease(releaseId);
+  bindEmptyEvents() {
+    document.querySelectorAll('.ab-upload-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!AppState.user?.address) { Modals.showAuth(); return; }
+        Modals.showCreate();
       });
     });
+  },
 
-    // Play preview buttons
-    document.querySelectorAll('.play-audiobook-btn').forEach(btn => {
+  bindHeroEvents(book) {
+    document.querySelector('.ab-play-btn')?.addEventListener('click', () => {
+      Modals.showRelease(book);
+    });
+    document.querySelector('.ab-buy-btn')?.addEventListener('click', () => {
+      Modals.showRelease(book);
+    });
+    document.querySelectorAll('.ab-upload-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!AppState.user?.address) { Modals.showAuth(); return; }
+        Modals.showCreate();
+      });
+    });
+  },
+
+  bindGridEvents() {
+    document.querySelectorAll('.ab-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.ab-card-play')) return;
+        const book = this.audiobooks.find(b => b.id === card.dataset.releaseId);
+        if (book) Modals.showRelease(book);
+      });
+    });
+    document.querySelectorAll('.ab-card-play').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const releaseId = btn.dataset.releaseId;
-        const audiobook = this.audiobooks.find(a => a.id === releaseId);
-        if (audiobook?.tracks?.length > 0) {
-          StreamPage.playRelease(audiobook);
-        }
+        const book = this.audiobooks.find(b => b.id === btn.dataset.releaseId);
+        if (book) Modals.showRelease(book);
       });
     });
+    document.querySelectorAll('.ab-upload-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!AppState.user?.address) { Modals.showAuth(); return; }
+        Modals.showCreate();
+      });
+    });
+  },
+
+  formatDuration(seconds) {
+    if (!seconds) return '';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m} min`;
   },
 
   getStyles() {
     return `
       <style>
-        .audiobooks-page {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 0 24px 80px;
-        }
+        .audiobooks-page { max-width: 1200px; margin: 0 auto; padding: 0 24px 120px; }
 
-        .audiobooks-header {
-          margin-bottom: 32px;
-        }
+        /* ── Page header ── */
+        .ab-page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 40px; }
+        .ab-page-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+        .ab-page-header h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
+        .ab-page-header p { font-size: 14px; color: var(--text-muted); margin: 0; }
 
-        .section-icon.audiobooks {
-          width: 48px;
-          height: 48px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        }
+        /* ── Empty state ── */
+        .ab-empty { text-align: center; padding: 100px 24px; }
+        .ab-empty-icon { font-size: 72px; margin-bottom: 24px; }
+        .ab-empty h2 { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+        .ab-empty p { font-size: 16px; color: var(--text-muted); margin-bottom: 32px; line-height: 1.6; }
+        .ab-empty-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .ab-empty-sub { font-size: 13px; color: var(--text-muted); margin: 0; }
 
-        .audiobooks-grid {
+        /* ── Hero spotlight ── */
+        .ab-hero-wrap {}
+        .ab-hero {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 24px;
+          grid-template-columns: 340px 1fr;
+          gap: 48px;
+          align-items: start;
+          margin-bottom: 48px;
+          background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(124,58,237,0.04));
+          border: 1px solid rgba(139,92,246,0.2);
+          border-radius: 24px;
+          padding: 40px;
         }
+        @media (max-width: 800px) {
+          .ab-hero { grid-template-columns: 1fr; gap: 32px; padding: 24px; }
+        }
+        .ab-hero-cover-wrap { position: relative; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.5); }
+        .ab-hero-cover { width: 100%; display: block; border-radius: 16px; }
+        .ab-hero-cover-glow {
+          position: absolute; inset: 0; border-radius: 16px;
+          background-size: cover; background-position: center;
+          filter: blur(40px); opacity: 0.3; transform: scale(1.1);
+          z-index: -1;
+        }
+        .ab-hero-eyebrow { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #a78bfa; margin-bottom: 12px; }
+        .ab-hero-title { font-size: 30px; font-weight: 800; line-height: 1.2; margin-bottom: 12px; color: var(--text-primary); }
+        .ab-hero-author { font-size: 16px; color: var(--text-muted); margin-bottom: 8px; }
+        .ab-hero-author strong { color: var(--text-secondary); }
+        .ab-hero-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+        .ab-avail-badge { display: inline-block; padding: 5px 12px; background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); border-radius: 20px; font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 16px; }
+        .ab-hero-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 28px; max-height: 140px; overflow-y: auto; }
+        .ab-hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .ab-play-btn { display: flex; align-items: center; gap: 8px; padding: 14px 24px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; color: var(--text-primary); font-size: 15px; cursor: pointer; transition: all 150ms; }
+        .ab-play-btn:hover { background: rgba(255,255,255,0.14); }
+        .ab-hero-footnote { font-size: 12px; color: var(--text-muted); margin: 0; }
 
-        .audiobook-card {
-          background: var(--bg-card);
+        /* ── Creator CTA ── */
+        .ab-creator-cta {
+          display: flex; align-items: center; justify-content: space-between; gap: 24px;
+          padding: 28px 32px;
+          background: rgba(255,255,255,0.03);
           border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          cursor: pointer;
-          transition: all 150ms ease;
+          border-radius: 16px;
         }
+        @media (max-width: 640px) { .ab-creator-cta { flex-direction: column; text-align: center; } }
+        .ab-creator-cta-text h3 { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+        .ab-creator-cta-text p { font-size: 13px; color: var(--text-muted); margin: 0; }
 
-        .audiobook-card:hover {
-          border-color: var(--accent);
-          transform: translateY(-4px);
-        }
-
-        .audiobook-cover {
-          position: relative;
-          aspect-ratio: 1;
-          background: var(--bg-hover);
-        }
-
-        .audiobook-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .editions-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 8px;
-          background: rgba(59, 130, 246, 0.9);
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: 600;
-          color: white;
-        }
-
-        .sold-out-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 8px;
-          background: rgba(239, 68, 68, 0.9);
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: 600;
-          color: white;
-        }
-
-        .audiobook-info {
-          padding: 12px;
-        }
-
-        .audiobook-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .audiobook-artist {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-        }
-
-        .audiobook-description {
-          font-size: 12px;
-          color: var(--text-secondary);
-          line-height: 1.4;
-          margin-bottom: 12px;
-        }
-
-        .audiobook-footer {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-top: 8px;
-        }
-
-        .audiobook-price {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--accent);
-        }
-
-        .play-audiobook-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .empty-state, .error-state {
-          text-align: center;
-          padding: 80px 20px;
-        }
-
-        .empty-icon, .error-icon {
-          font-size: 64px;
-          margin-bottom: 16px;
-        }
-
-        .empty-state h3, .error-state h3 {
-          font-size: 24px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 8px;
-        }
-
-        .empty-state p, .error-state p {
-          font-size: 14px;
-          color: var(--text-muted);
-          margin-bottom: 24px;
-        }
-
-        @media (max-width: 640px) {
-          .audiobooks-grid {
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 16px;
-          }
-        }
+        /* ── Grid ── */
+        .ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
+        .ab-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; cursor: pointer; transition: all 150ms; }
+        .ab-card:hover { border-color: #8b5cf6; transform: translateY(-4px); }
+        .ab-card-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
+        .ab-card-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .ab-card-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 150ms; }
+        .ab-card:hover .ab-card-overlay { opacity: 1; }
+        .ab-card-play { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .ab-card-avail { position: absolute; top: 8px; right: 8px; padding: 3px 8px; background: rgba(0,0,0,0.7); border-radius: 6px; font-size: 11px; font-weight: 600; color: white; }
+        .ab-card-info { padding: 12px; }
+        .ab-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ab-card-artist { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+        .ab-card-price { font-size: 13px; font-weight: 700; color: #a78bfa; }
       </style>
     `;
   },
