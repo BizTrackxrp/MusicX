@@ -5407,7 +5407,6 @@ bindCreateEvents(existingDraft) {
 //
 // Also deploy the updated api/profile.js that accepts commentPolicy.
 // ============================================================
-
 showEditProfile() {
     if (!AppState.user?.address) return;
     this.activeModal = 'edit-profile';
@@ -5440,15 +5439,17 @@ showEditProfile() {
                           <polyline points="21 15 16 10 5 21"></polyline>
                         </svg>
                         <span>Upload Banner</span>
+                        <span class="upload-size-hint">Best size: 1500 × 500 px</span>
                       </div>`
                   }
-                  <input type="file" id="banner-input" accept="image/*" hidden>
-                  <button type="button" class="banner-edit-btn" onclick="document.getElementById('banner-input').click()">
+                  <input type="file" id="banner-input" accept="image/*" style="display:none;">
+                  <button type="button" class="banner-edit-btn" id="banner-edit-btn">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                   </button>
+                  <div class="banner-size-hint-overlay">1500 × 500 px recommended • Max 5MB</div>
                 </div>
                 <div class="avatar-upload" id="avatar-upload">
                   ${profile.avatarUrl 
@@ -5460,14 +5461,15 @@ showEditProfile() {
                         </svg>
                       </div>`
                   }
-                  <input type="file" id="avatar-input" accept="image/*" hidden>
-                  <button type="button" class="avatar-edit-btn" onclick="document.getElementById('avatar-input').click()">
+                  <input type="file" id="avatar-input" accept="image/*" style="display:none;">
+                  <button type="button" class="avatar-edit-btn" id="avatar-edit-btn">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                   </button>
                 </div>
+                <div class="avatar-size-hint">Profile photo: 400 × 400 px • Max 5MB</div>
               </div>
               <input type="hidden" name="avatarUrl" id="avatar-url" value="${profile.avatarUrl || ''}">
               <input type="hidden" name="bannerUrl" id="banner-url" value="${profile.bannerUrl || ''}">
@@ -5577,7 +5579,7 @@ showEditProfile() {
       
       <style>
         .edit-profile-modal { max-width: 500px; }
-        .profile-images-section { position: relative; margin-bottom: 60px; }
+        .profile-images-section { position: relative; margin-bottom: 72px; }
         .banner-upload {
           width: 100%;
           height: 120px;
@@ -5587,6 +5589,32 @@ showEditProfile() {
           position: relative;
           cursor: pointer;
         }
+        .banner-upload:hover .banner-size-hint-overlay { opacity: 1; }
+        .banner-size-hint-overlay {
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          padding: 6px 10px;
+          background: rgba(0,0,0,0.65);
+          color: rgba(255,255,255,0.7);
+          font-size: 11px;
+          text-align: center;
+          opacity: 0;
+          transition: opacity 200ms;
+          pointer-events: none;
+        }
+        .avatar-size-hint {
+          position: absolute;
+          bottom: -52px;
+          left: 112px;
+          font-size: 11px;
+          color: var(--text-muted);
+          line-height: 1.4;
+        }
+        .upload-size-hint {
+          font-size: 11px;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
         .banner-preview { width: 100%; height: 100%; object-fit: cover; }
         .banner-placeholder {
           display: flex;
@@ -5595,7 +5623,7 @@ showEditProfile() {
           justify-content: center;
           height: 100%;
           color: var(--text-muted);
-          gap: 8px;
+          gap: 6px;
           font-size: 13px;
         }
         .banner-edit-btn {
@@ -5615,7 +5643,7 @@ showEditProfile() {
         }
         .avatar-upload {
           position: absolute;
-          bottom: -40px;
+          bottom: -48px;
           left: 20px;
           width: 80px;
           height: 80px;
@@ -5716,68 +5744,25 @@ showEditProfile() {
         }
         .form-actions { display: flex; gap: 12px; margin-top: 24px; }
         .form-actions .btn { flex: 1; }
-        
-        /* Comment Policy Styles */
-        .comment-policy-options {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-top: 8px;
-        }
+        .comment-policy-options { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
         .comment-policy-btn {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          width: 100%;
-          padding: 12px 16px;
-          background: var(--bg-hover);
-          border: 2px solid transparent;
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all 150ms;
-          text-align: left;
+          display: flex; align-items: center; gap: 14px; width: 100%;
+          padding: 12px 16px; background: var(--bg-hover);
+          border: 2px solid transparent; border-radius: var(--radius-md);
+          cursor: pointer; transition: all 150ms; text-align: left;
         }
-        .comment-policy-btn:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(255, 255, 255, 0.1);
-        }
-        .comment-policy-btn.active {
-          border-color: var(--accent);
-          background: rgba(99, 102, 241, 0.08);
-        }
+        .comment-policy-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+        .comment-policy-btn.active { border-color: var(--accent); background: rgba(99,102,241,0.08); }
         .comment-policy-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background: rgba(255, 255, 255, 0.06);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          color: var(--text-muted);
-          transition: all 150ms;
+          width: 36px; height: 36px; border-radius: 10px;
+          background: rgba(255,255,255,0.06); display: flex; align-items: center;
+          justify-content: center; flex-shrink: 0; color: var(--text-muted); transition: all 150ms;
         }
-        .comment-policy-btn.active .comment-policy-icon {
-          background: rgba(99, 102, 241, 0.15);
-          color: var(--accent);
-        }
-        .comment-policy-text {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .comment-policy-label {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-        .comment-policy-desc {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
-        .comment-policy-btn.active .comment-policy-label {
-          color: var(--accent);
-        }
+        .comment-policy-btn.active .comment-policy-icon { background: rgba(99,102,241,0.15); color: var(--accent); }
+        .comment-policy-text { display: flex; flex-direction: column; gap: 2px; }
+        .comment-policy-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .comment-policy-desc { font-size: 12px; color: var(--text-muted); }
+        .comment-policy-btn.active .comment-policy-label { color: var(--accent); }
       </style>
     `;
     
@@ -5791,7 +5776,7 @@ showEditProfile() {
     if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
     if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
     
-    // Artist toggle - show/hide genres AND comment policy
+    // Artist toggle
     document.getElementById('is-artist-toggle')?.addEventListener('change', (e) => {
       const show = e.target.checked ? 'block' : 'none';
       document.getElementById('genre-section').style.display = show;
@@ -5828,49 +5813,72 @@ showEditProfile() {
         document.getElementById('comment-policy-value').value = btn.dataset.policy;
       });
     });
-    
-    // Avatar upload
-    document.getElementById('avatar-input')?.addEventListener('change', async (e) => {
+
+    // Avatar upload — addEventListener only, no inline onclick (fixes null click error on mobile)
+    const avatarEditBtn = document.getElementById('avatar-edit-btn');
+    const avatarInput = document.getElementById('avatar-input');
+    if (avatarEditBtn && avatarInput) {
+      avatarEditBtn.addEventListener('click', () => avatarInput.click());
+    }
+
+    avatarInput?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const avatarUpload = document.getElementById('avatar-upload');
+      if (!avatarUpload) return;
       avatarUpload.innerHTML = '<div class="avatar-placeholder"><div class="spinner" style="width:24px;height:24px;"></div></div>';
-      
+
       try {
-        const result = await API.uploadFile(file);
+        const result = await API.uploadImage(file);
         document.getElementById('avatar-url').value = result.url;
-        avatarUpload.innerHTML = `<img src="${result.url}" alt="Avatar" class="avatar-preview">
-          <button type="button" class="avatar-edit-btn" onclick="document.getElementById('avatar-input').click()">
+        avatarUpload.innerHTML = `
+          <img src="${result.url}" alt="Avatar" class="avatar-preview">
+          <button type="button" class="avatar-edit-btn" id="avatar-edit-btn-new">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
             </svg>
           </button>`;
+        document.getElementById('avatar-edit-btn-new')?.addEventListener('click', () => avatarInput.click());
       } catch (err) {
         console.error('Avatar upload failed:', err);
-        avatarUpload.innerHTML = '<div class="avatar-placeholder"><span style="color:var(--error);">Failed</span></div>';
+        avatarUpload.innerHTML = '<div class="avatar-placeholder"><span style="color:var(--error);font-size:11px;">Failed</span></div>';
       }
     });
-    
-    // Banner upload
-    document.getElementById('banner-input')?.addEventListener('change', async (e) => {
+
+    // Banner upload — addEventListener only, no inline onclick
+    const bannerEditBtn = document.getElementById('banner-edit-btn');
+    const bannerInput = document.getElementById('banner-input');
+    if (bannerEditBtn && bannerInput) {
+      bannerEditBtn.addEventListener('click', () => bannerInput.click());
+    }
+    // Clicking the banner area itself also opens the picker
+    document.getElementById('banner-upload')?.addEventListener('click', (e) => {
+      if (e.target.closest('.banner-edit-btn')) return;
+      bannerInput?.click();
+    });
+
+    bannerInput?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const bannerUpload = document.getElementById('banner-upload');
+      if (!bannerUpload) return;
       bannerUpload.innerHTML = '<div class="banner-placeholder"><div class="spinner"></div><span>Uploading...</span></div>';
-      
+
       try {
-        const result = await API.uploadFile(file);
+        const result = await API.uploadImage(file);
         document.getElementById('banner-url').value = result.url;
-        bannerUpload.innerHTML = `<img src="${result.url}" alt="Banner" class="banner-preview">
-          <button type="button" class="banner-edit-btn" onclick="document.getElementById('banner-input').click()">
+        bannerUpload.innerHTML = `
+          <img src="${result.url}" alt="Banner" class="banner-preview">
+          <button type="button" class="banner-edit-btn" id="banner-edit-btn-new">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
             </svg>
           </button>`;
+        document.getElementById('banner-edit-btn-new')?.addEventListener('click', () => bannerInput.click());
       } catch (err) {
         console.error('Banner upload failed:', err);
         bannerUpload.innerHTML = '<div class="banner-placeholder"><span style="color:var(--error);">Upload failed</span></div>';
@@ -5897,11 +5905,11 @@ showEditProfile() {
         commentPolicy: isArtist ? (formData.get('commentPolicy') || 'anyone') : 'anyone',
       };
       
-      console.log('Saving profile updates:', updates);
-      
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+
       try {
-        const result = await API.saveProfile(updates);
-        console.log('Profile save result:', result);
+        await API.saveProfile(updates);
         setProfile({ ...AppState.profile, ...updates });
         UI.updateUserCard();
         this.close();
@@ -5909,6 +5917,7 @@ showEditProfile() {
       } catch (error) {
         console.error('Failed to save profile:', error);
         alert('Failed to save profile: ' + error.message);
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save Profile'; }
       }
     });
   },
