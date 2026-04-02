@@ -449,18 +449,55 @@ const API = {
   async getTrackBuyers(artistAddress, trackId) {
     return this.fetch(`/api/artist-sales?action=buyers&artist=${artistAddress}&trackId=${trackId}`);
   },
- /**
+
+  /**
    * Get artist analytics (earnings breakdown)
    */
   async getArtistAnalytics(artistAddress) {
     return this.fetch(`/api/artist-sales?action=analytics&artist=${artistAddress}`);
   },
+
   // ============================================
-  // UPLOADS (IPFS via Lighthouse - Direct)
+  // UPLOADS
+  // Profile images / banners → Vercel Blob (fast CDN)
+  // NFT audio / cover art / metadata → IPFS via Lighthouse
   // ============================================
-  
+
   /**
-   * Upload file directly to Lighthouse (bypasses Vercel size limits)
+   * Upload profile or banner image to Vercel Blob.
+   * Fast CDN delivery. NOT for permanent NFT media.
+   * Use this for: avatars, banners.
+   */
+  async uploadImage(file) {
+    const maxMB = 5;
+    if (file.size > maxMB * 1024 * 1024) {
+      throw new Error(`Image must be under ${maxMB}MB`);
+    }
+
+    console.log(`📤 Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) to CDN...`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/upload-image', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(err || 'Image upload failed');
+    }
+
+    const data = await response.json();
+    console.log(`✅ Image uploaded to CDN: ${data.url}`);
+    return { success: true, url: data.url };
+  },
+
+  /**
+   * Upload file directly to Lighthouse (IPFS).
+   * Bypasses Vercel size limits.
+   * Use ONLY for: NFT audio, NFT cover art, metadata — permanent storage.
    */
   async uploadFile(file) {
     // Step 1: Get Lighthouse config from our secure endpoint
@@ -556,7 +593,6 @@ const Helpers = {
    */
   getIPFSUrl(cid) {
     if (!cid) return '';
-    // Clean the CID in case it already has a gateway prefix
     if (cid.includes('/ipfs/')) {
       cid = cid.split('/ipfs/')[1].split('?')[0];
     }
@@ -576,7 +612,6 @@ const Helpers = {
       cid = currentUrl.split('/ipfs/')[1].split('?')[0];
     }
     
-    // Find which gateway we're currently using
     let currentGatewayIndex = 0;
     for (let i = 0; i < IPFS_GATEWAYS.length; i++) {
       if (currentUrl.includes(IPFS_GATEWAYS[i]) || 
@@ -587,11 +622,10 @@ const Helpers = {
     }
     
     const nextIndex = currentGatewayIndex + 1;
-    
     if (nextIndex < IPFS_GATEWAYS.length) {
       return `${IPFS_GATEWAYS[nextIndex]}${cid}`;
     }
-    return null; // No more gateways to try
+    return null;
   },
   
   /**
