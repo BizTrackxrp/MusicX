@@ -77,7 +77,7 @@ const AudiobooksPage = {
   },
 
   renderHeroSpotlight(book) {
-    const cover = book.coverUrl || book.cover_url || '/placeholder.png';
+    const cover = this.getImageUrl(book.coverUrl || book.cover_url);
     const artist = book.artistName || book.artist_name || 'Unknown Author';
     const price = book.albumPrice || book.songPrice || book.album_price || book.song_price || 0;
     const available = (book.totalEditions || book.total_editions || 0) - (book.soldEditions || book.sold_editions || 0);
@@ -167,7 +167,7 @@ const AudiobooksPage = {
   },
 
   renderCard(book) {
-    const cover = book.coverUrl || book.cover_url || '/placeholder.png';
+    const cover = this.getImageUrl(book.coverUrl || book.cover_url);
     const artist = book.artistName || book.artist_name || 'Unknown';
     const price = book.albumPrice || book.songPrice || book.album_price || book.song_price || 0;
     const available = (book.totalEditions || book.total_editions || 0) - (book.soldEditions || book.sold_editions || 0);
