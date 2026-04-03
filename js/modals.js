@@ -3989,6 +3989,7 @@ showCreate(existingDraft) {
     if (!AppState.user?.address) { this.showAuth(); return; }
     this.activeModal = 'create';
     const isEditMode = !!existingDraft;
+    const existingContentType = existingDraft?.contentType || 'music';
     
     const html = `
       <div class="modal-overlay">
@@ -4010,6 +4011,31 @@ showCreate(existingDraft) {
                 <h3 class="create-step-title">Release Details</h3>
                 
                 <input type="hidden" name="type" id="release-type" value="release">
+
+                <!-- Content Type Selector -->
+                <div class="form-group" id="content-type-section">
+                  <label class="form-label">What are you uploading?</label>
+                  <div class="content-type-grid">
+                    <button type="button" class="content-type-btn ${existingContentType === 'music' ? 'selected' : ''}" data-type="music">
+                      <span class="content-type-icon">🎵</span>
+                      <span class="content-type-label">Music</span>
+                    </button>
+                    <button type="button" class="content-type-btn ${existingContentType === 'audiobook' ? 'selected' : ''}" data-type="audiobook">
+                      <span class="content-type-icon">📚</span>
+                      <span class="content-type-label">Audiobook</span>
+                    </button>
+                    <button type="button" class="content-type-btn ${existingContentType === 'podcast' ? 'selected' : ''}" data-type="podcast">
+                      <span class="content-type-icon">🎙️</span>
+                      <span class="content-type-label">Podcast</span>
+                    </button>
+                    <a href="mailto:sales@aventra.consulting?subject=XRP Music - Film/Game Submission" class="content-type-btn content-type-locked" target="_blank">
+                      <span class="content-type-icon">🎬🎮</span>
+                      <span class="content-type-label">Film / Game</span>
+                      <span class="content-type-apply">Apply →</span>
+                    </a>
+                  </div>
+                  <input type="hidden" id="content-type-value" value="${existingContentType}">
+                </div>
                 
                 <div class="form-group">
                   <label class="form-label" id="title-label">Title *</label>
@@ -4065,8 +4091,8 @@ showCreate(existingDraft) {
                 </div>
                 
                 <div class="form-group">
-                  <label class="form-label">Audio File(s) *</label>
-                  <p class="form-hint" style="margin-bottom: 8px;">Upload 1 file for a single, or multiple for an album</p>
+                  <label class="form-label" id="audio-upload-label">Audio File(s) *</label>
+                  <p class="form-hint" id="audio-upload-hint" style="margin-bottom: 8px;">Upload 1 file for a single, or multiple for an album</p>
                   <div class="upload-zone audio-zone" id="audio-upload-zone">
                     <input type="file" id="audio-input" accept="audio/*" multiple hidden>
                     <div class="upload-placeholder" id="audio-placeholder">
@@ -4075,7 +4101,7 @@ showCreate(existingDraft) {
                         <circle cx="6" cy="18" r="3"></circle>
                         <circle cx="18" cy="16" r="3"></circle>
                       </svg>
-                      <span>Click to upload audio</span>
+                      <span id="audio-upload-cta">Click to upload audio</span>
                       <span class="upload-hint">MP3, WAV, FLAC, M4A, OGG supported (max 500MB)</span>
                     </div>
                   </div>
@@ -4137,6 +4163,10 @@ showCreate(existingDraft) {
                 
                 <div class="review-details">
                   <div class="review-row">
+                    <span>Content Type</span>
+                    <span id="review-content-type"></span>
+                  </div>
+                  <div class="review-row">
                     <span>Price</span>
                     <span id="review-price"></span>
                   </div>
@@ -4157,7 +4187,7 @@ showCreate(existingDraft) {
                   <div class="mint-status-text" id="mint-status-text">Preparing...</div>
                 </div>
                 
-                <!-- Expand panel: Save Draft (hidden until clicked) -->
+                <!-- Expand panel: Save Draft -->
                 <div class="expand-panel hidden" id="draft-expand-panel">
                   <div class="expand-panel-header">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4199,7 +4229,7 @@ showCreate(existingDraft) {
                   </div>
                 </div>
                 
-                <!-- Expand panel: Mint Now (hidden until clicked) -->
+                <!-- Expand panel: Mint Now -->
                 <div class="expand-panel hidden" id="mint-expand-panel">
                   <div class="expand-panel-header">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4250,6 +4280,25 @@ showCreate(existingDraft) {
         .create-modal { max-width: 540px; }
         .create-step-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; }
         .create-step.hidden { display: none; }
+
+        /* ── Content Type Selector ── */
+        .content-type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 8px; }
+        @media (max-width: 480px) { .content-type-grid { grid-template-columns: repeat(2, 1fr); } }
+        .content-type-btn {
+          display: flex; flex-direction: column; align-items: center; gap: 6px;
+          padding: 14px 8px; background: var(--bg-hover);
+          border: 2px solid var(--border-color); border-radius: var(--radius-lg);
+          color: var(--text-secondary); cursor: pointer; transition: all 150ms;
+          text-decoration: none;
+        }
+        .content-type-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+        .content-type-btn.selected { border-color: var(--accent); background: rgba(99,102,241,0.12); color: var(--accent); }
+        .content-type-icon { font-size: 22px; line-height: 1; }
+        .content-type-label { font-size: 12px; font-weight: 600; }
+        .content-type-locked { border-style: dashed; opacity: 0.6; position: relative; }
+        .content-type-locked:hover { opacity: 1; border-color: var(--text-muted); color: var(--text-secondary); }
+        .content-type-apply { font-size: 10px; color: var(--accent); font-weight: 700; }
+
         .release-type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; }
         .release-type-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; background: var(--bg-hover); border: 2px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-secondary); cursor: pointer; transition: all 150ms; }
         .release-type-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
@@ -4411,12 +4460,30 @@ bindCreateEvents(existingDraft) {
       : [];
     const isEditMode = !!existingDraft;
 
+    // ── Content type selection ──
+    let selectedContentType = existingDraft?.contentType || 'music';
+    document.querySelectorAll('.content-type-btn[data-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.content-type-btn[data-type]').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedContentType = btn.dataset.type;
+        document.getElementById('content-type-value').value = selectedContentType;
+        // Update audio upload label based on type
+        const labelMap = { music: 'Audio File(s) *', audiobook: 'Audio File *', podcast: 'Episode Audio *' };
+        const hintMap = { music: 'Upload 1 file for a single, or multiple for an album', audiobook: 'Upload the full audiobook as a single audio file', podcast: 'Upload your podcast episode' };
+        const ctaMap = { music: 'Click to upload audio', audiobook: 'Click to upload audiobook', podcast: 'Click to upload episode' };
+        document.getElementById('audio-upload-label').textContent = labelMap[selectedContentType] || 'Audio File(s) *';
+        document.getElementById('audio-upload-hint').textContent = hintMap[selectedContentType] || '';
+        document.getElementById('audio-upload-cta').textContent = ctaMap[selectedContentType] || 'Click to upload audio';
+      });
+    });
+
     // Restore selected state if editing a draft
     selectedGenres.forEach(g => {
       document.querySelectorAll(`.genre-chip[data-genre="${g}"]`).forEach(c => c.classList.add('selected'));
     });
 
-    // Genre chip click - delegated to parent so it survives updateTrackList() rerenders
+    // Genre chip click
     document.getElementById('genre-selector-section')?.addEventListener('click', (e) => {
       const chip = e.target.closest('.genre-chip');
       if (!chip) return;
@@ -4758,6 +4825,9 @@ bindCreateEvents(existingDraft) {
       document.getElementById('review-title').textContent = document.getElementById('release-title').value;
       document.getElementById('review-type').textContent = releaseType.toUpperCase();
       document.getElementById('review-tracks').textContent = `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`;
+      const contentTypeLabels = { music: '🎵 Music', audiobook: '📚 Audiobook', podcast: '🎙️ Podcast' };
+      const reviewContentTypeEl = document.getElementById('review-content-type');
+      if (reviewContentTypeEl) reviewContentTypeEl.textContent = contentTypeLabels[selectedContentType] || selectedContentType;
       const reviewPriceEl = document.getElementById('review-price');
       if (tracks.length === 1) {
         reviewPriceEl.textContent = `${tracks[0].price} XRP`;
@@ -4859,10 +4929,8 @@ bindCreateEvents(existingDraft) {
       updateTrackList();
     }
 
-    // Editions input - update mint fee
     document.getElementById('release-editions')?.addEventListener('input', updateMintFee);
 
-    // Sync default price to tracks
     document.getElementById('release-price')?.addEventListener('input', (e) => {
       const newDefault = parseFloat(e.target.value) || 0;
       tracks.forEach(track => {
@@ -4945,6 +5013,7 @@ bindCreateEvents(existingDraft) {
           title: releaseTitle,
           description: releaseDescription,
           type: releaseType,
+          contentType: selectedContentType,
           coverUrl: coverResult.url,
           coverCid: coverResult.cid,
           songPrice: defaultTrackPrice,
@@ -4957,7 +5026,6 @@ bindCreateEvents(existingDraft) {
         };
         let result;
         if (isEditMode && existingDraft?.id) {
-          console.log('📝 Saving draft tracks:', uploadedTracks.map(t => t.title));
           await API.updateRelease(existingDraft.id, {
             title: releaseTitle,
             description: releaseDescription,
@@ -4969,6 +5037,7 @@ bindCreateEvents(existingDraft) {
             coverCid: coverResult.cid,
             visibility: draftVisibility,
             draftGenres: selectedGenres,
+            contentType: selectedContentType,
             tracks: uploadedTracks.map((t, i) => ({
               ...t,
               price: tracks[i]?.price || t.price,
@@ -5028,7 +5097,6 @@ bindCreateEvents(existingDraft) {
       document.getElementById('confirm-mint-now-btn')?.style.setProperty('pointer-events', 'none');
       let releaseId = null;
       const statusEl = document.getElementById('mint-status');
-      const statusText = document.getElementById('mint-status-text');
       const navEl = document.getElementById('create-nav-3');
       statusEl.classList.remove('hidden');
       navEl.style.display = 'none';
@@ -5099,6 +5167,7 @@ bindCreateEvents(existingDraft) {
             animation_url: `ipfs://${track.audioCid}`,
             attributes: [
               { trait_type: 'Type', value: releaseType },
+              { trait_type: 'Content Type', value: selectedContentType },
               { trait_type: 'Artist', value: artistName },
               { trait_type: 'Album', value: releaseTitle },
               { trait_type: 'Track Number', value: i + 1 },
@@ -5125,6 +5194,7 @@ bindCreateEvents(existingDraft) {
           image: `ipfs://${coverResult.cid}`,
           attributes: [
             { trait_type: 'Type', value: releaseType },
+            { trait_type: 'Content Type', value: selectedContentType },
             { trait_type: 'Artist', value: artistName },
             { trait_type: 'Tracks', value: uploadedTracks.length },
           ],
@@ -5154,6 +5224,7 @@ bindCreateEvents(existingDraft) {
             coverUrl: coverResult.url,
             coverCid: coverResult.cid,
             metadataCid: albumMetadataResult.cid,
+            contentType: selectedContentType,
             songPrice: tracks[0]?.price || 5,
             albumPrice: releaseType !== 'single' ? (parseFloat(document.getElementById('album-discount-price')?.value) || tracks.reduce((s,t) => s + (parseFloat(t.price)||0), 0)) : null,
             totalEditions: editions,
@@ -5167,7 +5238,6 @@ bindCreateEvents(existingDraft) {
               ...(tracks[i]?.videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
             })),
           });
-          console.log('Updated existing draft for minting:', releaseId);
         } else {
           const preReleaseData = {
             artistAddress: AppState.user.address,
@@ -5175,6 +5245,7 @@ bindCreateEvents(existingDraft) {
             title: releaseTitle,
             description: releaseDescription,
             type: releaseType,
+            contentType: selectedContentType,
             coverUrl: coverResult.url,
             coverCid: coverResult.cid,
             metadataCid: albumMetadataResult.cid,
@@ -5196,7 +5267,6 @@ bindCreateEvents(existingDraft) {
           const preCreateResult = await API.saveRelease(preReleaseData);
           releaseId = preCreateResult.releaseId;
           Modals.pendingReleaseId = releaseId;
-          console.log('Pre-created release:', { releaseId, trackIds: preCreateResult.trackIds });
         }
         const mintFee = calculateMintFee(editions, uploadedTracks.length);
         statusEl.innerHTML = `
@@ -5225,7 +5295,6 @@ bindCreateEvents(existingDraft) {
             mintFeeAmount: parseFloat(mintFee),
             status: 'live',
           });
-          console.log('✓ Release is live - lazy minting enabled');
         } catch (updateError) {
           console.error('⚠ Failed to finalize release:', updateError);
           Modals.mintingInProgress = false;
@@ -5262,9 +5331,9 @@ bindCreateEvents(existingDraft) {
             </div>
             <div class="mint-success-title">🎉 ${releaseTitle}</div>
             <div class="mint-success-stats">${uploadedTracks.length} track${uploadedTracks.length > 1 ? 's' : ''} • ${editions} editions available</div>
-            <p class="mint-success-msg">Your music is live! NFTs mint automatically when fans purchase.</p>
+            <p class="mint-success-msg">Your release is live! NFTs mint automatically when fans purchase.</p>
             <div class="mint-success-actions">
-              <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my music as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
+              <button type="button" class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just dropped my release as NFTs on @XRP_MUSIC! 🎵\\n\\nOwn it forever on the XRP Ledger.')}', '_blank')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
                 Share on X
               </button>
@@ -5287,21 +5356,13 @@ bindCreateEvents(existingDraft) {
         Modals.mintingInProgress = false;
         Modals.mintSubmitting = false;
         if (releaseId && !isEditMode) {
-          console.log('🧹 Cleaning up failed release:', releaseId);
           try {
             const deleteResponse = await fetch(`/api/releases?id=${releaseId}`, { method: 'DELETE' });
             const deleteResult = await deleteResponse.json();
-            if (deleteResult.success) {
-              console.log('✅ Cleaned up failed release');
-              Modals.pendingReleaseId = null;
-            } else {
-              console.error('❌ Cleanup failed:', deleteResult.error);
-            }
+            if (deleteResult.success) Modals.pendingReleaseId = null;
           } catch (cleanupErr) {
-            console.error('❌ Cleanup fetch error:', cleanupErr);
+            console.error('Cleanup error:', cleanupErr);
           }
-        } else if (isEditMode) {
-          console.log('⚠️ Edit mode — keeping draft intact');
         }
         statusEl.innerHTML = `
           <div class="mint-status-icon" style="color: var(--error);">
