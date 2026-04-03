@@ -89,6 +89,8 @@ const AudiobooksPage = {
     const available = (book.totalEditions || book.total_editions || 0) - (book.soldEditions || book.sold_editions || 0);
     const description = book.description || '';
     const duration = book.tracks?.[0]?.duration || null;
+    const artistAvatar = this.getImageUrl(book.artistAvatar || book.artist_avatar);
+    const artistAddress = book.artistAddress || book.artist_address;
 
     return `
       <div class="ab-hero-wrap">
@@ -108,10 +110,18 @@ const AudiobooksPage = {
           <div class="ab-hero-info">
             <div class="ab-hero-eyebrow">🎧 Featured Audiobook</div>
             <h2 class="ab-hero-title">${book.title}</h2>
-            <div class="ab-hero-author">
-              <span>by</span>
-              <strong>${artist}</strong>
-            </div>
+            <button class="ab-hero-author-btn" data-address="${artistAddress}">
+              <div class="ab-hero-avatar">
+                ${artistAvatar && artistAvatar !== '/placeholder.png'
+                  ? `<img src="${artistAvatar}" alt="${artist}" onerror="this.style.display='none'">`
+                  : `<span>${artist[0]?.toUpperCase() || '?'}</span>`
+                }
+              </div>
+              <div>
+                <div class="ab-hero-author-label">Author</div>
+                <strong class="ab-hero-author-name">${artist}</strong>
+              </div>
+            </button>
             ${duration ? `<div class="ab-hero-meta">⏱ ${this.formatDuration(duration)}</div>` : ''}
             <div class="ab-hero-availability">
               <span class="ab-avail-badge">${available} of ${book.totalEditions || book.total_editions || 100} editions available</span>
@@ -222,6 +232,10 @@ const AudiobooksPage = {
     document.querySelector('.ab-buy-btn')?.addEventListener('click', () => {
       Modals.showRelease(book);
     });
+    document.querySelector('.ab-hero-author-btn')?.addEventListener('click', () => {
+      const address = book.artistAddress || book.artist_address;
+      if (address) Router.navigate('artist', { address });
+    });
     document.querySelectorAll('.ab-upload-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         if (!AppState.user?.address) { Modals.showAuth(); return; }
@@ -302,8 +316,23 @@ const AudiobooksPage = {
         }
         .ab-hero-eyebrow { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #a78bfa; margin-bottom: 12px; }
         .ab-hero-title { font-size: 30px; font-weight: 800; line-height: 1.2; margin-bottom: 12px; color: var(--text-primary); }
-        .ab-hero-author { font-size: 16px; color: var(--text-muted); margin-bottom: 8px; }
-        .ab-hero-author strong { color: var(--text-secondary); }
+        .ab-hero-author-btn {
+          display: flex; align-items: center; gap: 12px;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 40px; padding: 8px 16px 8px 8px;
+          cursor: pointer; transition: all 150ms; margin-bottom: 16px;
+          text-align: left;
+        }
+        .ab-hero-author-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+        .ab-hero-avatar {
+          width: 36px; height: 36px; border-radius: 50%;
+          background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+          display: flex; align-items: center; justify-content: center;
+          overflow: hidden; flex-shrink: 0; font-size: 16px; font-weight: 700; color: white;
+        }
+        .ab-hero-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .ab-hero-author-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+        .ab-hero-author-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
         .ab-hero-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
         .ab-avail-badge { display: inline-block; padding: 5px 12px; background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); border-radius: 20px; font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 16px; }
         .ab-hero-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 28px; max-height: 140px; overflow-y: auto; }
