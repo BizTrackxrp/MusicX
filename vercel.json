@@ -17,7 +17,12 @@
     { "source": "/genres", "destination": "/app.html" },
     { "source": "/genre/:id", "destination": "/app.html" },
     { "source": "/transparency", "destination": "/app.html" },
-    { "source": "/sales", "destination": "/app.html" }
+    { "source": "/sales", "destination": "/app.html" },
+    { "source": "/audiobooks", "destination": "/app.html" },
+    { "source": "/podcasts", "destination": "/app.html" },
+    { "source": "/films", "destination": "/app.html" },
+    { "source": "/games", "destination": "/app.html" },
+    { "source": "/rewards", "destination": "/app.html" }
   ],
   "functions": {
     "api/batch-mint.js": {
