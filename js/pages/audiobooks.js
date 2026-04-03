@@ -9,6 +9,12 @@ const AudiobooksPage = {
   audiobooks: [],
   isLoading: false,
 
+  getImageUrl(url) {
+    if (!url) return '/placeholder.png';
+    if (typeof IpfsHelper !== 'undefined') return IpfsHelper.toProxyUrl(url);
+    return url;
+  },
+
   async render() {
     UI.renderPage(`
       ${this.getStyles()}
@@ -86,7 +92,6 @@ const AudiobooksPage = {
 
     return `
       <div class="ab-hero-wrap">
-        <!-- Page header -->
         <div class="ab-page-header">
           <div class="ab-page-icon">📚</div>
           <div>
@@ -95,7 +100,6 @@ const AudiobooksPage = {
           </div>
         </div>
 
-        <!-- Hero spotlight -->
         <div class="ab-hero">
           <div class="ab-hero-cover-wrap">
             <img src="${cover}" alt="${book.title}" class="ab-hero-cover" onerror="this.src='/placeholder.png'">
@@ -126,7 +130,6 @@ const AudiobooksPage = {
           </div>
         </div>
 
-        <!-- Bottom CTA for creators -->
         <div class="ab-creator-cta">
           <div class="ab-creator-cta-text">
             <h3>Are you an author or narrator?</h3>
@@ -263,13 +266,11 @@ const AudiobooksPage = {
       <style>
         .audiobooks-page { max-width: 1200px; margin: 0 auto; padding: 0 24px 120px; }
 
-        /* ── Page header ── */
         .ab-page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 40px; }
         .ab-page-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
         .ab-page-header h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
         .ab-page-header p { font-size: 14px; color: var(--text-muted); margin: 0; }
 
-        /* ── Empty state ── */
         .ab-empty { text-align: center; padding: 100px 24px; }
         .ab-empty-icon { font-size: 72px; margin-bottom: 24px; }
         .ab-empty h2 { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
@@ -277,8 +278,6 @@ const AudiobooksPage = {
         .ab-empty-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
         .ab-empty-sub { font-size: 13px; color: var(--text-muted); margin: 0; }
 
-        /* ── Hero spotlight ── */
-        .ab-hero-wrap {}
         .ab-hero {
           display: grid;
           grid-template-columns: 340px 1fr;
@@ -313,7 +312,6 @@ const AudiobooksPage = {
         .ab-play-btn:hover { background: rgba(255,255,255,0.14); }
         .ab-hero-footnote { font-size: 12px; color: var(--text-muted); margin: 0; }
 
-        /* ── Creator CTA ── */
         .ab-creator-cta {
           display: flex; align-items: center; justify-content: space-between; gap: 24px;
           padding: 28px 32px;
@@ -325,7 +323,6 @@ const AudiobooksPage = {
         .ab-creator-cta-text h3 { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
         .ab-creator-cta-text p { font-size: 13px; color: var(--text-muted); margin: 0; }
 
-        /* ── Grid ── */
         .ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
         .ab-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; cursor: pointer; transition: all 150ms; }
         .ab-card:hover { border-color: #8b5cf6; transform: translateY(-4px); }
