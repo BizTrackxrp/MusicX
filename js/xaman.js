@@ -347,6 +347,7 @@ const XamanWallet = {
             if (userData?.address) {
               // Save session so handlePageLoad sees it as same-tab after reload
               this.saveSessionToTab(userData.address);
+              localStorage.removeItem('xrpmusic_pending_auth');
 
               // Snapshot everything the user is doing right now
               this.savePageState();
@@ -426,8 +427,15 @@ const XamanWallet = {
     if (!tabSession) {
       // Check if this is a new auth tab opened by Xaman
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('xumm') || document.referrer.includes('xumm.app') || document.referrer.includes('xaman.app')) {
+      const pendingAuth = localStorage.getItem('xrpmusic_pending_auth');
+      const isXamanRedirect = urlParams.has('xumm') || 
+        document.referrer.includes('xumm.app') || 
+        document.referrer.includes('xaman.app') ||
+        pendingAuth === '1';
+      
+      if (isXamanRedirect) {
         sessionStorage.setItem('xrpmusic_auth_tab', 'true');
+        localStorage.removeItem('xrpmusic_pending_auth');
         console.log('Auth redirect tab detected');
       } else {
         // Fresh page load — clear any old sessions
@@ -577,9 +585,14 @@ const XamanWallet = {
     
     try {
       sessionStorage.setItem('xrpmusic_return_url', window.location.href);
+      // Mark that the NEXT page load in this tab (or a new tab opened by Xaman)
+      // is an auth tab — so it knows to close itself after login completes.
+      // We write to localStorage so it persists across the tab that Xaman opens.
+      localStorage.setItem('xrpmusic_pending_auth', '1');
       await this.sdk.authorize();
     } catch (err) {
       console.error('Failed to connect wallet:', err);
+      localStorage.removeItem('xrpmusic_pending_auth');
       this.isConnecting = false;
     }
   },
