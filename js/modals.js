@@ -6149,7 +6149,7 @@ showEditProfile() {
       }
     });
   },
-  },
+  
   /**
  * Show Gift Track Modal - Artist gives away a copy
  */
