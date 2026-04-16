@@ -195,7 +195,33 @@ const ProfilePage = {
             <h1 class="profile-name">${displayName}</h1>
             ${this.renderGenreBadges(profile)}
             <p class="profile-address">${Helpers.truncateAddress(address, 8, 6)}</p>
-            ${profile.bio ? `<div class="profile-bio-container"><p class="profile-bio">${profile.bio}</p></div>` : ''}
+           ${profile.bio ? `<div class="profile-bio-container"><p class="profile-bio">${profile.bio}</p></div>` : ''}
+            
+            <!-- Social Links Button (NEW) -->
+            ${profile.socialLinks && profile.socialLinks.length > 0 ? `
+              <button 
+                id="view-social-links-btn"
+                style="
+                  margin-top: 12px;
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  border: none;
+                  padding: 10px 20px;
+                  border-radius: 8px;
+                  font-weight: 600;
+                  font-size: 14px;
+                  cursor: pointer;
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 8px;
+                  transition: transform 0.2s;
+                "
+                onmouseover="this.style.transform='scale(1.05)'"
+                onmouseout="this.style.transform='scale(1)'"
+              >
+                🔗 View All Links (${profile.socialLinks.length})
+              </button>
+            ` : ''}
             
             <div class="profile-links">
               ${profile.website ? `
@@ -2168,6 +2194,10 @@ renderDraftCard(draft) {
         avatarUrl: profile.avatarUrl
       });
     });
+
+    document.getElementById('view-social-links-btn')?.addEventListener('click', () => {
+      this.showSocialLinksModal(AppState.profile);
+    });
     
     this.fetchCollectedCount();
     this.fetchForSaleCount();
@@ -2314,5 +2344,147 @@ renderDraftCard(draft) {
         }
       });
     });
+},
+  
+  showSocialLinksModal(profile) {
+    const socialLinks = profile.socialLinks || [];
+    
+    const platformDisplay = {
+      spotify: { label: 'Spotify', icon: '🎵', color: '#1DB954' },
+      youtube: { label: 'YouTube', icon: '▶️', color: '#FF0000' },
+      instagram: { label: 'Instagram', icon: '📷', color: '#E4405F' },
+      tiktok: { label: 'TikTok', icon: '🎵', color: '#000000' },
+      facebook: { label: 'Facebook', icon: '👥', color: '#1877F2' },
+      twitter: { label: 'Twitter/X', icon: '🐦', color: '#1DA1F2' },
+      soundcloud: { label: 'SoundCloud', icon: '☁️', color: '#FF5500' },
+      bandcamp: { label: 'Bandcamp', icon: '🎸', color: '#629aa9' },
+      apple_music: { label: 'Apple Music', icon: '🍎', color: '#FA243C' },
+      website: { label: 'Website', icon: '🌐', color: '#3B82F6' },
+      custom: { label: 'Link', icon: '🔗', color: '#6366F1' }
+    };
+
+    const modalHTML = `
+      <div 
+        id="social-links-modal" 
+        style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          padding: 20px;
+        "
+        onclick="if(event.target.id === 'social-links-modal') this.remove()"
+      >
+        <div 
+          style="
+            background: var(--bg-primary);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+            position: relative;
+          "
+          onclick="event.stopPropagation()"
+        >
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 700;">
+              ${profile.name || 'Artist'}'s Links
+            </h2>
+            <button 
+              onclick="document.getElementById('social-links-modal').remove()"
+              style="
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: #666;
+                padding: 0;
+                width: 32px;
+                height: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 6px;
+              "
+              onmouseover="this.style.background='#f5f5f5'"
+              onmouseout="this.style.background='none'"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${socialLinks.map(link => {
+              const platform = platformDisplay[link.platform] || platformDisplay.custom;
+              const displayName = link.platform === 'custom' ? link.customName : platform.label;
+              
+              return `
+                <a 
+                  href="${link.url}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 14px;
+                    background: #f8f9fa;
+                    border-radius: 10px;
+                    text-decoration: none;
+                    color: #1a1a1a;
+                    transition: all 0.2s;
+                    border: 2px solid transparent;
+                  "
+                  onmouseover="
+                    this.style.background='${platform.color}15';
+                    this.style.borderColor='${platform.color}';
+                    this.style.transform='translateX(4px)';
+                  "
+                  onmouseout="
+                    this.style.background='#f8f9fa';
+                    this.style.borderColor='transparent';
+                    this.style.transform='translateX(0)';
+                  "
+                >
+                  <div style="
+                    font-size: 24px;
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: white;
+                    border-radius: 8px;
+                  ">
+                    ${platform.icon}
+                  </div>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">
+                      ${displayName}
+                    </div>
+                    <div style="font-size: 12px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      ${link.url}
+                    </div>
+                  </div>
+                  <div style="font-size: 18px; color: #999;">
+                    →
+                  </div>
+                </a>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
   },
 };
