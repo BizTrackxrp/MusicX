@@ -6,8 +6,12 @@
  *   'anyone'  = any logged-in user can comment (default)
  *   'holders' = only users holding one of the artist's NFTs can comment
  *   'none'    = comments disabled
+ * 
+ * UPDATED: social_links field — artists can add social media links to their profile
+ *   Stored as JSONB array: [{ platform: 'spotify', url: '...' }, ...]
  */
 import { neon } from '@neondatabase/serverless';
+
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   
@@ -51,14 +55,15 @@ export default async function handler(req, res) {
         genrePrimary,
         genreSecondary,
         isArtist,
-        commentPolicy
+        commentPolicy,
+        socialLinks  // NEW FIELD
       } = req.body;
       
       if (!address) {
         return res.status(400).json({ error: 'Address required' });
       }
       
-      console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist, commentPolicy });
+      console.log('Saving profile:', { address, name, bio, website, twitter, genrePrimary, genreSecondary, isArtist, commentPolicy, socialLinks });
       
       // Convert isArtist to proper boolean
       const isArtistBool = isArtist === true || isArtist === 'true';
@@ -66,6 +71,9 @@ export default async function handler(req, res) {
       // Validate comment policy
       const validPolicies = ['anyone', 'holders', 'none'];
       const cleanCommentPolicy = validPolicies.includes(commentPolicy) ? commentPolicy : null;
+      
+      // Validate and serialize social links
+      const cleanSocialLinks = Array.isArray(socialLinks) ? JSON.stringify(socialLinks) : null;
       
       // Upsert profile - update ALL fields that are provided
       const [profile] = await sql`
@@ -81,6 +89,7 @@ export default async function handler(req, res) {
           genre_secondary,
           is_artist,
           comment_policy,
+          social_links,
           updated_at
         ) VALUES (
           ${address},
@@ -94,6 +103,7 @@ export default async function handler(req, res) {
           ${genreSecondary || null},
           ${isArtistBool},
           ${cleanCommentPolicy || 'anyone'},
+          ${cleanSocialLinks || '[]'},
           NOW()
         )
         ON CONFLICT (wallet_address) DO UPDATE SET
@@ -107,6 +117,7 @@ export default async function handler(req, res) {
           genre_secondary = ${genreSecondary || null},
           is_artist = ${isArtistBool},
           comment_policy = COALESCE(${cleanCommentPolicy}, profiles.comment_policy, 'anyone'),
+          social_links = COALESCE(${cleanSocialLinks}, profiles.social_links, '[]'),
           updated_at = NOW()
         RETURNING *
       `;
@@ -122,6 +133,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
+
 function formatProfile(row) {
   return {
     address: row.wallet_address,
@@ -140,6 +152,7 @@ function formatProfile(row) {
     genreSecondary: row.genre_secondary,
     isArtist: row.is_artist,
     commentPolicy: row.comment_policy || 'anyone',
+    socialLinks: row.social_links || [],  // NEW FIELD
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
