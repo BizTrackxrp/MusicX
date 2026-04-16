@@ -5629,19 +5629,36 @@ showEditProfile() {
                 </div>
               </div>
 
-              <!-- Social Links Section (NEW) -->
-              <div class="social-links-section" style="margin-top: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <!-- All Your Links Section (SIMPLIFIED) -->
+              <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
                   <label class="form-label" style="margin: 0;">All Your Links</label>
                   <button 
                     type="button" 
-                    id="add-social-link-btn" 
-                    style="background: #3B82F6; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500;"
+                    id="add-link-btn"
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                      padding: 6px 12px;
+                      background: var(--accent);
+                      color: white;
+                      border: none;
+                      border-radius: 6px;
+                      font-size: 13px;
+                      font-weight: 600;
+                      cursor: pointer;
+                      transition: opacity 0.2s;
+                    "
+                    onmouseover="this.style.opacity='0.8'"
+                    onmouseout="this.style.opacity='1'"
                   >
                     + Add Link
                   </button>
                 </div>
-                <div id="social-links-container"></div>
+                <div id="social-links-container" style="display: flex; flex-direction: column; gap: 10px;">
+                  <!-- Links will be added here dynamically -->
+                </div>
               </div>
               
               <div class="form-actions">
@@ -5840,33 +5857,42 @@ showEditProfile() {
         .comment-policy-desc { font-size: 12px; color: var(--text-muted); }
         .comment-policy-btn.active .comment-policy-label { color: var(--accent); }
         
-        /* Social Links Styles */
-        .social-link-item {
-          background: #f5f5f5;
-          padding: 12px;
-          border-radius: 8px;
-          margin-bottom: 10px;
+        /* Simplified Social Links Styles */
+        .link-item {
+          display: flex;
+          gap: 8px;
+          align-items: center;
         }
-        .link-platform, .link-custom-name, .link-url {
-          padding: 8px;
-          border: 1px solid #ddd;
-          border-radius: 6px;
-          font-size: 13px;
-          background: white;
-          color: #1a1a1a;
+        .link-input {
+          flex: 1;
+          padding: 10px 12px;
+          background: var(--bg-hover);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          color: var(--text-primary);
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        .link-input:focus {
+          border-color: var(--accent);
+        }
+        .link-input::placeholder {
+          color: var(--text-muted);
         }
         .remove-link-btn {
-          background: #ef4444;
-          color: white;
-          border: none;
-          padding: 8px 12px;
+          padding: 8px 10px;
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.3);
           border-radius: 6px;
+          font-size: 18px;
           cursor: pointer;
-          font-size: 13px;
-          transition: background 150ms;
+          transition: background 0.2s;
+          line-height: 1;
         }
         .remove-link-btn:hover {
-          background: #dc2626;
+          background: rgba(239, 68, 68, 0.2);
         }
       </style>
     `;
@@ -5881,136 +5907,88 @@ showEditProfile() {
     if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
     if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
     
-    // ===== SOCIAL LINKS LOGIC (NEW) =====
-    let socialLinks = profile.socialLinks || [];
+    // ============================================
+    // SIMPLIFIED SOCIAL LINKS LOGIC
+    // ============================================
+    const socialLinks = profile.socialLinks || [];
+    const container = document.getElementById('social-links-container');
+    const addBtn = document.getElementById('add-link-btn');
     
-    const platformOptions = [
-      { value: 'spotify', label: 'Spotify', icon: '🎵' },
-      { value: 'youtube', label: 'YouTube', icon: '▶️' },
-      { value: 'instagram', label: 'Instagram', icon: '📷' },
-      { value: 'tiktok', label: 'TikTok', icon: '🎵' },
-      { value: 'facebook', label: 'Facebook', icon: '👥' },
-      { value: 'twitter', label: 'Twitter/X', icon: '🐦' },
-      { value: 'soundcloud', label: 'SoundCloud', icon: '☁️' },
-      { value: 'bandcamp', label: 'Bandcamp', icon: '🎸' },
-      { value: 'apple_music', label: 'Apple Music', icon: '🍎' },
-      { value: 'website', label: 'Website', icon: '🌐' },
-      { value: 'custom', label: 'Other', icon: '🔗' }
-    ];
-    
-    function renderSocialLinks() {
-      const container = document.getElementById('social-links-container');
+    // Render existing links
+    function renderLinks() {
       if (!container) return;
       
       if (socialLinks.length === 0) {
         container.innerHTML = `
-          <div style="text-align: center; padding: 20px; color: #666; font-size: 13px;">
-            No links added yet. Click "+ Add Link" to get started.
+          <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">
+            No links added yet. Click "+ Add Link" above.
           </div>
         `;
         return;
       }
       
-      container.innerHTML = socialLinks.map((link, index) => `
-        <div class="social-link-item">
-          <div style="display: flex; gap: 10px; align-items: start;">
-            <select 
-              class="link-platform" 
-              data-index="${index}"
-              style="flex: 0 0 140px;"
-            >
-              ${platformOptions.map(opt => `
-                <option value="${opt.value}" ${link.platform === opt.value ? 'selected' : ''}>
-                  ${opt.icon} ${opt.label}
-                </option>
-              `).join('')}
-            </select>
-            
-            ${link.platform === 'custom' ? `
-              <input 
-                type="text" 
-                class="link-custom-name" 
-                data-index="${index}"
-                placeholder="Platform name"
-                value="${link.customName || ''}"
-                style="flex: 0 0 120px;"
-              />
-            ` : ''}
-            
-            <input 
-              type="url" 
-              class="link-url" 
-              data-index="${index}"
-              placeholder="https://..."
-              value="${link.url || ''}"
-              style="flex: 1;"
-            />
-            
-            <button 
-              class="remove-link-btn" 
-              data-index="${index}"
-            >
-              ✕
-            </button>
-          </div>
+      container.innerHTML = socialLinks.map((link, idx) => `
+        <div class="link-item" data-idx="${idx}">
+          <input 
+            type="url" 
+            class="link-input" 
+            placeholder="https://..." 
+            value="${link.url || ''}"
+            data-idx="${idx}"
+          />
+          <button type="button" class="remove-link-btn" data-idx="${idx}">×</button>
         </div>
       `).join('');
       
-      attachSocialLinksListeners();
+      attachLinkListeners();
     }
     
-    function attachSocialLinksListeners() {
-      document.querySelectorAll('.link-platform').forEach(select => {
-        select.addEventListener('change', (e) => {
-          const index = parseInt(e.target.dataset.index);
-          socialLinks[index].platform = e.target.value;
-          renderSocialLinks();
-        });
-      });
-      
-      document.querySelectorAll('.link-custom-name').forEach(input => {
+    // Attach event listeners
+    function attachLinkListeners() {
+      container.querySelectorAll('.link-input').forEach(input => {
         input.addEventListener('input', (e) => {
-          const index = parseInt(e.target.dataset.index);
-          socialLinks[index].customName = e.target.value;
+          const idx = parseInt(e.target.dataset.idx);
+          socialLinks[idx].url = e.target.value.trim();
         });
       });
       
-      document.querySelectorAll('.link-url').forEach(input => {
-        input.addEventListener('input', (e) => {
-          const index = parseInt(e.target.dataset.index);
-          socialLinks[index].url = e.target.value;
-        });
-      });
-      
-      document.querySelectorAll('.remove-link-btn').forEach(btn => {
+      container.querySelectorAll('.remove-link-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-          const index = parseInt(e.target.dataset.index);
-          socialLinks.splice(index, 1);
-          renderSocialLinks();
+          const idx = parseInt(e.target.dataset.idx);
+          socialLinks.splice(idx, 1);
+          renderLinks();
         });
       });
     }
     
-    document.getElementById('add-social-link-btn')?.addEventListener('click', () => {
+    // Add new link button
+    addBtn?.addEventListener('click', () => {
       if (socialLinks.length >= 10) {
         alert('Maximum 10 links allowed');
         return;
       }
-      socialLinks.push({ platform: 'spotify', url: '' });
-      renderSocialLinks();
+      socialLinks.push({ url: '' });
+      renderLinks();
+      // Focus the new input
+      const inputs = container.querySelectorAll('.link-input');
+      inputs[inputs.length - 1]?.focus();
     });
     
-    renderSocialLinks();
-    // ===== END SOCIAL LINKS LOGIC =====
+    // Initial render
+    renderLinks();
     
-    // Artist toggle
+    // ============================================
+    // ARTIST TOGGLE
+    // ============================================
     document.getElementById('is-artist-toggle')?.addEventListener('change', (e) => {
       const show = e.target.checked ? 'block' : 'none';
       document.getElementById('genre-section').style.display = show;
       document.getElementById('comment-policy-section').style.display = show;
     });
     
-    // Genre selection
+    // ============================================
+    // GENRE SELECTION
+    // ============================================
     document.querySelectorAll('.genre-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const genre = btn.dataset.genre;
@@ -6032,7 +6010,9 @@ showEditProfile() {
       });
     });
     
-    // Comment policy selection
+    // ============================================
+    // COMMENT POLICY SELECTION
+    // ============================================
     document.querySelectorAll('.comment-policy-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.comment-policy-btn').forEach(b => b.classList.remove('active'));
@@ -6041,7 +6021,9 @@ showEditProfile() {
       });
     });
 
-    // Avatar upload — addEventListener only, no inline onclick (fixes null click error on mobile)
+    // ============================================
+    // AVATAR UPLOAD
+    // ============================================
     const avatarEditBtn = document.getElementById('avatar-edit-btn');
     const avatarInput = document.getElementById('avatar-input');
     if (avatarEditBtn && avatarInput) {
@@ -6074,13 +6056,14 @@ showEditProfile() {
       }
     });
 
-    // Banner upload — addEventListener only, no inline onclick
+    // ============================================
+    // BANNER UPLOAD
+    // ============================================
     const bannerEditBtn = document.getElementById('banner-edit-btn');
     const bannerInput = document.getElementById('banner-input');
     if (bannerEditBtn && bannerInput) {
       bannerEditBtn.addEventListener('click', () => bannerInput.click());
     }
-    // Clicking the banner area itself also opens the picker
     document.getElementById('banner-upload')?.addEventListener('click', (e) => {
       if (e.target.closest('.banner-edit-btn')) return;
       bannerInput?.click();
@@ -6112,7 +6095,9 @@ showEditProfile() {
       }
     });
     
-    // Form submit
+    // ============================================
+    // FORM SUBMIT
+    // ============================================
     document.getElementById('edit-profile-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
@@ -6130,7 +6115,7 @@ showEditProfile() {
         genrePrimary: isArtist ? (formData.get('genrePrimary') || null) : null,
         genreSecondary: isArtist ? (formData.get('genreSecondary') || null) : null,
         commentPolicy: isArtist ? (formData.get('commentPolicy') || 'anyone') : 'anyone',
-        socialLinks: socialLinks  // ADD THIS LINE
+        socialLinks: socialLinks.filter(link => link.url.trim() !== ''), // Filter out empty URLs
       };
       
       const submitBtn = e.target.querySelector('[type="submit"]');
@@ -6149,7 +6134,6 @@ showEditProfile() {
       }
     });
   },
-  
   /**
  * Show Gift Track Modal - Artist gives away a copy
  */
