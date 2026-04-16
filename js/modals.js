@@ -5628,6 +5628,21 @@ showEditProfile() {
                   <input type="text" class="form-input" name="twitter" value="${profile.twitter || ''}" placeholder="username">
                 </div>
               </div>
+
+              <!-- Social Links Section (NEW) -->
+              <div class="social-links-section" style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <label class="form-label" style="margin: 0;">All Your Links</label>
+                  <button 
+                    type="button" 
+                    id="add-social-link-btn" 
+                    style="background: #3B82F6; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500;"
+                  >
+                    + Add Link
+                  </button>
+                </div>
+                <div id="social-links-container"></div>
+              </div>
               
               <div class="form-actions">
                 <button type="button" class="btn btn-secondary close-modal-btn">Cancel</button>
@@ -5824,6 +5839,35 @@ showEditProfile() {
         .comment-policy-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
         .comment-policy-desc { font-size: 12px; color: var(--text-muted); }
         .comment-policy-btn.active .comment-policy-label { color: var(--accent); }
+        
+        /* Social Links Styles */
+        .social-link-item {
+          background: #f5f5f5;
+          padding: 12px;
+          border-radius: 8px;
+          margin-bottom: 10px;
+        }
+        .link-platform, .link-custom-name, .link-url {
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 13px;
+          background: white;
+          color: #1a1a1a;
+        }
+        .remove-link-btn {
+          background: #ef4444;
+          color: white;
+          border: none;
+          padding: 8px 12px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: background 150ms;
+        }
+        .remove-link-btn:hover {
+          background: #dc2626;
+        }
       </style>
     `;
     
@@ -5836,6 +5880,128 @@ showEditProfile() {
     const profile = AppState.profile || {};
     if (profile.genrePrimary) selectedGenres.push(profile.genrePrimary);
     if (profile.genreSecondary) selectedGenres.push(profile.genreSecondary);
+    
+    // ===== SOCIAL LINKS LOGIC (NEW) =====
+    let socialLinks = profile.socialLinks || [];
+    
+    const platformOptions = [
+      { value: 'spotify', label: 'Spotify', icon: '🎵' },
+      { value: 'youtube', label: 'YouTube', icon: '▶️' },
+      { value: 'instagram', label: 'Instagram', icon: '📷' },
+      { value: 'tiktok', label: 'TikTok', icon: '🎵' },
+      { value: 'facebook', label: 'Facebook', icon: '👥' },
+      { value: 'twitter', label: 'Twitter/X', icon: '🐦' },
+      { value: 'soundcloud', label: 'SoundCloud', icon: '☁️' },
+      { value: 'bandcamp', label: 'Bandcamp', icon: '🎸' },
+      { value: 'apple_music', label: 'Apple Music', icon: '🍎' },
+      { value: 'website', label: 'Website', icon: '🌐' },
+      { value: 'custom', label: 'Other', icon: '🔗' }
+    ];
+    
+    function renderSocialLinks() {
+      const container = document.getElementById('social-links-container');
+      if (!container) return;
+      
+      if (socialLinks.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 20px; color: #666; font-size: 13px;">
+            No links added yet. Click "+ Add Link" to get started.
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = socialLinks.map((link, index) => `
+        <div class="social-link-item">
+          <div style="display: flex; gap: 10px; align-items: start;">
+            <select 
+              class="link-platform" 
+              data-index="${index}"
+              style="flex: 0 0 140px;"
+            >
+              ${platformOptions.map(opt => `
+                <option value="${opt.value}" ${link.platform === opt.value ? 'selected' : ''}>
+                  ${opt.icon} ${opt.label}
+                </option>
+              `).join('')}
+            </select>
+            
+            ${link.platform === 'custom' ? `
+              <input 
+                type="text" 
+                class="link-custom-name" 
+                data-index="${index}"
+                placeholder="Platform name"
+                value="${link.customName || ''}"
+                style="flex: 0 0 120px;"
+              />
+            ` : ''}
+            
+            <input 
+              type="url" 
+              class="link-url" 
+              data-index="${index}"
+              placeholder="https://..."
+              value="${link.url || ''}"
+              style="flex: 1;"
+            />
+            
+            <button 
+              class="remove-link-btn" 
+              data-index="${index}"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      `).join('');
+      
+      attachSocialLinksListeners();
+    }
+    
+    function attachSocialLinksListeners() {
+      document.querySelectorAll('.link-platform').forEach(select => {
+        select.addEventListener('change', (e) => {
+          const index = parseInt(e.target.dataset.index);
+          socialLinks[index].platform = e.target.value;
+          renderSocialLinks();
+        });
+      });
+      
+      document.querySelectorAll('.link-custom-name').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const index = parseInt(e.target.dataset.index);
+          socialLinks[index].customName = e.target.value;
+        });
+      });
+      
+      document.querySelectorAll('.link-url').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const index = parseInt(e.target.dataset.index);
+          socialLinks[index].url = e.target.value;
+        });
+      });
+      
+      document.querySelectorAll('.remove-link-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt(e.target.dataset.index);
+          socialLinks.splice(index, 1);
+          renderSocialLinks();
+        });
+      });
+    }
+    
+    document.getElementById('add-social-link-btn')?.addEventListener('click', () => {
+      if (socialLinks.length >= 10) {
+        alert('Maximum 10 links allowed');
+        return;
+      }
+      socialLinks.push({ platform: 'spotify', url: '' });
+      renderSocialLinks();
+    });
+    
+    renderSocialLinks();
+    // ===== END SOCIAL LINKS LOGIC =====
     
     // Artist toggle
     document.getElementById('is-artist-toggle')?.addEventListener('change', (e) => {
@@ -5964,6 +6130,7 @@ showEditProfile() {
         genrePrimary: isArtist ? (formData.get('genrePrimary') || null) : null,
         genreSecondary: isArtist ? (formData.get('genreSecondary') || null) : null,
         commentPolicy: isArtist ? (formData.get('commentPolicy') || 'anyone') : 'anyone',
+        socialLinks: socialLinks  // ADD THIS LINE
       };
       
       const submitBtn = e.target.querySelector('[type="submit"]');
@@ -5982,101 +6149,6 @@ showEditProfile() {
       }
     });
   },
-
-  showPrivacyPolicy() {
-    this.activeModal = 'privacy';
-    const html = `
-      <div class="modal-overlay tos-modal-overlay">
-        <div class="modal tos-modal">
-          <div class="modal-header">
-            <div class="modal-title">Privacy Policy</div>
-            <button class="modal-close">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body tos-content">
-            <p class="tos-effective"><em>Effective Date: February 18, 2026</em></p>
-            
-            <h3>1. Introduction</h3>
-            <p>Aventra LLC, a Delaware limited liability company ("XRP Music," "we," "us," or "our"), operates the Platform located at xrpmusic.io. This Privacy Policy describes how we collect, use, and disclose personal information.</p>
-            
-            <h3>2. Information We Collect</h3>
-            <p>We may collect the following information:</p>
-            <ul>
-              <li>Wallet addresses</li>
-              <li>Email addresses (if you choose to provide them)</li>
-              <li>Transaction data related to your interactions with the Platform</li>
-              <li>IP addresses</li>
-              <li>Device information</li>
-              <li>Usage analytics</li>
-            </ul>
-            <p>We do not require account registration and we do not collect government-issued identification or other formal identity verification information. Blockchain transactions are public and permanent.</p>
-            
-            <h3>3. How We Use Information</h3>
-            <p>We use information to operate the Platform, process transactions, provide support, comply with legal obligations, prevent fraud, and improve services.</p>
-            
-            <h3>4. Sharing Information</h3>
-            <p>We may share information with service providers who assist us in operating the Platform, tax authorities to the extent required by law, law enforcement or governmental authorities when required by law, and successor entities in the event of a business transfer. We do not sell personal information for monetary consideration.</p>
-            
-            <h3>5. Data Retention</h3>
-            <p>We retain information as long as necessary for legal compliance, tax obligations, and dispute resolution. Blockchain data cannot be deleted.</p>
-            
-            <h3>6. Data Security</h3>
-            <p>We implement reasonable security measures to protect information. In the event of a data breach involving personal information, we will provide notice as required by law.</p>
-            
-            <h3>7. Cookies</h3>
-            <p>We use essential and analytics cookies. Users may manage cookies through browser settings.</p>
-            
-            <h3>8. Your Rights</h3>
-            <p>Depending on your state of residence, you may have rights to access, correct, delete, or opt out of certain data uses. Contact <a href="mailto:support@xrpmusic.io" style="color:var(--accent);">support@xrpmusic.io</a> to exercise rights.</p>
-            
-            <h3>9. Children</h3>
-            <p>The Platform is not directed to individuals under 18.</p>
-            
-            <h3>10. International Users</h3>
-            <p>Information may be transferred to and processed in the United States.</p>
-            
-            <h3>11. Changes</h3>
-            <p>We may update this Privacy Policy at any time. The date of the last update appears at the top of this document.</p>
-            
-            <h3>12. Contact</h3>
-            <p>Aventra LLC, 701 Fifth Avenue, Suite 3600, Seattle, WA 98104 — <a href="mailto:support@xrpmusic.io" style="color:var(--accent);">support@xrpmusic.io</a></p>
-            
-            <p class="tos-agreement"><em>By using XRP Music, you acknowledge that you have read and understood this Privacy Policy.</em></p>
-          </div>
-        </div>
-      </div>
-      
-      <style>
-        .tos-modal { max-width: 600px; max-height: 80vh; }
-        .tos-content { 
-          overflow-y: auto; 
-          max-height: 60vh; 
-          padding-right: 8px;
-          font-size: 14px;
-          line-height: 1.6;
-          color: var(--text-secondary);
-        }
-        .tos-content h3 { 
-          font-size: 15px; 
-          font-weight: 600; 
-          color: var(--text-primary); 
-          margin: 20px 0 8px 0; 
-        }
-        .tos-content p { margin: 8px 0; }
-        .tos-content ul { margin: 8px 0 8px 20px; }
-        .tos-content li { margin: 4px 0; }
-        .tos-effective { color: var(--text-muted); margin-bottom: 16px; }
-        .tos-agreement { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); }
-        .tos-content::-webkit-scrollbar { width: 6px; }
-        .tos-content::-webkit-scrollbar-track { background: var(--bg-hover); border-radius: 3px; }
-        .tos-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-      </style>
-    `;
-    this.show(html);
   },
   /**
  * Show Gift Track Modal - Artist gives away a copy
