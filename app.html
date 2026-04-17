@@ -48,58 +48,7 @@
         <span>Marketplace</span>
       </button>
 
-      <!-- Browse Genres (PROMOTED to top-level) -->
-      <button class="nav-item" data-page="genres">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7"></rect>
-          <rect x="14" y="3" width="7" height="7"></rect>
-          <rect x="14" y="14" width="7" height="7"></rect>
-          <rect x="3" y="14" width="7" height="7"></rect>
-        </svg>
-        <span>Browse Genres</span>
-      </button>
-
-      <!-- Browse Playlists (PROMOTED to top-level) -->
-      <button class="nav-item" data-page="playlists">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-        </svg>
-        <span>Browse Playlists</span>
-      </button>
-
-      <!-- Liked Songs (PROMOTED to top-level) -->
-      <button class="nav-item" data-page="liked" id="liked-nav-item">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-        </svg>
-        <span>Liked Songs</span>
-      </button>
-
-      <!-- Private Feed (NEW!) -->
-      <button class="nav-item" data-page="private-feed" id="private-feed-nav-item">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-        <span>Private Feed</span>
-        <span class="notification-badge" id="private-feed-badge" style="display: none; margin-left: auto; background: var(--accent); color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px;">!</span>
-      </button>
-
-      <!-- Experiences (RENAMED from Rewards) -->
-      <button class="nav-item" data-page="experiences">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="8" width="18" height="4" rx="1" ry="1"></rect>
-          <path d="M12 8V2"></path>
-          <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path>
-          <path d="M7.5 8a2.5 2.5 0 0 1 0-5C9 3 12 7 12 8"></path>
-          <path d="M16.5 8a2.5 2.5 0 0 0 0-5C15 3 12 7 12 8"></path>
-        </svg>
-        <span>Experiences</span>
-      </button>
-
-      <!-- Audiobooks -->
+      <!-- Audiobooks (MOVED UP) -->
       <button class="nav-item" data-page="audiobooks">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
@@ -108,7 +57,7 @@
         <span>Audiobooks</span>
       </button>
 
-      <!-- Podcasts -->
+      <!-- Podcasts (MOVED UP) -->
       <button class="nav-item" data-page="podcasts">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -119,7 +68,7 @@
         <span>Podcasts</span>
       </button>
 
-      <!-- Films -->
+      <!-- Films (MOVED UP) -->
       <button class="nav-item" data-page="films">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
@@ -134,7 +83,7 @@
         <span>Films</span>
       </button>
 
-      <!-- Games -->
+      <!-- Games (MOVED UP) -->
       <button class="nav-item" data-page="games">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="6" width="20" height="12" rx="2"></rect>
@@ -147,6 +96,60 @@
         <span>Games</span>
       </button>
 
+      <!-- Divider -->
+      <div style="height: 1px; background: var(--border); margin: 12px 16px;"></div>
+
+      <!-- Browse Genres -->
+      <button class="nav-item" data-page="genres">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        <span>Browse Genres</span>
+      </button>
+
+      <!-- Browse Playlists -->
+      <button class="nav-item" data-page="playlists">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+        <span>Browse Playlists</span>
+      </button>
+
+      <!-- Liked Songs -->
+      <button class="nav-item" data-page="liked" id="liked-nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+        <span>Liked Songs</span>
+      </button>
+
+      <!-- Private Feed -->
+      <button class="nav-item" data-page="private-feed" id="private-feed-nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>Private Feed</span>
+        <span class="notification-badge" id="private-feed-badge" style="display: none; margin-left: auto; background: var(--accent); color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px;">!</span>
+      </button>
+
+      <!-- Experiences -->
+      <button class="nav-item" data-page="experiences">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="8" width="18" height="4" rx="1" ry="1"></rect>
+          <path d="M12 8V2"></path>
+          <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path>
+          <path d="M7.5 8a2.5 2.5 0 0 1 0-5C9 3 12 7 12 8"></path>
+          <path d="M16.5 8a2.5 2.5 0 0 0 0-5C15 3 12 7 12 8"></path>
+        </svg>
+        <span>Experiences</span>
+      </button>
+
       <!-- Profile -->
       <button class="nav-item" data-page="profile">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -154,22 +157,6 @@
           <circle cx="12" cy="7" r="4"></circle>
         </svg>
         <span>Profile</span>
-      </button>
-
-      <!-- Sales (conditional - shown only for artists) -->
-      <button id="sales-nav-item" class="nav-item hidden" data-page="sales">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-        </svg>
-        <span>Sales</span>
-      </button>
-
-      <!-- Secondary Sales -->
-      <button class="nav-item" data-page="transparency">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M7 17l9.2-9.2M17 17V7H7"></path>
-        </svg>
-        <span>Secondary Sales</span>
       </button>
 
       <!-- Create Button (shown when logged in) -->
@@ -640,6 +627,7 @@
   <script src="/js/pages/secondary-sales.js"></script>
   <script src="/js/pages/unlockable-tab.js"></script>
   <script src="/js/pages/private-feed.js"></script>
+  <script src="/js/private-feed-notifications.js"></script>
   <script src="/js/pages/rewards-page.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/mint-notifications.js"></script>
