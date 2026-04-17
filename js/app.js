@@ -5,6 +5,7 @@
  * UPDATED: Added 🎁 Rewards page route for NFT-gated rewards system
  * UPDATED: Added 📚 Audiobooks and 🎙️ Podcasts page routes
  * UPDATED: Added 🎬 Films and 🎮 Games page routes
+ * UPDATED: Added 🔒 Private Feed page route
  */
 const Router = {
   params: {},
@@ -40,7 +41,8 @@ const Router = {
     }
     if (page === 'sales') return '/sales';
     if (page === 'transparency') return '/transparency';
-    if (page === 'rewards') return '/rewards';
+    if (page === 'experiences') return '/experiences';
+    if (page === 'private-feed') return '/private-feed';
     if (page === 'audiobooks') return '/audiobooks';
     if (page === 'podcasts') return '/podcasts';
     if (page === 'films') return '/films';
@@ -77,7 +79,8 @@ const Router = {
     if (path === '/purchase') return { page: 'purchase', params: { release: searchParams.get('release'), track: searchParams.get('track'), album: searchParams.get('album') } };
     if (path === '/sales') return { page: 'sales', params: {} };
     if (path === '/transparency') return { page: 'transparency', params: {} };
-    if (path === '/rewards') return { page: 'rewards', params: {} };
+    if (path === '/experiences') return { page: 'experiences', params: {} };
+    if (path === '/private-feed') return { page: 'private-feed', params: {} };
     if (path === '/audiobooks') return { page: 'audiobooks', params: {} };
     if (path === '/podcasts') return { page: 'podcasts', params: {} };
     if (path === '/films') return { page: 'films', params: {} };
@@ -148,10 +151,19 @@ const Router = {
           StreamPage.render();
         }
         break;
-      case 'rewards':
+      case 'experiences':
         if (typeof RewardsPage !== 'undefined') {
           RewardsPage.render();
         } else {
+          StreamPage.render();
+        }
+        break;
+      // ========== PRIVATE FEED ==========
+      case 'private-feed':
+        if (typeof PrivateFeed !== 'undefined') {
+          PrivateFeed.render().then(html => UI.renderPage(html));
+        } else {
+          console.error('PrivateFeed not loaded');
           StreamPage.render();
         }
         break;
