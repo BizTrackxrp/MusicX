@@ -29,9 +29,9 @@ const PrivateFeed = {
       return `
         <div class="page-container">
           <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <h2>No Private Content Yet</h2>
-            <p>Purchase NFTs from artists to unlock exclusive content</p>
+            <div class="empty-icon">🔒</div>
+            <h2>No Content Available</h2>
+            <p>Buy NFTs from participating artists to unlock their exclusive posts, behind-the-scenes content, and more.</p>
             <button class="btn-primary" onclick="UI.navigateTo('marketplace')">Browse Marketplace</button>
           </div>
         </div>
