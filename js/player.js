@@ -1774,11 +1774,14 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
   // Event Handlers
   // ============================================
   
-  onCanPlay() {
-    if (AppState.player.currentTrack) {
-      this.play();
-    }
-  },
+ onCanPlay() {
+  // Only auto-play if we're NOT already playing
+  // This prevents the "4-second pause" bug where canplay event
+  // calls play() again after the track is already playing
+  if (AppState.player.currentTrack && !AppState.player.isPlaying) {
+    this.play();
+  }
+},
   
   onPlay() {
     console.log('▶️ Playback started');
