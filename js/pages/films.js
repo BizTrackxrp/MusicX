@@ -1,7 +1,7 @@
 /**
  * XRP Music - Films Page
  * Upload, mint, and distribute films/videos as NFTs on XRPL.
- * Videos live on IPFS forever — no platform can delete them.
+ * Videos live on Filecoin forever — no platform can delete them.
  */
 
 const FilmsPage = {
@@ -54,14 +54,11 @@ const FilmsPage = {
           <h1 class="films-title">Save Your Video to XRPL</h1>
           <p class="films-subtitle">
             YouTube deleted XRPL Japan's channel overnight.<br>
-            Videos on XRP Music live on IPFS — permanently, unstoppably, on-chain.
+            Videos on XRP Music live on Filecoin — permanently, unstoppably, on-chain.
           </p>
           <div class="films-actions">
             <button class="btn btn-primary films-upload-btn" style="font-size:15px;padding:14px 32px;">
               🎬 Upload Your Film
-            </button>
-            <button class="btn films-learn-btn" style="padding:14px 28px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);">
-              How It Works
             </button>
           </div>
           <p class="films-hero-sub">Mint as an NFT · Set your price · Fans own what they watch · You earn on every resale</p>
@@ -73,7 +70,7 @@ const FilmsPage = {
         <div class="films-feature">
           <div class="films-feature-icon">🛡️</div>
           <h3>Can't Be Deleted</h3>
-          <p>IPFS + XRPL means no platform, no company, no government can pull your content. It exists as long as the network does.</p>
+          <p>Filecoin + XRPL means no platform, no company, no government can pull your content. It exists as long as the network does.</p>
         </div>
         <div class="films-feature">
           <div class="films-feature-icon">💸</div>
@@ -99,7 +96,7 @@ const FilmsPage = {
       <div class="films-cta-banner">
         <div class="films-cta-text">
           <h2>Your video, preserved forever</h2>
-          <p>Upload once. Live on IPFS permanently. No subscriptions, no platform risk, no takedowns. The XRP Ledger doesn't forget.</p>
+          <p>Upload once. Live on Filecoin permanently. No subscriptions, no platform risk, no takedowns. The XRP Ledger doesn't forget.</p>
         </div>
         <button class="btn btn-primary films-upload-btn" style="font-size:15px;padding:14px 32px;white-space:nowrap;">
           🎬 Upload Your Film
@@ -166,10 +163,6 @@ const FilmsPage = {
         }
         this.showUploadModal();
       });
-    });
-
-    document.querySelector('.films-learn-btn')?.addEventListener('click', () => {
-      document.querySelector('.films-features')?.scrollIntoView({ behavior: 'smooth' });
     });
 
     document.querySelectorAll('.film-card').forEach(card => {
@@ -262,7 +255,7 @@ const FilmsPage = {
                   <div class="upload-placeholder" id="film-video-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"></polygon></svg>
                     <span id="film-video-cta">Click to upload video</span>
-                    <span class="upload-hint">MP4, MOV, AVI, WebM — up to 10GB</span>
+                    <span class="upload-hint">MP4, MOV, AVI, WebM — up to 10GB • Stored on Filecoin</span>
                   </div>
                   <div id="film-video-status" class="hidden"></div>
                 </div>
@@ -357,257 +350,357 @@ const FilmsPage = {
     let videoUploading = false;
 
     // ── Close ──
-    document.querySelector('.modal-close')?.addEventListener('click', () => Modals.close());
-    document.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-      if (e.target === e.currentTarget && !videoUploading) Modals.close();
-    });
+    const closeBtn = document.querySelector('.modal-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => Modals.close());
+    }
+    
+    const overlay = document.querySelector('.modal-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget && !videoUploading) Modals.close();
+      });
+    }
 
     // ── Step 1 → 2 ──
-    document.getElementById('film-next-1')?.addEventListener('click', () => {
-      const title = document.getElementById('film-title').value.trim();
-      if (!title) { alert('Please enter a title'); return; }
-      document.getElementById('film-step-1').classList.add('hidden');
-      document.getElementById('film-step-2').classList.remove('hidden');
-    });
+    const next1Btn = document.getElementById('film-next-1');
+    if (next1Btn) {
+      next1Btn.addEventListener('click', () => {
+        const titleInput = document.getElementById('film-title');
+        const title = titleInput ? titleInput.value.trim() : '';
+        if (!title) { alert('Please enter a title'); return; }
+        
+        const step1 = document.getElementById('film-step-1');
+        const step2 = document.getElementById('film-step-2');
+        if (step1) step1.classList.add('hidden');
+        if (step2) step2.classList.remove('hidden');
+      });
+    }
 
-    document.getElementById('film-back-2')?.addEventListener('click', () => {
-      document.getElementById('film-step-2').classList.add('hidden');
-      document.getElementById('film-step-1').classList.remove('hidden');
-    });
+    const back2Btn = document.getElementById('film-back-2');
+    if (back2Btn) {
+      back2Btn.addEventListener('click', () => {
+        const step1 = document.getElementById('film-step-1');
+        const step2 = document.getElementById('film-step-2');
+        if (step2) step2.classList.add('hidden');
+        if (step1) step1.classList.remove('hidden');
+      });
+    }
 
     // ── Thumbnail ──
     const thumbZone = document.getElementById('film-thumb-zone');
     const thumbInput = document.getElementById('film-thumb-input');
-    thumbZone?.addEventListener('click', () => thumbInput?.click());
-    thumbInput?.addEventListener('change', () => {
-      const file = thumbInput.files[0];
-      if (!file || !file.type.startsWith('image/')) return;
-      thumbFile = file;
-      document.getElementById('film-thumb-img').src = URL.createObjectURL(file);
-      document.getElementById('film-thumb-placeholder').classList.add('hidden');
-      document.getElementById('film-thumb-preview').classList.remove('hidden');
-      thumbZone.classList.add('has-file');
-    });
-    document.getElementById('film-thumb-remove')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      thumbFile = null;
-      document.getElementById('film-thumb-placeholder').classList.remove('hidden');
-      document.getElementById('film-thumb-preview').classList.add('hidden');
-      thumbZone.classList.remove('has-file');
-    });
+    if (thumbZone && thumbInput) {
+      thumbZone.addEventListener('click', () => thumbInput.click());
+      thumbInput.addEventListener('change', () => {
+        const file = thumbInput.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        thumbFile = file;
+        
+        const thumbImg = document.getElementById('film-thumb-img');
+        const thumbPlaceholder = document.getElementById('film-thumb-placeholder');
+        const thumbPreview = document.getElementById('film-thumb-preview');
+        
+        if (thumbImg) thumbImg.src = URL.createObjectURL(file);
+        if (thumbPlaceholder) thumbPlaceholder.classList.add('hidden');
+        if (thumbPreview) thumbPreview.classList.remove('hidden');
+        thumbZone.classList.add('has-file');
+      });
+    }
+    
+    const thumbRemoveBtn = document.getElementById('film-thumb-remove');
+    if (thumbRemoveBtn) {
+      thumbRemoveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        thumbFile = null;
+        
+        const thumbPlaceholder = document.getElementById('film-thumb-placeholder');
+        const thumbPreview = document.getElementById('film-thumb-preview');
+        const thumbZone = document.getElementById('film-thumb-zone');
+        
+        if (thumbPlaceholder) thumbPlaceholder.classList.remove('hidden');
+        if (thumbPreview) thumbPreview.classList.add('hidden');
+        if (thumbZone) thumbZone.classList.remove('has-file');
+      });
+    }
 
     // ── Video upload ──
     const videoZone = document.getElementById('film-video-zone');
     const videoInput = document.getElementById('film-video-input');
-    videoZone?.addEventListener('click', () => { if (!videoUploading && !videoCid) videoInput?.click(); });
-    videoInput?.addEventListener('change', async () => {
-      const file = videoInput.files[0];
-      if (!file) return;
-      if (file.size > 10 * 1024 * 1024 * 1024) { alert('File too large (max 10GB)'); return; }
+    if (videoZone && videoInput) {
+      videoZone.addEventListener('click', () => { 
+        if (!videoUploading && !videoCid) videoInput.click(); 
+      });
+      
+      videoInput.addEventListener('change', async () => {
+        const file = videoInput.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024 * 1024) { 
+          alert('File too large (max 10GB)'); 
+          return; 
+        }
 
-      videoFile = file;
-      videoUploading = true;
-      videoZone.classList.remove('has-file');
-      document.getElementById('film-video-placeholder').classList.add('hidden');
+        videoFile = file;
+        videoUploading = true;
+        videoZone.classList.remove('has-file');
+        
+        const videoPlaceholder = document.getElementById('film-video-placeholder');
+        if (videoPlaceholder) videoPlaceholder.classList.add('hidden');
 
-      const statusEl = document.getElementById('film-video-status');
-      statusEl.classList.remove('hidden');
-      statusEl.innerHTML = `
-        <div class="film-upload-progress">
-          <div class="film-progress-bar"><div class="film-progress-fill" id="film-vpbar" style="width:0%"></div></div>
-          <div class="film-progress-text" id="film-vpct">Uploading ${(file.size/1024/1024/1024).toFixed(2)}GB to IPFS...</div>
-        </div>
-      `;
-
-      try {
-        const result = await DirectUploader.upload(file, (pct) => {
-          const bar = document.getElementById('film-vpbar');
-          const txt = document.getElementById('film-vpct');
-          if (bar) bar.style.width = pct + '%';
-          if (txt) txt.textContent = `Uploading... ${pct}% — please don't close this page`;
-        });
-
-        videoCid = result.cid;
-        videoUrl = result.url;
-        videoUploading = false;
-        videoZone.classList.add('has-file');
-        statusEl.innerHTML = `
-          <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;">
-            <span style="font-size:20px;">✅</span>
-            <div>
-              <div style="font-size:14px;font-weight:600;color:#22c55e;">Upload complete</div>
-              <div style="font-size:12px;color:var(--text-muted);">${file.name} • On IPFS forever</div>
+        const statusEl = document.getElementById('film-video-status');
+        if (statusEl) {
+          statusEl.classList.remove('hidden');
+          statusEl.innerHTML = `
+            <div class="film-upload-progress">
+              <div class="film-progress-bar"><div class="film-progress-fill" id="film-vpbar" style="width:0%"></div></div>
+              <div class="film-progress-text" id="film-vpct">Uploading ${(file.size/1024/1024/1024).toFixed(2)}GB to Filecoin...</div>
             </div>
-          </div>
-        `;
-      } catch (err) {
-        videoUploading = false;
-        videoCid = null;
-        statusEl.innerHTML = `<div style="color:var(--error);font-size:13px;padding:8px;">Upload failed: ${err.message}</div>`;
-        document.getElementById('film-video-placeholder').classList.remove('hidden');
-      }
-    });
+          `;
+        }
+
+        try {
+          const result = await DirectUploader.upload(file, (pct) => {
+            const bar = document.getElementById('film-vpbar');
+            const txt = document.getElementById('film-vpct');
+            if (bar) bar.style.width = pct + '%';
+            if (txt) txt.textContent = `Uploading to Filecoin... ${pct}% — please don't close this page`;
+          });
+
+          videoCid = result.cid;
+          videoUrl = result.url;
+          videoUploading = false;
+          videoZone.classList.add('has-file');
+          
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;">
+                <span style="font-size:20px;">✅</span>
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:#22c55e;">Upload complete</div>
+                  <div style="font-size:12px;color:var(--text-muted);">${file.name} • On Filecoin forever</div>
+                </div>
+              </div>
+            `;
+          }
+        } catch (err) {
+          videoUploading = false;
+          videoCid = null;
+          if (statusEl) {
+            statusEl.innerHTML = `<div style="color:var(--error);font-size:13px;padding:8px;">Upload failed: ${err.message}</div>`;
+          }
+          if (videoPlaceholder) videoPlaceholder.classList.remove('hidden');
+        }
+      });
+    }
 
     // ── Step 2 → 3 ──
-    document.getElementById('film-next-2')?.addEventListener('click', () => {
-      if (!thumbFile) { alert('Please upload a thumbnail'); return; }
-      if (!videoCid) { alert('Please wait for video upload to complete'); return; }
+    const next2Btn = document.getElementById('film-next-2');
+    if (next2Btn) {
+      next2Btn.addEventListener('click', () => {
+        if (!thumbFile) { alert('Please upload a thumbnail'); return; }
+        if (!videoCid) { alert('Please wait for video upload to complete'); return; }
 
-      const title = document.getElementById('film-title').value;
-      const price = document.getElementById('film-price').value;
-      const editions = document.getElementById('film-editions').value;
-      const royalty = document.getElementById('film-royalty').value;
-      const fee = ((parseInt(editions) * 0.000012) + 0.01).toFixed(6);
+        const titleInput = document.getElementById('film-title');
+        const priceInput = document.getElementById('film-price');
+        const editionsInput = document.getElementById('film-editions');
+        const royaltyInput = document.getElementById('film-royalty');
+        
+        const title = titleInput ? titleInput.value : '';
+        const price = priceInput ? priceInput.value : '10';
+        const editions = editionsInput ? editionsInput.value : '100';
+        const royalty = royaltyInput ? royaltyInput.value : '10';
+        const fee = ((parseInt(editions) * 0.000012) + 0.01).toFixed(6);
 
-      document.getElementById('film-review-card').innerHTML = `
-        <div class="film-review-thumb">
-          <img src="${URL.createObjectURL(thumbFile)}" alt="${title}">
-        </div>
-        <div class="film-review-info">
-          <div class="film-review-title">${title}</div>
-          <div class="film-review-artist">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</div>
-        </div>
-      `;
-      document.getElementById('film-review-price').textContent = `${price} XRP`;
-      document.getElementById('film-review-editions').textContent = `${editions} copies`;
-      document.getElementById('film-review-royalty').textContent = `${royalty}%`;
-      document.getElementById('film-review-fee').textContent = `~${fee} XRP`;
+        const reviewCard = document.getElementById('film-review-card');
+        if (reviewCard) {
+          reviewCard.innerHTML = `
+            <div class="film-review-thumb">
+              <img src="${URL.createObjectURL(thumbFile)}" alt="${title}">
+            </div>
+            <div class="film-review-info">
+              <div class="film-review-title">${title}</div>
+              <div class="film-review-artist">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</div>
+            </div>
+          `;
+        }
+        
+        const reviewPrice = document.getElementById('film-review-price');
+        const reviewEditions = document.getElementById('film-review-editions');
+        const reviewRoyalty = document.getElementById('film-review-royalty');
+        const reviewFee = document.getElementById('film-review-fee');
+        
+        if (reviewPrice) reviewPrice.textContent = `${price} XRP`;
+        if (reviewEditions) reviewEditions.textContent = `${editions} copies`;
+        if (reviewRoyalty) reviewRoyalty.textContent = `${royalty}%`;
+        if (reviewFee) reviewFee.textContent = `~${fee} XRP`;
 
-      document.getElementById('film-step-2').classList.add('hidden');
-      document.getElementById('film-step-3').classList.remove('hidden');
-    });
+        const step2 = document.getElementById('film-step-2');
+        const step3 = document.getElementById('film-step-3');
+        if (step2) step2.classList.add('hidden');
+        if (step3) step3.classList.remove('hidden');
+      });
+    }
 
-    document.getElementById('film-back-3')?.addEventListener('click', () => {
-      document.getElementById('film-step-3').classList.add('hidden');
-      document.getElementById('film-step-2').classList.remove('hidden');
-    });
+    const back3Btn = document.getElementById('film-back-3');
+    if (back3Btn) {
+      back3Btn.addEventListener('click', () => {
+        const step2 = document.getElementById('film-step-2');
+        const step3 = document.getElementById('film-step-3');
+        if (step3) step3.classList.add('hidden');
+        if (step2) step2.classList.remove('hidden');
+      });
+    }
 
     // ── Mint ──
-    document.getElementById('film-mint-btn')?.addEventListener('click', async () => {
-      const statusEl = document.getElementById('film-mint-status');
-      const navEl = document.getElementById('film-nav-3');
-      statusEl.classList.remove('hidden');
-      navEl.style.display = 'none';
+    const mintBtn = document.getElementById('film-mint-btn');
+    if (mintBtn) {
+      mintBtn.addEventListener('click', async () => {
+        const statusEl = document.getElementById('film-mint-status');
+        const navEl = document.getElementById('film-nav-3');
+        const statusText = document.getElementById('film-mint-status-text');
+        
+        if (statusEl) statusEl.classList.remove('hidden');
+        if (navEl) navEl.style.display = 'none';
 
-      const showStatus = (msg) => {
-        document.getElementById('film-mint-status-text').textContent = msg;
-      };
-
-      try {
-        const title = document.getElementById('film-title').value;
-        const description = document.getElementById('film-description').value;
-        const price = parseFloat(document.getElementById('film-price').value) || 10;
-        const editions = parseInt(document.getElementById('film-editions').value) || 100;
-        const royaltyPercent = parseFloat(document.getElementById('film-royalty').value) || 10;
-
-        // 1. Upload thumbnail
-        showStatus('Uploading thumbnail...');
-        const thumbResult = await API.uploadFile(thumbFile);
-
-        // 2. Create metadata
-        showStatus('Creating metadata...');
-        const metadata = {
-          name: title,
-          description,
-          image: `ipfs://${thumbResult.cid}`,
-          animation_url: `ipfs://${videoCid}`,
-          attributes: [
-            { trait_type: 'Type', value: 'Film' },
-            { trait_type: 'Content Type', value: 'film' },
-            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
-          ],
-          properties: { video: videoUrl, thumbnail: thumbResult.url },
+        const showStatus = (msg) => {
+          if (statusText) statusText.textContent = msg;
         };
-        const metaResult = await API.uploadJSON(metadata, `${title}-metadata.json`);
 
-        // 3. Save release
-        showStatus('Creating release...');
-        const releaseData = {
-          artistAddress: AppState.user.address,
-          artistName: AppState.profile?.name || null,
-          title,
-          description,
-          type: 'single',
-          contentType: 'film',
-          coverUrl: thumbResult.url,
-          coverCid: thumbResult.cid,
-          metadataCid: metaResult.cid,
-          songPrice: price,
-          albumPrice: null,
-          totalEditions: editions,
-          editionsPerTrack: editions,
-          royaltyPercent,
-          nftTokenIds: [],
-          txHash: null,
-          tracks: [{
+        try {
+          const titleInput = document.getElementById('film-title');
+          const descInput = document.getElementById('film-description');
+          const priceInput = document.getElementById('film-price');
+          const editionsInput = document.getElementById('film-editions');
+          const royaltyInput = document.getElementById('film-royalty');
+          
+          const title = titleInput ? titleInput.value : '';
+          const description = descInput ? descInput.value : '';
+          const price = priceInput ? parseFloat(priceInput.value) || 10 : 10;
+          const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
+          const royaltyPercent = royaltyInput ? parseFloat(royaltyInput.value) || 10 : 10;
+
+          // 1. Upload thumbnail
+          showStatus('Uploading thumbnail...');
+          const thumbResult = await API.uploadFile(thumbFile);
+
+          // 2. Create metadata
+          showStatus('Creating metadata...');
+          const metadata = {
+            name: title,
+            description,
+            image: `ipfs://${thumbResult.cid}`,
+            animation_url: `ipfs://${videoCid}`,
+            attributes: [
+              { trait_type: 'Type', value: 'Film' },
+              { trait_type: 'Content Type', value: 'film' },
+              { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+            ],
+            properties: { video: videoUrl, thumbnail: thumbResult.url },
+          };
+          const metaResult = await API.uploadJSON(metadata, `${title}-metadata.json`);
+
+          // 3. Save release
+          showStatus('Creating release...');
+          const releaseData = {
+            artistAddress: AppState.user.address,
+            artistName: AppState.profile?.name || null,
             title,
-            trackNumber: 1,
-            duration: 0,
-            audioCid: videoCid,
-            audioUrl: videoUrl,
-            price,
-            soldEditions: 0,
-            availableEditions: editions,
-          }],
-          sellOfferIndex: null,
-        };
-        const createResult = await API.saveRelease(releaseData);
-        const releaseId = createResult.releaseId;
+            description,
+            type: 'single',
+            contentType: 'film',
+            coverUrl: thumbResult.url,
+            coverCid: thumbResult.cid,
+            metadataCid: metaResult.cid,
+            songPrice: price,
+            albumPrice: null,
+            totalEditions: editions,
+            editionsPerTrack: editions,
+            royaltyPercent,
+            nftTokenIds: [],
+            txHash: null,
+            tracks: [{
+              title,
+              trackNumber: 1,
+              duration: 0,
+              audioCid: videoCid,
+              audioUrl: videoUrl,
+              price,
+              soldEditions: 0,
+              availableEditions: editions,
+            }],
+            sellOfferIndex: null,
+          };
+          const createResult = await API.saveRelease(releaseData);
+          const releaseId = createResult.releaseId;
 
-        // 4. Pay mint fee
-        const mintFee = ((editions * 0.000012) + 0.01).toFixed(6);
-        statusEl.innerHTML = `
-          <div class="mint-status-icon"><div class="spinner"></div></div>
-          <div class="film-mint-status-text" style="font-size:15px;font-weight:600;">Pay Mint Fee</div>
-          <p style="font-size:13px;color:var(--accent);margin-top:12px;">📱 Sign in Xaman</p>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">~${mintFee} XRP one-time fee</p>
-        `;
+          // 4. Pay mint fee
+          const mintFee = ((editions * 0.000012) + 0.01).toFixed(6);
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div class="mint-status-icon"><div class="spinner"></div></div>
+              <div class="film-mint-status-text" style="font-size:15px;font-weight:600;">Pay Mint Fee</div>
+              <p style="font-size:13px;color:var(--accent);margin-top:12px;">📱 Sign in Xaman</p>
+              <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">~${mintFee} XRP one-time fee</p>
+            `;
+          }
 
-        const configRes = await fetch('/api/batch-mint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getConfig' }) });
-        const { platformAddress } = await configRes.json();
-        if (!platformAddress) throw new Error('Platform not configured');
+          const configRes = await fetch('/api/batch-mint', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ action: 'getConfig' }) 
+          });
+          const { platformAddress } = await configRes.json();
+          if (!platformAddress) throw new Error('Platform not configured');
 
-        const payResult = await XamanWallet.sendPayment(platformAddress, parseFloat(mintFee), `XRP Music Films: ${title}`);
-        if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
+          const payResult = await XamanWallet.sendPayment(platformAddress, parseFloat(mintFee), `XRP Music Films: ${title}`);
+          if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
 
-        // 5. Go live
-        showStatus('Publishing...');
-        await API.updateRelease(releaseId, {
-          mintFeePaid: true,
-          mintFeeTxHash: payResult.txHash,
-          mintFeeAmount: parseFloat(mintFee),
-          status: 'live',
-        });
+          // 5. Go live
+          showStatus('Publishing...');
+          await API.updateRelease(releaseId, {
+            mintFeePaid: true,
+            mintFeeTxHash: payResult.txHash,
+            mintFeeAmount: parseFloat(mintFee),
+            status: 'live',
+          });
 
-        // Success
-        statusEl.innerHTML = `
-          <div style="text-align:center;">
-            <div style="font-size:56px;margin-bottom:16px;">🎬</div>
-            <div style="font-size:20px;font-weight:700;margin-bottom:8px;">${title} is live!</div>
-            <p style="font-size:14px;color:var(--text-muted);margin-bottom:24px;">Your film is on IPFS forever. No one can delete it.</p>
-            <div style="display:flex;gap:12px;justify-content:center;">
-              <button class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just uploaded my film to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡')}','_blank')">Share on X</button>
-              <button class="btn btn-primary" id="film-success-done">View Film</button>
-            </div>
-          </div>
-        `;
+          // Success
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div style="text-align:center;">
+                <div style="font-size:56px;margin-bottom:16px;">🎬</div>
+                <div style="font-size:20px;font-weight:700;margin-bottom:8px;">${title} is live!</div>
+                <p style="font-size:14px;color:var(--text-muted);margin-bottom:24px;">Your film is on Filecoin forever. No one can delete it.</p>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                  <button class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just uploaded my film to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡')}','_blank')">Share on X</button>
+                  <button class="btn btn-primary" id="film-success-done">View Film</button>
+                </div>
+              </div>
+            `;
+          }
 
-        document.getElementById('film-success-done')?.addEventListener('click', () => {
-          Modals.close();
-          FilmsPage.loadFilms();
-        });
+          const successBtn = document.getElementById('film-success-done');
+          if (successBtn) {
+            successBtn.addEventListener('click', () => {
+              Modals.close();
+              FilmsPage.loadFilms();
+            });
+          }
 
-      } catch (err) {
-        console.error('Film mint failed:', err);
-        statusEl.innerHTML = `
-          <div class="mint-status-icon" style="color:var(--error);">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-          </div>
-          <div class="film-mint-status-text" style="color:var(--error);">${err.message || 'Minting failed'}</div>
-        `;
-        navEl.style.display = 'flex';
-      }
-    });
+        } catch (err) {
+          console.error('Film mint failed:', err);
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div class="mint-status-icon" style="color:var(--error);">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              </div>
+              <div class="film-mint-status-text" style="color:var(--error);">${err.message || 'Minting failed'}</div>
+            `;
+          }
+          if (navEl) navEl.style.display = 'flex';
+        }
+      });
+    }
   },
 
   getStyles() {
