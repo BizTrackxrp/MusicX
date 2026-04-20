@@ -2,6 +2,8 @@
  * XRP Music - Films Page
  * Upload, mint, and distribute films/videos as NFTs on XRPL.
  * Videos live on Filecoin forever — no platform can delete them.
+ * 
+ * PAYMENT-BEFORE-UPLOAD: User pays storage + mint fee BEFORE video uploads to Filecoin
  */
 
 const FilmsPage = {
@@ -223,12 +225,12 @@ const FilmsPage = {
                 <p class="form-hint">You earn this on every secondary sale</p>
               </div>
 
-              <button type="button" class="btn btn-primary btn-full" id="film-next-1">Next: Upload Files</button>
+              <button type="button" class="btn btn-primary btn-full" id="film-next-1">Next: Select Files</button>
             </div>
 
-            <!-- Step 2: Files -->
+            <!-- Step 2: Select Files (NOT uploaded yet) -->
             <div class="film-step hidden" id="film-step-2">
-              <h3 class="film-step-title">Upload Files</h3>
+              <h3 class="film-step-title">Select Files</h3>
 
               <!-- Thumbnail -->
               <div class="form-group">
@@ -237,7 +239,7 @@ const FilmsPage = {
                   <input type="file" id="film-thumb-input" accept="image/*" style="display:none;">
                   <div class="upload-placeholder" id="film-thumb-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                    <span>Click to upload thumbnail</span>
+                    <span>Click to select thumbnail</span>
                     <span class="upload-hint">JPG, PNG — 1920×1080 recommended</span>
                   </div>
                   <div class="upload-preview hidden" id="film-thumb-preview">
@@ -254,43 +256,135 @@ const FilmsPage = {
                   <input type="file" id="film-video-input" accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" style="display:none;">
                   <div class="upload-placeholder" id="film-video-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"></polygon></svg>
-                    <span id="film-video-cta">Click to upload video</span>
-                    <span class="upload-hint">MP4, MOV, AVI, WebM — up to 10GB • Stored on Filecoin</span>
+                    <span id="film-video-cta">Click to select video</span>
+                    <span class="upload-hint">MP4, MOV, AVI, WebM — up to 10GB</span>
                   </div>
-                  <div id="film-video-status" class="hidden"></div>
+                  <div class="upload-file-info hidden" id="film-video-info">
+                    <div class="file-info-icon">🎬</div>
+                    <div class="file-info-details">
+                      <div class="file-info-name" id="film-video-name"></div>
+                      <div class="file-info-size" id="film-video-size"></div>
+                    </div>
+                    <button type="button" class="file-info-remove" id="film-video-remove">×</button>
+                  </div>
                 </div>
               </div>
 
               <div class="film-nav">
                 <button type="button" class="btn btn-secondary" id="film-back-2">Back</button>
-                <button type="button" class="btn btn-primary" id="film-next-2">Next: Review</button>
+                <button type="button" class="btn btn-primary" id="film-next-2">Next: Payment</button>
               </div>
             </div>
 
-            <!-- Step 3: Review & Mint -->
+            <!-- Step 3: Payment (BEFORE upload) -->
             <div class="film-step hidden" id="film-step-3">
-              <h3 class="film-step-title">Review & Mint</h3>
+              <h3 class="film-step-title">Payment</h3>
 
-              <div class="film-review-card" id="film-review-card"></div>
-
-              <div class="review-details">
-                <div class="review-row"><span>Price</span><span id="film-review-price"></span></div>
-                <div class="review-row"><span>Editions</span><span id="film-review-editions"></span></div>
-                <div class="review-row"><span>Resale Royalty</span><span id="film-review-royalty"></span></div>
-                <div class="review-row"><span>Mint Fee</span><span id="film-review-fee"></span></div>
+              <div class="payment-warning">
+                <div class="payment-warning-icon">⚠️</div>
+                <div>
+                  <div class="payment-warning-title">Payment Required Before Upload</div>
+                  <p class="payment-warning-text">Filecoin storage is permanent and cannot be deleted. You must pay upfront to cover storage + minting costs.</p>
+                </div>
               </div>
 
-              <div class="film-mint-status hidden" id="film-mint-status">
+              <div class="payment-breakdown">
+                <div class="payment-row">
+                  <span>Filecoin Storage</span>
+                  <span id="payment-storage-fee">-</span>
+                </div>
+                <div class="payment-row">
+                  <span>Video Size</span>
+                  <span id="payment-video-size">-</span>
+                </div>
+                <div class="payment-row">
+                  <span>Thumbnail Storage</span>
+                  <span>~0.01 XRP</span>
+                </div>
+                <div class="payment-row">
+                  <span>Mint Fee (<span id="payment-editions-count">-</span> editions)</span>
+                  <span id="payment-mint-fee">-</span>
+                </div>
+                <div class="payment-row payment-total">
+                  <span>TOTAL</span>
+                  <span id="payment-total">-</span>
+                </div>
+              </div>
+
+              <div class="payment-note">
+                💡 <strong>What you get:</strong> Permanent Filecoin storage + NFT minted on XRPL + Your film lives forever on-chain
+              </div>
+
+              <div class="film-mint-status hidden" id="film-payment-status">
                 <div class="mint-status-icon"><div class="spinner"></div></div>
-                <div class="film-mint-status-text" id="film-mint-status-text">Preparing...</div>
+                <div class="film-mint-status-text" id="film-payment-status-text">Waiting for payment...</div>
               </div>
 
               <div class="film-nav" id="film-nav-3">
                 <button type="button" class="btn btn-secondary" id="film-back-3">Back</button>
-                <button type="button" class="btn btn-primary" id="film-mint-btn" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
-                  Pay & Go Live
+                <button type="button" class="btn btn-primary" id="film-pay-btn" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
+                  💳 Pay & Start Upload
                 </button>
+              </div>
+            </div>
+
+            <!-- Step 4: Upload Progress (AFTER payment) -->
+            <div class="film-step hidden" id="film-step-4">
+              <h3 class="film-step-title">Uploading to Filecoin</h3>
+
+              <div class="upload-status-card">
+                <div class="upload-status-icon">✅</div>
+                <div class="upload-status-text">Payment confirmed!</div>
+              </div>
+
+              <div class="upload-progress-section">
+                <div class="upload-progress-item" id="upload-thumb-progress">
+                  <div class="upload-progress-label">
+                    <span>Uploading thumbnail...</span>
+                    <span class="upload-progress-pct" id="thumb-pct">0%</span>
+                  </div>
+                  <div class="upload-progress-bar">
+                    <div class="upload-progress-fill" id="thumb-bar" style="width:0%"></div>
+                  </div>
+                </div>
+
+                <div class="upload-progress-item hidden" id="upload-video-progress">
+                  <div class="upload-progress-label">
+                    <span>Uploading video to Filecoin...</span>
+                    <span class="upload-progress-pct" id="video-pct">0%</span>
+                  </div>
+                  <div class="upload-progress-bar">
+                    <div class="upload-progress-fill" id="video-bar" style="width:0%"></div>
+                  </div>
+                </div>
+
+                <div class="upload-progress-item hidden" id="upload-minting-progress">
+                  <div class="upload-progress-label">
+                    <span>Creating NFT metadata...</span>
+                    <span class="upload-progress-pct">⏳</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="upload-warning">
+                ⚠️ <strong>Do not close this page</strong> — upload in progress
+              </div>
+            </div>
+
+            <!-- Step 5: Success -->
+            <div class="film-step hidden" id="film-step-5">
+              <div class="success-animation">
+                <div class="success-icon">🎬</div>
+                <h2 class="success-title" id="success-title">Film is Live!</h2>
+                <p class="success-text">Your film is on Filecoin forever. No one can delete it.</p>
+                
+                <div class="success-share">
+                  <button class="btn btn-secondary" id="success-share-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>
+                    Share on X
+                  </button>
+                  <button class="btn btn-primary" id="success-done-btn">View Film</button>
+                </div>
               </div>
             </div>
 
@@ -299,22 +393,59 @@ const FilmsPage = {
       </div>
 
       <style>
-        .film-upload-modal { max-width: 520px; }
+        .film-upload-modal { max-width: 540px; }
         .film-step-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
         .film-step.hidden { display: none; }
         .film-nav { display: flex; gap: 12px; margin-top: 24px; }
         .film-nav .btn { flex: 1; }
         .film-video-zone { min-height: 120px; }
-        .film-upload-progress { margin-top: 12px; }
-        .film-progress-bar { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
-        .film-progress-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 4px; transition: width 300ms ease; }
-        .film-progress-text { font-size: 13px; color: var(--text-muted); text-align: center; }
-        .film-review-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-hover); border-radius: var(--radius-lg); margin-bottom: 20px; }
-        .film-review-thumb { width: 120px; height: 68px; border-radius: 8px; overflow: hidden; background: var(--bg-card); flex-shrink: 0; }
-        .film-review-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .film-review-info { flex: 1; }
-        .film-review-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-        .film-review-artist { font-size: 13px; color: var(--text-muted); }
+        
+        /* File info display */
+        .upload-file-info { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-card); border-radius: 12px; }
+        .upload-file-info.hidden { display: none; }
+        .file-info-icon { font-size: 32px; }
+        .file-info-details { flex: 1; }
+        .file-info-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .file-info-size { font-size: 12px; color: var(--text-muted); }
+        .file-info-remove { width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
+
+        /* Payment warning */
+        .payment-warning { display: flex; gap: 12px; padding: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 12px; margin-bottom: 20px; }
+        .payment-warning-icon { font-size: 24px; flex-shrink: 0; }
+        .payment-warning-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #fbbf24; }
+        .payment-warning-text { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+
+        /* Payment breakdown */
+        .payment-breakdown { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .payment-row { display: flex; justify-content: space-between; padding: 10px 0; font-size: 14px; border-bottom: 1px solid var(--border-color); }
+        .payment-row:last-child { border-bottom: none; }
+        .payment-row span:first-child { color: var(--text-secondary); }
+        .payment-row span:last-child { color: var(--text-primary); font-weight: 500; }
+        .payment-total { padding-top: 16px; margin-top: 8px; border-top: 2px solid var(--border-color); font-size: 16px; font-weight: 700; }
+        .payment-total span { color: var(--text-primary); }
+        .payment-note { font-size: 13px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.5; }
+
+        /* Upload progress */
+        .upload-status-card { text-align: center; padding: 20px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px; margin-bottom: 24px; }
+        .upload-status-icon { font-size: 48px; margin-bottom: 8px; }
+        .upload-status-text { font-size: 16px; font-weight: 600; color: #22c55e; }
+        .upload-progress-section { margin-bottom: 20px; }
+        .upload-progress-item { margin-bottom: 16px; }
+        .upload-progress-item.hidden { display: none; }
+        .upload-progress-label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+        .upload-progress-pct { color: var(--text-muted); }
+        .upload-progress-bar { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
+        .upload-progress-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 4px; transition: width 300ms ease; }
+        .upload-warning { text-align: center; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; font-size: 13px; }
+
+        /* Success */
+        .success-animation { text-align: center; padding: 40px 20px; }
+        .success-icon { font-size: 80px; margin-bottom: 20px; animation: successPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        @keyframes successPop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+        .success-title { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+        .success-text { font-size: 14px; color: var(--text-muted); margin-bottom: 32px; }
+        .success-share { display: flex; gap: 12px; justify-content: center; }
+
         .film-mint-status { text-align: center; padding: 24px; }
         .film-mint-status.hidden { display: none; }
         .film-mint-status-text { font-size: 14px; color: var(--text-secondary); margin-top: 12px; }
@@ -330,11 +461,6 @@ const FilmsPage = {
         .upload-preview img { width: 100%; max-width: 240px; border-radius: 8px; }
         .upload-preview.hidden { display: none; }
         .upload-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
-        .review-details { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
-        .review-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border-color); }
-        .review-row:last-child { border-bottom: none; }
-        .review-row span:first-child { color: var(--text-secondary); }
-        .review-row span:last-child { color: var(--text-primary); font-weight: 500; }
       </style>
     `;
 
@@ -347,7 +473,12 @@ const FilmsPage = {
     let videoFile = null;
     let videoCid = null;
     let videoUrl = null;
-    let videoUploading = false;
+    let thumbCid = null;
+    let thumbUrl = null;
+    let paymentTxHash = null;
+    let releaseId = null;
+
+    const STORAGE_RATE_PER_GB = 5; // 5 XRP per GB
 
     // ── Close ──
     const closeBtn = document.querySelector('.modal-close');
@@ -358,7 +489,7 @@ const FilmsPage = {
     const overlay = document.querySelector('.modal-overlay');
     if (overlay) {
       overlay.addEventListener('click', (e) => {
-        if (e.target === e.currentTarget && !videoUploading) Modals.close();
+        if (e.target === e.currentTarget) Modals.close();
       });
     }
 
@@ -387,7 +518,7 @@ const FilmsPage = {
       });
     }
 
-    // ── Thumbnail ──
+    // ── Thumbnail Selection ──
     const thumbZone = document.getElementById('film-thumb-zone');
     const thumbInput = document.getElementById('film-thumb-input');
     if (thumbZone && thumbInput) {
@@ -395,6 +526,10 @@ const FilmsPage = {
       thumbInput.addEventListener('change', () => {
         const file = thumbInput.files[0];
         if (!file || !file.type.startsWith('image/')) return;
+        if (file.size > 10 * 1024 * 1024) {
+          alert('Thumbnail too large (max 10MB)');
+          return;
+        }
         thumbFile = file;
         
         const thumbImg = document.getElementById('film-thumb-img');
@@ -424,15 +559,15 @@ const FilmsPage = {
       });
     }
 
-    // ── Video upload ──
+    // ── Video Selection ──
     const videoZone = document.getElementById('film-video-zone');
     const videoInput = document.getElementById('film-video-input');
     if (videoZone && videoInput) {
-      videoZone.addEventListener('click', () => { 
-        if (!videoUploading && !videoCid) videoInput.click(); 
+      videoZone.addEventListener('click', () => {
+        if (!videoFile) videoInput.click();
       });
       
-      videoInput.addEventListener('change', async () => {
+      videoInput.addEventListener('change', () => {
         const file = videoInput.files[0];
         if (!file) return;
         if (file.size > 10 * 1024 * 1024 * 1024) { 
@@ -441,135 +576,68 @@ const FilmsPage = {
         }
 
         videoFile = file;
-        videoUploading = true;
-        videoZone.classList.remove('has-file');
+        const sizeGB = file.size / (1024 * 1024 * 1024);
+        const sizeMB = file.size / (1024 * 1024);
+        const sizeText = sizeGB >= 1 ? `${sizeGB.toFixed(2)} GB` : `${sizeMB.toFixed(1)} MB`;
         
         const videoPlaceholder = document.getElementById('film-video-placeholder');
+        const videoInfo = document.getElementById('film-video-info');
+        const videoName = document.getElementById('film-video-name');
+        const videoSize = document.getElementById('film-video-size');
+        
         if (videoPlaceholder) videoPlaceholder.classList.add('hidden');
-
-        const statusEl = document.getElementById('film-video-status');
-        if (statusEl) {
-          statusEl.classList.remove('hidden');
-          statusEl.innerHTML = `
-            <div class="film-upload-progress">
-              <div class="film-progress-bar"><div class="film-progress-fill" id="film-vpbar" style="width:0%"></div></div>
-              <div class="film-progress-text" id="film-vpct">Uploading ${(file.size/1024/1024/1024).toFixed(2)}GB to Filecoin...</div>
-            </div>
-          `;
-        }
-
-        try {
-          // Create FormData with contentType for Filecoin routing
-          const uploadFile = async (file, onProgress) => {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('contentType', 'film'); // ← This triggers Filecoin in upload.js!
-            
-            return new Promise((resolve, reject) => {
-              const xhr = new XMLHttpRequest();
-              
-              xhr.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable) {
-                  const pct = Math.round((e.loaded / e.total) * 100);
-                  onProgress(pct);
-                }
-              });
-              
-              xhr.addEventListener('load', () => {
-                if (xhr.status === 200) {
-                  try {
-                    const result = JSON.parse(xhr.responseText);
-                    resolve(result);
-                  } catch (err) {
-                    reject(new Error('Invalid response from server'));
-                  }
-                } else {
-                  reject(new Error(`Upload failed: ${xhr.statusText}`));
-                }
-              });
-              
-              xhr.addEventListener('error', () => reject(new Error('Network error')));
-              xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-              
-              xhr.open('POST', '/api/upload');
-              xhr.send(formData);
-            });
-          };
-          
-          const result = await uploadFile(file, (pct) => {
-            const bar = document.getElementById('film-vpbar');
-            const txt = document.getElementById('film-vpct');
-            if (bar) bar.style.width = pct + '%';
-            if (txt) txt.textContent = `Uploading to Filecoin... ${pct}% — please don't close this page`;
-          });
-
-          videoCid = result.cid;
-          videoUrl = result.url;
-          videoUploading = false;
-          videoZone.classList.add('has-file');
-          
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;">
-                <span style="font-size:20px;">✅</span>
-                <div>
-                  <div style="font-size:14px;font-weight:600;color:#22c55e;">Upload complete</div>
-                  <div style="font-size:12px;color:var(--text-muted);">${file.name} • On Filecoin forever</div>
-                </div>
-              </div>
-            `;
-          }
-        } catch (err) {
-          videoUploading = false;
-          videoCid = null;
-          if (statusEl) {
-            statusEl.innerHTML = `<div style="color:var(--error);font-size:13px;padding:8px;">Upload failed: ${err.message}</div>`;
-          }
-          if (videoPlaceholder) videoPlaceholder.classList.remove('hidden');
-        }
+        if (videoInfo) videoInfo.classList.remove('hidden');
+        if (videoName) videoName.textContent = file.name;
+        if (videoSize) videoSize.textContent = sizeText;
+        videoZone.classList.add('has-file');
       });
     }
 
-    // ── Step 2 → 3 ──
+    const videoRemoveBtn = document.getElementById('film-video-remove');
+    if (videoRemoveBtn) {
+      videoRemoveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        videoFile = null;
+        
+        const videoPlaceholder = document.getElementById('film-video-placeholder');
+        const videoInfo = document.getElementById('film-video-info');
+        const videoZone = document.getElementById('film-video-zone');
+        
+        if (videoPlaceholder) videoPlaceholder.classList.remove('hidden');
+        if (videoInfo) videoInfo.classList.add('hidden');
+        if (videoZone) videoZone.classList.remove('has-file');
+      });
+    }
+
+    // ── Step 2 → 3 (Calculate Payment) ──
     const next2Btn = document.getElementById('film-next-2');
     if (next2Btn) {
       next2Btn.addEventListener('click', () => {
-        if (!thumbFile) { alert('Please upload a thumbnail'); return; }
-        if (!videoCid) { alert('Please wait for video upload to complete'); return; }
+        if (!thumbFile) { alert('Please select a thumbnail'); return; }
+        if (!videoFile) { alert('Please select a video file'); return; }
 
-        const titleInput = document.getElementById('film-title');
-        const priceInput = document.getElementById('film-price');
         const editionsInput = document.getElementById('film-editions');
-        const royaltyInput = document.getElementById('film-royalty');
-        
-        const title = titleInput ? titleInput.value : '';
-        const price = priceInput ? priceInput.value : '10';
-        const editions = editionsInput ? editionsInput.value : '100';
-        const royalty = royaltyInput ? royaltyInput.value : '10';
-        const fee = ((parseInt(editions) * 0.000012) + 0.01).toFixed(6);
+        const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
 
-        const reviewCard = document.getElementById('film-review-card');
-        if (reviewCard) {
-          reviewCard.innerHTML = `
-            <div class="film-review-thumb">
-              <img src="${URL.createObjectURL(thumbFile)}" alt="${title}">
-            </div>
-            <div class="film-review-info">
-              <div class="film-review-title">${title}</div>
-              <div class="film-review-artist">${AppState.profile?.name || Helpers.truncateAddress(AppState.user.address)}</div>
-            </div>
-          `;
-        }
-        
-        const reviewPrice = document.getElementById('film-review-price');
-        const reviewEditions = document.getElementById('film-review-editions');
-        const reviewRoyalty = document.getElementById('film-review-royalty');
-        const reviewFee = document.getElementById('film-review-fee');
-        
-        if (reviewPrice) reviewPrice.textContent = `${price} XRP`;
-        if (reviewEditions) reviewEditions.textContent = `${editions} copies`;
-        if (reviewRoyalty) reviewRoyalty.textContent = `${royalty}%`;
-        if (reviewFee) reviewFee.textContent = `~${fee} XRP`;
+        // Calculate costs
+        const videoSizeGB = videoFile.size / (1024 * 1024 * 1024);
+        const storageFee = (videoSizeGB * STORAGE_RATE_PER_GB).toFixed(2);
+        const thumbFee = 0.01;
+        const mintFee = ((editions * 0.000012) + 0.01).toFixed(6);
+        const totalCost = (parseFloat(storageFee) + thumbFee + parseFloat(mintFee)).toFixed(2);
+
+        // Display costs
+        const paymentStorageFee = document.getElementById('payment-storage-fee');
+        const paymentVideoSize = document.getElementById('payment-video-size');
+        const paymentEditionsCount = document.getElementById('payment-editions-count');
+        const paymentMintFee = document.getElementById('payment-mint-fee');
+        const paymentTotal = document.getElementById('payment-total');
+
+        if (paymentStorageFee) paymentStorageFee.textContent = `${storageFee} XRP`;
+        if (paymentVideoSize) paymentVideoSize.textContent = `${videoSizeGB.toFixed(2)} GB @ ${STORAGE_RATE_PER_GB} XRP/GB`;
+        if (paymentEditionsCount) paymentEditionsCount.textContent = editions;
+        if (paymentMintFee) paymentMintFee.textContent = `${mintFee} XRP`;
+        if (paymentTotal) paymentTotal.textContent = `${totalCost} XRP`;
 
         const step2 = document.getElementById('film-step-2');
         const step3 = document.getElementById('film-step-3');
@@ -588,99 +656,24 @@ const FilmsPage = {
       });
     }
 
-    // ── Mint ──
-    const mintBtn = document.getElementById('film-mint-btn');
-    if (mintBtn) {
-      mintBtn.addEventListener('click', async () => {
-        const statusEl = document.getElementById('film-mint-status');
+    // ── Step 3: Payment ──
+    const payBtn = document.getElementById('film-pay-btn');
+    if (payBtn) {
+      payBtn.addEventListener('click', async () => {
+        const statusEl = document.getElementById('film-payment-status');
         const navEl = document.getElementById('film-nav-3');
-        const statusText = document.getElementById('film-mint-status-text');
+        const statusText = document.getElementById('film-payment-status-text');
         
         if (statusEl) statusEl.classList.remove('hidden');
         if (navEl) navEl.style.display = 'none';
 
-        const showStatus = (msg) => {
-          if (statusText) statusText.textContent = msg;
-        };
-
         try {
           const titleInput = document.getElementById('film-title');
-          const descInput = document.getElementById('film-description');
-          const priceInput = document.getElementById('film-price');
           const editionsInput = document.getElementById('film-editions');
-          const royaltyInput = document.getElementById('film-royalty');
-          
           const title = titleInput ? titleInput.value : '';
-          const description = descInput ? descInput.value : '';
-          const price = priceInput ? parseFloat(priceInput.value) || 10 : 10;
           const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
-          const royaltyPercent = royaltyInput ? parseFloat(royaltyInput.value) || 10 : 10;
 
-          // 1. Upload thumbnail
-          showStatus('Uploading thumbnail...');
-          const thumbResult = await API.uploadFile(thumbFile);
-
-          // 2. Create metadata
-          showStatus('Creating metadata...');
-          const metadata = {
-            name: title,
-            description,
-            image: `ipfs://${thumbResult.cid}`,
-            animation_url: `ipfs://${videoCid}`,
-            attributes: [
-              { trait_type: 'Type', value: 'Film' },
-              { trait_type: 'Content Type', value: 'film' },
-              { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
-            ],
-            properties: { video: videoUrl, thumbnail: thumbResult.url },
-          };
-          const metaResult = await API.uploadJSON(metadata, `${title}-metadata.json`);
-
-          // 3. Save release
-          showStatus('Creating release...');
-          const releaseData = {
-            artistAddress: AppState.user.address,
-            artistName: AppState.profile?.name || null,
-            title,
-            description,
-            type: 'single',
-            contentType: 'film',
-            coverUrl: thumbResult.url,
-            coverCid: thumbResult.cid,
-            metadataCid: metaResult.cid,
-            songPrice: price,
-            albumPrice: null,
-            totalEditions: editions,
-            editionsPerTrack: editions,
-            royaltyPercent,
-            nftTokenIds: [],
-            txHash: null,
-            tracks: [{
-              title,
-              trackNumber: 1,
-              duration: 0,
-              audioCid: videoCid,
-              audioUrl: videoUrl,
-              price,
-              soldEditions: 0,
-              availableEditions: editions,
-            }],
-            sellOfferIndex: null,
-          };
-          const createResult = await API.saveRelease(releaseData);
-          const releaseId = createResult.releaseId;
-
-          // 4. Pay mint fee
-          const mintFee = ((editions * 0.000012) + 0.01).toFixed(6);
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div class="mint-status-icon"><div class="spinner"></div></div>
-              <div class="film-mint-status-text" style="font-size:15px;font-weight:600;">Pay Mint Fee</div>
-              <p style="font-size:13px;color:var(--accent);margin-top:12px;">📱 Sign in Xaman</p>
-              <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">~${mintFee} XRP one-time fee</p>
-            `;
-          }
-
+          // Get platform address
           const configRes = await fetch('/api/batch-mint', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -689,53 +682,212 @@ const FilmsPage = {
           const { platformAddress } = await configRes.json();
           if (!platformAddress) throw new Error('Platform not configured');
 
-          const payResult = await XamanWallet.sendPayment(platformAddress, parseFloat(mintFee), `XRP Music Films: ${title}`);
+          // Calculate total payment
+          const videoSizeGB = videoFile.size / (1024 * 1024 * 1024);
+          const storageFee = videoSizeGB * STORAGE_RATE_PER_GB;
+          const thumbFee = 0.01;
+          const mintFee = (editions * 0.000012) + 0.01;
+          const totalPayment = storageFee + thumbFee + mintFee;
+
+          // Request payment
+          if (statusText) statusText.textContent = '📱 Waiting for payment in Xaman...';
+          
+          const payResult = await XamanWallet.sendPayment(
+            platformAddress, 
+            parseFloat(totalPayment.toFixed(2)), 
+            `XRP Music Films: ${title}`
+          );
+          
           if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
 
-          // 5. Go live
-          showStatus('Publishing...');
-          await API.updateRelease(releaseId, {
-            mintFeePaid: true,
-            mintFeeTxHash: payResult.txHash,
-            mintFeeAmount: parseFloat(mintFee),
-            status: 'live',
-          });
+          paymentTxHash = payResult.txHash;
 
-          // Success
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div style="text-align:center;">
-                <div style="font-size:56px;margin-bottom:16px;">🎬</div>
-                <div style="font-size:20px;font-weight:700;margin-bottom:8px;">${title} is live!</div>
-                <p style="font-size:14px;color:var(--text-muted);margin-bottom:24px;">Your film is on Filecoin forever. No one can delete it.</p>
-                <div style="display:flex;gap:12px;justify-content:center;">
-                  <button class="btn btn-secondary" onclick="window.open('https://x.com/intent/tweet?text=${encodeURIComponent('Just uploaded my film to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡')}','_blank')">Share on X</button>
-                  <button class="btn btn-primary" id="film-success-done">View Film</button>
-                </div>
-              </div>
-            `;
-          }
-
-          const successBtn = document.getElementById('film-success-done');
-          if (successBtn) {
-            successBtn.addEventListener('click', () => {
-              Modals.close();
-              FilmsPage.loadFilms();
-            });
-          }
+          // Payment successful! Move to upload step
+          if (statusText) statusText.textContent = '✅ Payment confirmed!';
+          
+          setTimeout(() => {
+            const step3 = document.getElementById('film-step-3');
+            const step4 = document.getElementById('film-step-4');
+            if (step3) step3.classList.add('hidden');
+            if (step4) step4.classList.remove('hidden');
+            
+            // Start uploads
+            startUpload();
+          }, 1000);
 
         } catch (err) {
-          console.error('Film mint failed:', err);
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div class="mint-status-icon" style="color:var(--error);">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-              </div>
-              <div class="film-mint-status-text" style="color:var(--error);">${err.message || 'Minting failed'}</div>
-            `;
-          }
+          console.error('Payment failed:', err);
+          if (statusText) statusText.textContent = `❌ ${err.message || 'Payment failed'}`;
           if (navEl) navEl.style.display = 'flex';
         }
+      });
+    }
+
+    // ── Upload Function (after payment) ──
+    const startUpload = async () => {
+      try {
+        const titleInput = document.getElementById('film-title');
+        const descInput = document.getElementById('film-description');
+        const priceInput = document.getElementById('film-price');
+        const editionsInput = document.getElementById('film-editions');
+        const royaltyInput = document.getElementById('film-royalty');
+        
+        const title = titleInput ? titleInput.value : '';
+        const description = descInput ? descInput.value : '';
+        const price = priceInput ? parseFloat(priceInput.value) || 10 : 10;
+        const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
+        const royaltyPercent = royaltyInput ? parseFloat(royaltyInput.value) || 10 : 10;
+
+        // 1. Upload thumbnail
+        const thumbProgressItem = document.getElementById('upload-thumb-progress');
+        if (thumbProgressItem) thumbProgressItem.classList.remove('hidden');
+
+        const thumbResult = await uploadFileWithProgress(thumbFile, null, (pct) => {
+          const bar = document.getElementById('thumb-bar');
+          const txt = document.getElementById('thumb-pct');
+          if (bar) bar.style.width = pct + '%';
+          if (txt) txt.textContent = pct + '%';
+        });
+
+        thumbCid = thumbResult.cid;
+        thumbUrl = thumbResult.url;
+
+        // 2. Upload video to Filecoin
+        const videoProgressItem = document.getElementById('upload-video-progress');
+        if (videoProgressItem) videoProgressItem.classList.remove('hidden');
+
+        const videoResult = await uploadFileWithProgress(videoFile, 'film', (pct) => {
+          const bar = document.getElementById('video-bar');
+          const txt = document.getElementById('video-pct');
+          if (bar) bar.style.width = pct + '%';
+          if (txt) txt.textContent = pct + '%';
+        });
+
+        videoCid = videoResult.cid;
+        videoUrl = videoResult.url;
+
+        // 3. Create metadata & save release
+        const mintingProgressItem = document.getElementById('upload-minting-progress');
+        if (mintingProgressItem) mintingProgressItem.classList.remove('hidden');
+
+        const metadata = {
+          name: title,
+          description,
+          image: `ipfs://${thumbCid}`,
+          animation_url: `ipfs://${videoCid}`,
+          attributes: [
+            { trait_type: 'Type', value: 'Film' },
+            { trait_type: 'Content Type', value: 'film' },
+            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+          ],
+          properties: { video: videoUrl, thumbnail: thumbUrl },
+        };
+        const metaResult = await API.uploadJSON(metadata, `${title}-metadata.json`);
+
+        const releaseData = {
+          artistAddress: AppState.user.address,
+          artistName: AppState.profile?.name || null,
+          title,
+          description,
+          type: 'single',
+          contentType: 'film',
+          coverUrl: thumbUrl,
+          coverCid: thumbCid,
+          metadataCid: metaResult.cid,
+          songPrice: price,
+          albumPrice: null,
+          totalEditions: editions,
+          editionsPerTrack: editions,
+          royaltyPercent,
+          nftTokenIds: [],
+          txHash: null,
+          tracks: [{
+            title,
+            trackNumber: 1,
+            duration: 0,
+            audioCid: videoCid,
+            audioUrl: videoUrl,
+            price,
+            soldEditions: 0,
+            availableEditions: editions,
+          }],
+          sellOfferIndex: null,
+          mintFeePaid: true,
+          mintFeeTxHash: paymentTxHash,
+          status: 'live',
+        };
+        
+        const createResult = await API.saveRelease(releaseData);
+        releaseId = createResult.releaseId;
+
+        // Success!
+        const step4 = document.getElementById('film-step-4');
+        const step5 = document.getElementById('film-step-5');
+        const successTitle = document.getElementById('success-title');
+        
+        if (successTitle) successTitle.textContent = `${title} is Live!`;
+        if (step4) step4.classList.add('hidden');
+        if (step5) step5.classList.remove('hidden');
+
+      } catch (err) {
+        console.error('Upload failed:', err);
+        alert(`Upload failed: ${err.message}`);
+      }
+    };
+
+    // Helper: Upload with progress
+    const uploadFileWithProgress = (file, contentType, onProgress) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (contentType) formData.append('contentType', contentType);
+      
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            onProgress(pct);
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            try {
+              const result = JSON.parse(xhr.responseText);
+              resolve(result);
+            } catch (err) {
+              reject(new Error('Invalid response from server'));
+            }
+          } else {
+            reject(new Error(`Upload failed: ${xhr.statusText}`));
+          }
+        });
+        
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+        
+        xhr.open('POST', '/api/upload');
+        xhr.send(formData);
+      });
+    };
+
+    // ── Success Actions ──
+    const shareBtn = document.getElementById('success-share-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        const titleInput = document.getElementById('film-title');
+        const title = titleInput ? titleInput.value : 'my film';
+        const tweetText = `Just uploaded "${title}" to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡`;
+        window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`, '_blank');
+      });
+    }
+
+    const doneBtn = document.getElementById('success-done-btn');
+    if (doneBtn) {
+      doneBtn.addEventListener('click', () => {
+        Modals.close();
+        FilmsPage.loadFilms();
       });
     }
   },
