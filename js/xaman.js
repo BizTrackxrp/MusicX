@@ -16,9 +16,10 @@
  * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
  * due to xrplcluster.com timeouts causing purchase failures.
  * 
- * DESKTOP AUTH FIX (APR 2026): Desktop auth now opens Xaman in SAME TAB,
- * redirects back automatically, and logs user in without any "close this tab"
- * message. Mobile still uses new tab flow with cross-tab session detection.
+ * APR 2026 AUTH/PAYMENT FIX:
+ * - AUTH (wallet connect): Desktop uses same tab, mobile uses new tab
+ * - TRANSACTIONS (payments/minting): Always use popup window (stay on page)
+ * - Detection: isConnecting flag determines auth vs transaction
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -39,21 +40,51 @@ const XamanWallet = {
   mintProgressInterval: null,
   
   /**
-   * Open Xaman URL - Desktop uses SAME TAB, Mobile uses new tab
+   * Open Xaman URL - smart detection of auth vs transaction
+   * @param {string} url - Xaman sign URL
    */
   openXamanPopup(url) {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    if (isMobile) {
-      // Mobile: Open in NEW TAB (will deep link to Xaman app)
-      // Original tab will detect login via storage event
-      const popup = window.open(url, '_blank');
-      if (popup) popup.focus();
-      return popup;
+    // Detect if this is an AUTH request (wallet connect) vs TRANSACTION (payment/mint/etc)
+    // Auth happens when isConnecting flag is true
+    const isAuthRequest = this.isConnecting === true;
+    
+    if (isAuthRequest) {
+      // ===== AUTH FLOW (Connect Wallet) =====
+      console.log('🔐 Opening Xaman for AUTH');
+      
+      if (isMobile) {
+        // Mobile: Open in NEW TAB (will deep link to Xaman app)
+        const popup = window.open(url, '_blank');
+        if (popup) popup.focus();
+        return popup;
+      } else {
+        // Desktop: Open in SAME TAB - redirects back automatically after auth
+        window.location.href = url;
+        return null;
+      }
     } else {
-      // Desktop: Open in SAME TAB - redirects back automatically after auth
-      window.location.href = url;
-      return null;
+      // ===== TRANSACTION FLOW (Payments, Minting, NFT operations) =====
+      // Always use popup window to stay on current page
+      console.log('💳 Opening Xaman for TRANSACTION');
+      
+      const width = 420;
+      const height = 700;
+      const left = (window.screen.width - width) / 2;
+      const top = (window.screen.height - height) / 2;
+      
+      const popup = window.open(
+        url,
+        'XamanSign',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      );
+      
+      if (popup) {
+        popup.focus();
+      }
+      
+      return popup;
     }
   },
   
