@@ -459,7 +459,44 @@ const FilmsPage = {
         }
 
         try {
-          const result = await DirectUploader.upload(file, (pct) => {
+          // Create FormData with contentType for Filecoin routing
+          const uploadFile = async (file, onProgress) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('contentType', 'film'); // ← This triggers Filecoin in upload.js!
+            
+            return new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              
+              xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                  const pct = Math.round((e.loaded / e.total) * 100);
+                  onProgress(pct);
+                }
+              });
+              
+              xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                  try {
+                    const result = JSON.parse(xhr.responseText);
+                    resolve(result);
+                  } catch (err) {
+                    reject(new Error('Invalid response from server'));
+                  }
+                } else {
+                  reject(new Error(`Upload failed: ${xhr.statusText}`));
+                }
+              });
+              
+              xhr.addEventListener('error', () => reject(new Error('Network error')));
+              xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+              
+              xhr.open('POST', '/api/upload');
+              xhr.send(formData);
+            });
+          };
+          
+          const result = await uploadFile(file, (pct) => {
             const bar = document.getElementById('film-vpbar');
             const txt = document.getElementById('film-vpct');
             if (bar) bar.style.width = pct + '%';
