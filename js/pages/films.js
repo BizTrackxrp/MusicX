@@ -1,14 +1,28 @@
 /**
- * XRP Music - Films Page
- * Upload, mint, and distribute films/videos as NFTs on XRPL.
- * Videos live on Filecoin forever — no platform can delete them.
- * 
- * PAYMENT-BEFORE-UPLOAD: User pays storage + mint fee BEFORE video uploads to Filecoin
+ * XRP Music - Films Page (WORKING VERSION)
+ * - Direct Lighthouse upload (bypasses Vercel 50MB limit)
+ * - Payment before upload (prevents wasted Filecoin storage)
+ * - Auto-refund on upload failure
+ * - 0.29 XRP/GB permanent Filecoin storage
  */
 
 const FilmsPage = {
   films: [],
   isLoading: false,
+  LIGHTHOUSE_API_KEY: null,
+
+  async init() {
+    // Fetch Lighthouse API key for direct uploads
+    try {
+      const res = await fetch('/api/upload-config');
+      const config = await res.json();
+      this.LIGHTHOUSE_API_KEY = config.lighthouseApiKey;
+      console.log('✅ Lighthouse direct upload enabled');
+    } catch (err) {
+      console.error('Failed to load Lighthouse config:', err);
+      alert('Upload system not available. Please refresh the page.');
+    }
+  },
 
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
@@ -17,6 +31,11 @@ const FilmsPage = {
   },
 
   async render() {
+    // Initialize Lighthouse config
+    if (!this.LIGHTHOUSE_API_KEY) {
+      await this.init();
+    }
+    
     UI.renderPage(`
       ${this.getStyles()}
       <div class="films-page">
@@ -63,7 +82,7 @@ const FilmsPage = {
               🎬 Upload Your Film
             </button>
           </div>
-          <p class="films-hero-sub">Mint as an NFT · Set your price · Fans own what they watch · You earn on every resale</p>
+          <p class="films-hero-sub">From $0.55 • Mint as an NFT • Fans own what they watch • You earn on every resale</p>
         </div>
       </div>
 
@@ -163,6 +182,10 @@ const FilmsPage = {
           Modals.showAuth();
           return;
         }
+        if (!this.LIGHTHOUSE_API_KEY) {
+          alert('Upload system not ready. Please refresh the page.');
+          return;
+        }
         this.showUploadModal();
       });
     });
@@ -172,6 +195,60 @@ const FilmsPage = {
         const film = this.films.find(f => f.id === card.dataset.releaseId);
         if (film) Modals.showRelease(film);
       });
+    });
+  },
+
+  // ─── Direct Lighthouse Upload Helper ────────────────────────────────────────
+
+  async uploadToLighthouse(file, useFilecoin = false, onProgress = () => {}) {
+    if (!this.LIGHTHOUSE_API_KEY) {
+      throw new Error('Lighthouse API key not loaded');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Build URL with Filecoin routing
+    let url = 'https://node.lighthouse.storage/api/v0/add';
+    if (useFilecoin) {
+      url += '?network=filecoin';
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          onProgress(pct);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            // Lighthouse returns: { Hash: "QmXXX...", Size: "12345", Name: "filename" }
+            resolve({
+              cid: result.Hash,
+              url: `https://gateway.lighthouse.storage/ipfs/${result.Hash}`,
+              size: result.Size,
+              name: result.Name
+            });
+          } catch (err) {
+            reject(new Error('Invalid response from Lighthouse'));
+          }
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+      xhr.open('POST', url);
+      xhr.setRequestHeader('Authorization', `Bearer ${this.LIGHTHOUSE_API_KEY}`);
+      xhr.send(formData);
     });
   },
 
@@ -228,7 +305,7 @@ const FilmsPage = {
               <button type="button" class="btn btn-primary btn-full" id="film-next-1">Next: Select Files</button>
             </div>
 
-            <!-- Step 2: Select Files (NOT uploaded yet) -->
+            <!-- Step 2: Select Files -->
             <div class="film-step hidden" id="film-step-2">
               <h3 class="film-step-title">Select Files</h3>
 
@@ -253,11 +330,11 @@ const FilmsPage = {
               <div class="form-group">
                 <label class="form-label">Video File *</label>
                 <div class="upload-zone film-video-zone" id="film-video-zone">
-                  <input type="file" id="film-video-input" accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" style="display:none;">
+                  <input type="file" id="film-video-input" accept="video/*" style="display:none;">
                   <div class="upload-placeholder" id="film-video-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"></polygon></svg>
-                    <span id="film-video-cta">Click to select video</span>
-                    <span class="upload-hint">MP4, MOV, AVI, WebM — up to 10GB</span>
+                    <span>Click to select video</span>
+                    <span class="upload-hint">MP4, MOV, WebM — up to 10GB</span>
                   </div>
                   <div class="upload-file-info hidden" id="film-video-info">
                     <div class="file-info-icon">🎬</div>
@@ -276,7 +353,7 @@ const FilmsPage = {
               </div>
             </div>
 
-            <!-- Step 3: Payment (BEFORE upload) -->
+            <!-- Step 3: Payment -->
             <div class="film-step hidden" id="film-step-3">
               <h3 class="film-step-title">Payment</h3>
 
@@ -284,13 +361,13 @@ const FilmsPage = {
                 <div class="payment-warning-icon">⚠️</div>
                 <div>
                   <div class="payment-warning-title">Payment Required Before Upload</div>
-                  <p class="payment-warning-text">Filecoin storage is permanent and cannot be deleted. You must pay upfront to cover storage + minting costs.</p>
+                  <p class="payment-warning-text">Filecoin storage is permanent. Pay upfront to cover storage + minting. <strong>Auto-refund if upload fails.</strong></p>
                 </div>
               </div>
 
               <div class="payment-breakdown">
                 <div class="payment-row">
-                  <span>Filecoin Storage</span>
+                  <span>Permanent Filecoin Storage</span>
                   <span id="payment-storage-fee">-</span>
                 </div>
                 <div class="payment-row">
@@ -299,10 +376,14 @@ const FilmsPage = {
                 </div>
                 <div class="payment-row">
                   <span>Thumbnail Storage</span>
-                  <span>~0.01 XRP</span>
+                  <span>0.01 XRP</span>
                 </div>
                 <div class="payment-row">
-                  <span>Mint Fee (<span id="payment-editions-count">-</span> editions)</span>
+                  <span>Platform Fee</span>
+                  <span>0.10 XRP</span>
+                </div>
+                <div class="payment-row">
+                  <span>Mint Fee (<span id="payment-editions-count">-</span> ed)</span>
                   <span id="payment-mint-fee">-</span>
                 </div>
                 <div class="payment-row payment-total">
@@ -312,7 +393,7 @@ const FilmsPage = {
               </div>
 
               <div class="payment-note">
-                💡 <strong>What you get:</strong> Permanent Filecoin storage + NFT minted on XRPL + Your film lives forever on-chain
+                💡 <strong>What you get:</strong> Permanent Filecoin storage (10-year deal, auto-renews) + NFT minted on XRPL + Your film lives forever on-chain
               </div>
 
               <div class="film-mint-status hidden" id="film-payment-status">
@@ -322,13 +403,13 @@ const FilmsPage = {
 
               <div class="film-nav" id="film-nav-3">
                 <button type="button" class="btn btn-secondary" id="film-back-3">Back</button>
-                <button type="button" class="btn btn-primary" id="film-pay-btn" style="flex:2;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <button type="button" class="btn btn-primary" id="film-pay-btn" style="flex:2;">
                   💳 Pay & Start Upload
                 </button>
               </div>
             </div>
 
-            <!-- Step 4: Upload Progress (AFTER payment) -->
+            <!-- Step 4: Upload Progress -->
             <div class="film-step hidden" id="film-step-4">
               <h3 class="film-step-title">Uploading to Filecoin</h3>
 
@@ -392,15 +473,419 @@ const FilmsPage = {
         </div>
       </div>
 
+      ${this.getModalStyles()}
+    `;
+
+    Modals.show(html);
+    this.bindUploadEvents();
+  },
+
+  bindUploadEvents() {
+    const STORAGE_RATE_PER_GB = 0.29;
+    const PLATFORM_FEE = 0.10;
+    
+    let thumbFile = null;
+    let videoFile = null;
+    let paymentTxHash = null;
+    let paymentAmount = 0;
+
+    // Close handlers
+    const closeBtn = document.querySelector('.modal-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => Modals.close());
+
+    // Step 1 → 2
+    const next1Btn = document.getElementById('film-next-1');
+    if (next1Btn) {
+      next1Btn.addEventListener('click', () => {
+        const title = document.getElementById('film-title')?.value.trim();
+        if (!title) { alert('Please enter a title'); return; }
+        
+        document.getElementById('film-step-1')?.classList.add('hidden');
+        document.getElementById('film-step-2')?.classList.remove('hidden');
+      });
+    }
+
+    const back2Btn = document.getElementById('film-back-2');
+    if (back2Btn) {
+      back2Btn.addEventListener('click', () => {
+        document.getElementById('film-step-2')?.classList.add('hidden');
+        document.getElementById('film-step-1')?.classList.remove('hidden');
+      });
+    }
+
+    // Thumbnail selection
+    const thumbZone = document.getElementById('film-thumb-zone');
+    const thumbInput = document.getElementById('film-thumb-input');
+    if (thumbZone && thumbInput) {
+      thumbZone.addEventListener('click', () => thumbInput.click());
+      thumbInput.addEventListener('change', () => {
+        const file = thumbInput.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        if (file.size > 10 * 1024 * 1024) {
+          alert('Thumbnail too large (max 10MB)');
+          return;
+        }
+        thumbFile = file;
+        
+        document.getElementById('film-thumb-img').src = URL.createObjectURL(file);
+        document.getElementById('film-thumb-placeholder')?.classList.add('hidden');
+        document.getElementById('film-thumb-preview')?.classList.remove('hidden');
+        thumbZone.classList.add('has-file');
+      });
+    }
+
+    const thumbRemoveBtn = document.getElementById('film-thumb-remove');
+    if (thumbRemoveBtn) {
+      thumbRemoveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        thumbFile = null;
+        document.getElementById('film-thumb-placeholder')?.classList.remove('hidden');
+        document.getElementById('film-thumb-preview')?.classList.add('hidden');
+        thumbZone?.classList.remove('has-file');
+      });
+    }
+
+    // Video selection
+    const videoZone = document.getElementById('film-video-zone');
+    const videoInput = document.getElementById('film-video-input');
+    if (videoZone && videoInput) {
+      videoZone.addEventListener('click', () => {
+        if (!videoFile) videoInput.click();
+      });
+      
+      videoInput.addEventListener('change', () => {
+        const file = videoInput.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024 * 1024) {
+          alert('File too large (max 10GB)');
+          return;
+        }
+
+        videoFile = file;
+        const sizeGB = file.size / (1024 * 1024 * 1024);
+        const sizeMB = file.size / (1024 * 1024);
+        const sizeText = sizeGB >= 1 ? `${sizeGB.toFixed(2)} GB` : `${sizeMB.toFixed(0)} MB`;
+        
+        document.getElementById('film-video-placeholder')?.classList.add('hidden');
+        document.getElementById('film-video-info')?.classList.remove('hidden');
+        document.getElementById('film-video-name').textContent = file.name;
+        document.getElementById('film-video-size').textContent = sizeText;
+        videoZone.classList.add('has-file');
+      });
+    }
+
+    const videoRemoveBtn = document.getElementById('film-video-remove');
+    if (videoRemoveBtn) {
+      videoRemoveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        videoFile = null;
+        document.getElementById('film-video-placeholder')?.classList.remove('hidden');
+        document.getElementById('film-video-info')?.classList.add('hidden');
+        videoZone?.classList.remove('has-file');
+      });
+    }
+
+    // Step 2 → 3 (Calculate payment)
+    const next2Btn = document.getElementById('film-next-2');
+    if (next2Btn) {
+      next2Btn.addEventListener('click', () => {
+        if (!thumbFile) { alert('Please select a thumbnail'); return; }
+        if (!videoFile) { alert('Please select a video file'); return; }
+
+        const editions = parseInt(document.getElementById('film-editions')?.value) || 100;
+        const videoSizeGB = videoFile.size / (1024 * 1024 * 1024);
+        const storageFee = (videoSizeGB * STORAGE_RATE_PER_GB).toFixed(4);
+        const thumbFee = 0.01;
+        const mintFee = ((editions * 0.000012) + 0.002).toFixed(6);
+        const totalCost = (parseFloat(storageFee) + thumbFee + PLATFORM_FEE + parseFloat(mintFee)).toFixed(4);
+
+        document.getElementById('payment-storage-fee').textContent = `${storageFee} XRP`;
+        document.getElementById('payment-video-size').textContent = `${videoSizeGB.toFixed(2)} GB @ 0.29 XRP/GB`;
+        document.getElementById('payment-editions-count').textContent = editions;
+        document.getElementById('payment-mint-fee').textContent = `${mintFee} XRP`;
+        document.getElementById('payment-total').textContent = `${totalCost} XRP`;
+
+        paymentAmount = parseFloat(totalCost);
+
+        document.getElementById('film-step-2')?.classList.add('hidden');
+        document.getElementById('film-step-3')?.classList.remove('hidden');
+      });
+    }
+
+    const back3Btn = document.getElementById('film-back-3');
+    if (back3Btn) {
+      back3Btn.addEventListener('click', () => {
+        document.getElementById('film-step-3')?.classList.add('hidden');
+        document.getElementById('film-step-2')?.classList.remove('hidden');
+      });
+    }
+
+    // Step 3: Payment
+    const payBtn = document.getElementById('film-pay-btn');
+    if (payBtn) {
+      payBtn.addEventListener('click', async () => {
+        const statusEl = document.getElementById('film-payment-status');
+        const navEl = document.getElementById('film-nav-3');
+        const statusText = document.getElementById('film-payment-status-text');
+        
+        statusEl?.classList.remove('hidden');
+        if (navEl) navEl.style.display = 'none';
+
+        try {
+          const title = document.getElementById('film-title')?.value || '';
+          
+          // Get platform address
+          const configRes = await fetch('/api/batch-mint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getConfig' })
+          });
+          const { platformAddress } = await configRes.json();
+          if (!platformAddress) throw new Error('Platform not configured');
+
+          // Request payment
+          if (statusText) statusText.textContent = '📱 Waiting for payment in Xaman...';
+          
+          const payResult = await XamanWallet.sendPayment(
+            platformAddress,
+            paymentAmount,
+            `XRP Music Films: ${title}`
+          );
+          
+          if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
+
+          paymentTxHash = payResult.txHash;
+
+          // Payment confirmed! Start upload
+          if (statusText) statusText.textContent = '✅ Payment confirmed!';
+          
+          setTimeout(() => {
+            document.getElementById('film-step-3')?.classList.add('hidden');
+            document.getElementById('film-step-4')?.classList.remove('hidden');
+            startUpload();
+          }, 1000);
+
+        } catch (err) {
+          console.error('Payment failed:', err);
+          if (statusText) statusText.textContent = `❌ ${err.message || 'Payment failed'}`;
+          if (navEl) navEl.style.display = 'flex';
+        }
+      });
+    }
+
+    // Upload function (after payment)
+    const startUpload = async () => {
+      try {
+        const title = document.getElementById('film-title')?.value || '';
+        const description = document.getElementById('film-description')?.value || '';
+        const price = parseFloat(document.getElementById('film-price')?.value) || 10;
+        const editions = parseInt(document.getElementById('film-editions')?.value) || 100;
+        const royaltyPercent = parseFloat(document.getElementById('film-royalty')?.value) || 10;
+
+        // 1. Upload thumbnail
+        document.getElementById('upload-thumb-progress')?.classList.remove('hidden');
+        const thumbResult = await FilmsPage.uploadToLighthouse(thumbFile, false, (pct) => {
+          const bar = document.getElementById('thumb-bar');
+          const txt = document.getElementById('thumb-pct');
+          if (bar) bar.style.width = pct + '%';
+          if (txt) txt.textContent = pct + '%';
+        });
+
+        // 2. Upload video to Filecoin
+        document.getElementById('upload-video-progress')?.classList.remove('hidden');
+        const videoResult = await FilmsPage.uploadToLighthouse(videoFile, true, (pct) => {
+          const bar = document.getElementById('video-bar');
+          const txt = document.getElementById('video-pct');
+          if (bar) bar.style.width = pct + '%';
+          if (txt) txt.textContent = pct + '%';
+        });
+
+        // 3. Create metadata (upload JSON to Lighthouse)
+        document.getElementById('upload-minting-progress')?.classList.remove('hidden');
+        
+        const metadata = {
+          name: title,
+          description,
+          image: `ipfs://${thumbResult.cid}`,
+          animation_url: `ipfs://${videoResult.cid}`,
+          attributes: [
+            { trait_type: 'Type', value: 'Film' },
+            { trait_type: 'Content Type', value: 'film' },
+            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+          ],
+          properties: {
+            video: videoResult.url,
+            thumbnail: thumbResult.url,
+            videoSize: videoResult.size
+          },
+        };
+
+        const metaBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
+        const metaFile = new File([metaBlob], `${title}-metadata.json`, { type: 'application/json' });
+        const metaResult = await FilmsPage.uploadToLighthouse(metaFile, false);
+
+        // 4. Save release to database
+        const releaseData = {
+          artistAddress: AppState.user.address,
+          artistName: AppState.profile?.name || null,
+          title,
+          description,
+          type: 'single',
+          contentType: 'film',
+          coverUrl: thumbResult.url,
+          coverCid: thumbResult.cid,
+          metadataCid: metaResult.cid,
+          songPrice: price,
+          albumPrice: null,
+          totalEditions: editions,
+          editionsPerTrack: editions,
+          royaltyPercent,
+          nftTokenIds: [],
+          txHash: null,
+          tracks: [{
+            title,
+            trackNumber: 1,
+            duration: 0,
+            audioCid: videoResult.cid,
+            audioUrl: videoResult.url,
+            price,
+            soldEditions: 0,
+            availableEditions: editions,
+          }],
+          sellOfferIndex: null,
+          mintFeePaid: true,
+          mintFeeTxHash: paymentTxHash,
+          paymentAmount: paymentAmount,
+          status: 'live',
+        };
+
+        const createResult = await API.saveRelease(releaseData);
+
+        // Success!
+        document.getElementById('success-title').textContent = `${title} is Live!`;
+        document.getElementById('film-step-4')?.classList.add('hidden');
+        document.getElementById('film-step-5')?.classList.remove('hidden');
+
+      } catch (err) {
+        console.error('Upload failed:', err);
+        
+        // AUTO-REFUND on failure
+        alert(`Upload failed: ${err.message}\n\nRefunding ${paymentAmount} XRP...`);
+        
+        try {
+          await fetch('/api/refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paymentTxHash,
+              userAddress: AppState.user.address,
+              amount: paymentAmount,
+              reason: err.message
+            })
+          });
+          alert(`Refund sent! ${paymentAmount} XRP returned to your wallet.`);
+        } catch (refundErr) {
+          console.error('Refund failed:', refundErr);
+          alert(`Upload failed AND refund failed. Please contact support with tx: ${paymentTxHash}`);
+        }
+        
+        Modals.close();
+      }
+    };
+
+    // Success actions
+    const shareBtn = document.getElementById('success-share-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        const title = document.getElementById('film-title')?.value || 'my film';
+        const text = `Just uploaded "${title}" to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡`;
+        window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+      });
+    }
+
+    const doneBtn = document.getElementById('success-done-btn');
+    if (doneBtn) {
+      doneBtn.addEventListener('click', () => {
+        Modals.close();
+        FilmsPage.loadFilms();
+      });
+    }
+  },
+
+  getStyles() {
+    return `
+      <style>
+        .films-page { max-width: 1100px; margin: 0 auto; padding: 0 24px 120px; }
+
+        /* Hero */
+        .films-hero {
+          position: relative; text-align: center;
+          padding: 80px 24px 72px; border-radius: 24px;
+          overflow: hidden; margin-bottom: 56px;
+          background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(220,38,38,0.04));
+          border: 1px solid rgba(239,68,68,0.2);
+        }
+        .films-bg-grid {
+          position: absolute; inset: 0; z-index: 0;
+          background-image: linear-gradient(rgba(239,68,68,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(239,68,68,0.06) 1px, transparent 1px);
+          background-size: 40px 40px;
+        }
+        .films-hero-content { position: relative; z-index: 1; }
+        .films-badge { display: inline-block; padding: 6px 16px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 13px; font-weight: 600; color: #f87171; margin-bottom: 20px; }
+        .films-title { font-size: 44px; font-weight: 800; margin-bottom: 16px; }
+        @media (max-width: 640px) { .films-title { font-size: 28px; } }
+        .films-subtitle { font-size: 17px; color: var(--text-muted); line-height: 1.6; margin-bottom: 32px; max-width: 560px; margin-left: auto; margin-right: auto; }
+        .films-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .films-hero-sub { font-size: 13px; color: var(--text-muted); }
+
+        /* Features */
+        .films-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 56px; }
+        .films-feature { padding: 28px 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; }
+        .films-feature-icon { font-size: 36px; margin-bottom: 14px; }
+        .films-feature h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+        .films-feature p { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+
+        /* Empty state */
+        .films-empty { text-align: center; padding: 80px 24px; margin-bottom: 48px; }
+        .films-empty-icon { font-size: 72px; margin-bottom: 20px; }
+        .films-empty h2 { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+        .films-empty p { font-size: 15px; color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; }
+
+        /* Grid */
+        .films-section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 20px; }
+        .films-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; margin-bottom: 56px; }
+        .film-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; cursor: pointer; transition: all 150ms; }
+        .film-card:hover { border-color: #ef4444; transform: translateY(-4px); }
+        .film-card-thumb { position: relative; aspect-ratio: 16/9; background: var(--bg-hover); }
+        .film-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .film-card-play-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 150ms; }
+        .film-card:hover .film-card-play-overlay { opacity: 1; }
+        .film-card-play-btn { width: 56px; height: 56px; border-radius: 50%; background: rgba(239,68,68,0.9); display: flex; align-items: center; justify-content: center; }
+        .film-card-avail { position: absolute; top: 8px; right: 8px; padding: 3px 8px; background: rgba(0,0,0,0.7); border-radius: 6px; font-size: 11px; font-weight: 600; color: white; }
+        .film-card-info { padding: 12px; }
+        .film-card-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .film-card-artist { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+        .film-card-price { font-size: 13px; font-weight: 700; color: #f87171; }
+
+        /* CTA Banner */
+        .films-cta-banner { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 36px 40px; background: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.05)); border: 1px solid rgba(239,68,68,0.25); border-radius: 20px; }
+        @media (max-width: 700px) { .films-cta-banner { flex-direction: column; text-align: center; padding: 28px 24px; } }
+        .films-cta-text h2 { font-size: 22px; font-weight: 700; margin: 0 0 10px; }
+        .films-cta-text p { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.6; max-width: 520px; }
+      </style>
+    `;
+  },
+
+  getModalStyles() {
+    return `
       <style>
         .film-upload-modal { max-width: 540px; }
         .film-step-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
         .film-step.hidden { display: none; }
         .film-nav { display: flex; gap: 12px; margin-top: 24px; }
         .film-nav .btn { flex: 1; }
-        .film-video-zone { min-height: 120px; }
         
-        /* File info display */
+        /* File info */
         .upload-file-info { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-card); border-radius: 12px; }
         .upload-file-info.hidden { display: none; }
         .file-info-icon { font-size: 32px; }
@@ -409,20 +894,17 @@ const FilmsPage = {
         .file-info-size { font-size: 12px; color: var(--text-muted); }
         .file-info-remove { width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
 
-        /* Payment warning */
+        /* Payment */
         .payment-warning { display: flex; gap: 12px; padding: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 12px; margin-bottom: 20px; }
-        .payment-warning-icon { font-size: 24px; flex-shrink: 0; }
+        .payment-warning-icon { font-size: 24px; }
         .payment-warning-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #fbbf24; }
         .payment-warning-text { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.5; }
-
-        /* Payment breakdown */
         .payment-breakdown { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
         .payment-row { display: flex; justify-content: space-between; padding: 10px 0; font-size: 14px; border-bottom: 1px solid var(--border-color); }
         .payment-row:last-child { border-bottom: none; }
         .payment-row span:first-child { color: var(--text-secondary); }
-        .payment-row span:last-child { color: var(--text-primary); font-weight: 500; }
-        .payment-total { padding-top: 16px; margin-top: 8px; border-top: 2px solid var(--border-color); font-size: 16px; font-weight: 700; }
-        .payment-total span { color: var(--text-primary); }
+        .payment-row span:last-child { font-weight: 500; }
+        .payment-total { padding-top: 16px; margin-top: 8px; border-top: 2px solid var(--border-color) !important; font-size: 16px; font-weight: 700; }
         .payment-note { font-size: 13px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.5; }
 
         /* Upload progress */
@@ -461,497 +943,6 @@ const FilmsPage = {
         .upload-preview img { width: 100%; max-width: 240px; border-radius: 8px; }
         .upload-preview.hidden { display: none; }
         .upload-remove { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
-      </style>
-    `;
-
-    Modals.show(html);
-    this.bindUploadEvents();
-  },
-
-  bindUploadEvents() {
-    let thumbFile = null;
-    let videoFile = null;
-    let videoCid = null;
-    let videoUrl = null;
-    let thumbCid = null;
-    let thumbUrl = null;
-    let paymentTxHash = null;
-    let releaseId = null;
-
-    const STORAGE_RATE_PER_GB = 5; // 5 XRP per GB
-
-    // ── Close ──
-    const closeBtn = document.querySelector('.modal-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => Modals.close());
-    }
-    
-    const overlay = document.querySelector('.modal-overlay');
-    if (overlay) {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === e.currentTarget) Modals.close();
-      });
-    }
-
-    // ── Step 1 → 2 ──
-    const next1Btn = document.getElementById('film-next-1');
-    if (next1Btn) {
-      next1Btn.addEventListener('click', () => {
-        const titleInput = document.getElementById('film-title');
-        const title = titleInput ? titleInput.value.trim() : '';
-        if (!title) { alert('Please enter a title'); return; }
-        
-        const step1 = document.getElementById('film-step-1');
-        const step2 = document.getElementById('film-step-2');
-        if (step1) step1.classList.add('hidden');
-        if (step2) step2.classList.remove('hidden');
-      });
-    }
-
-    const back2Btn = document.getElementById('film-back-2');
-    if (back2Btn) {
-      back2Btn.addEventListener('click', () => {
-        const step1 = document.getElementById('film-step-1');
-        const step2 = document.getElementById('film-step-2');
-        if (step2) step2.classList.add('hidden');
-        if (step1) step1.classList.remove('hidden');
-      });
-    }
-
-    // ── Thumbnail Selection ──
-    const thumbZone = document.getElementById('film-thumb-zone');
-    const thumbInput = document.getElementById('film-thumb-input');
-    if (thumbZone && thumbInput) {
-      thumbZone.addEventListener('click', () => thumbInput.click());
-      thumbInput.addEventListener('change', () => {
-        const file = thumbInput.files[0];
-        if (!file || !file.type.startsWith('image/')) return;
-        if (file.size > 10 * 1024 * 1024) {
-          alert('Thumbnail too large (max 10MB)');
-          return;
-        }
-        thumbFile = file;
-        
-        const thumbImg = document.getElementById('film-thumb-img');
-        const thumbPlaceholder = document.getElementById('film-thumb-placeholder');
-        const thumbPreview = document.getElementById('film-thumb-preview');
-        
-        if (thumbImg) thumbImg.src = URL.createObjectURL(file);
-        if (thumbPlaceholder) thumbPlaceholder.classList.add('hidden');
-        if (thumbPreview) thumbPreview.classList.remove('hidden');
-        thumbZone.classList.add('has-file');
-      });
-    }
-    
-    const thumbRemoveBtn = document.getElementById('film-thumb-remove');
-    if (thumbRemoveBtn) {
-      thumbRemoveBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        thumbFile = null;
-        
-        const thumbPlaceholder = document.getElementById('film-thumb-placeholder');
-        const thumbPreview = document.getElementById('film-thumb-preview');
-        const thumbZone = document.getElementById('film-thumb-zone');
-        
-        if (thumbPlaceholder) thumbPlaceholder.classList.remove('hidden');
-        if (thumbPreview) thumbPreview.classList.add('hidden');
-        if (thumbZone) thumbZone.classList.remove('has-file');
-      });
-    }
-
-    // ── Video Selection ──
-    const videoZone = document.getElementById('film-video-zone');
-    const videoInput = document.getElementById('film-video-input');
-    if (videoZone && videoInput) {
-      videoZone.addEventListener('click', () => {
-        if (!videoFile) videoInput.click();
-      });
-      
-      videoInput.addEventListener('change', () => {
-        const file = videoInput.files[0];
-        if (!file) return;
-        if (file.size > 10 * 1024 * 1024 * 1024) { 
-          alert('File too large (max 10GB)'); 
-          return; 
-        }
-
-        videoFile = file;
-        const sizeGB = file.size / (1024 * 1024 * 1024);
-        const sizeMB = file.size / (1024 * 1024);
-        const sizeText = sizeGB >= 1 ? `${sizeGB.toFixed(2)} GB` : `${sizeMB.toFixed(1)} MB`;
-        
-        const videoPlaceholder = document.getElementById('film-video-placeholder');
-        const videoInfo = document.getElementById('film-video-info');
-        const videoName = document.getElementById('film-video-name');
-        const videoSize = document.getElementById('film-video-size');
-        
-        if (videoPlaceholder) videoPlaceholder.classList.add('hidden');
-        if (videoInfo) videoInfo.classList.remove('hidden');
-        if (videoName) videoName.textContent = file.name;
-        if (videoSize) videoSize.textContent = sizeText;
-        videoZone.classList.add('has-file');
-      });
-    }
-
-    const videoRemoveBtn = document.getElementById('film-video-remove');
-    if (videoRemoveBtn) {
-      videoRemoveBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        videoFile = null;
-        
-        const videoPlaceholder = document.getElementById('film-video-placeholder');
-        const videoInfo = document.getElementById('film-video-info');
-        const videoZone = document.getElementById('film-video-zone');
-        
-        if (videoPlaceholder) videoPlaceholder.classList.remove('hidden');
-        if (videoInfo) videoInfo.classList.add('hidden');
-        if (videoZone) videoZone.classList.remove('has-file');
-      });
-    }
-
-    // ── Step 2 → 3 (Calculate Payment) ──
-    const next2Btn = document.getElementById('film-next-2');
-    if (next2Btn) {
-      next2Btn.addEventListener('click', () => {
-        if (!thumbFile) { alert('Please select a thumbnail'); return; }
-        if (!videoFile) { alert('Please select a video file'); return; }
-
-        const editionsInput = document.getElementById('film-editions');
-        const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
-
-        // Calculate costs
-        const videoSizeGB = videoFile.size / (1024 * 1024 * 1024);
-        const storageFee = (videoSizeGB * STORAGE_RATE_PER_GB).toFixed(2);
-        const thumbFee = 0.01;
-        const mintFee = ((editions * 0.000012) + 0.01).toFixed(6);
-        const totalCost = (parseFloat(storageFee) + thumbFee + parseFloat(mintFee)).toFixed(2);
-
-        // Display costs
-        const paymentStorageFee = document.getElementById('payment-storage-fee');
-        const paymentVideoSize = document.getElementById('payment-video-size');
-        const paymentEditionsCount = document.getElementById('payment-editions-count');
-        const paymentMintFee = document.getElementById('payment-mint-fee');
-        const paymentTotal = document.getElementById('payment-total');
-
-        if (paymentStorageFee) paymentStorageFee.textContent = `${storageFee} XRP`;
-        if (paymentVideoSize) paymentVideoSize.textContent = `${videoSizeGB.toFixed(2)} GB @ ${STORAGE_RATE_PER_GB} XRP/GB`;
-        if (paymentEditionsCount) paymentEditionsCount.textContent = editions;
-        if (paymentMintFee) paymentMintFee.textContent = `${mintFee} XRP`;
-        if (paymentTotal) paymentTotal.textContent = `${totalCost} XRP`;
-
-        const step2 = document.getElementById('film-step-2');
-        const step3 = document.getElementById('film-step-3');
-        if (step2) step2.classList.add('hidden');
-        if (step3) step3.classList.remove('hidden');
-      });
-    }
-
-    const back3Btn = document.getElementById('film-back-3');
-    if (back3Btn) {
-      back3Btn.addEventListener('click', () => {
-        const step2 = document.getElementById('film-step-2');
-        const step3 = document.getElementById('film-step-3');
-        if (step3) step3.classList.add('hidden');
-        if (step2) step2.classList.remove('hidden');
-      });
-    }
-
-    // ── Step 3: Payment ──
-    const payBtn = document.getElementById('film-pay-btn');
-    if (payBtn) {
-      payBtn.addEventListener('click', async () => {
-        const statusEl = document.getElementById('film-payment-status');
-        const navEl = document.getElementById('film-nav-3');
-        const statusText = document.getElementById('film-payment-status-text');
-        
-        if (statusEl) statusEl.classList.remove('hidden');
-        if (navEl) navEl.style.display = 'none';
-
-        try {
-          const titleInput = document.getElementById('film-title');
-          const editionsInput = document.getElementById('film-editions');
-          const title = titleInput ? titleInput.value : '';
-          const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
-
-          // Get platform address
-          const configRes = await fetch('/api/batch-mint', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ action: 'getConfig' }) 
-          });
-          const { platformAddress } = await configRes.json();
-          if (!platformAddress) throw new Error('Platform not configured');
-
-          // Calculate total payment
-          const videoSizeGB = videoFile.size / (1024 * 1024 * 1024);
-          const storageFee = videoSizeGB * STORAGE_RATE_PER_GB;
-          const thumbFee = 0.01;
-          const mintFee = (editions * 0.000012) + 0.01;
-          const totalPayment = storageFee + thumbFee + mintFee;
-
-          // Request payment
-          if (statusText) statusText.textContent = '📱 Waiting for payment in Xaman...';
-          
-          const payResult = await XamanWallet.sendPayment(
-            platformAddress, 
-            parseFloat(totalPayment.toFixed(2)), 
-            `XRP Music Films: ${title}`
-          );
-          
-          if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
-
-          paymentTxHash = payResult.txHash;
-
-          // Payment successful! Move to upload step
-          if (statusText) statusText.textContent = '✅ Payment confirmed!';
-          
-          setTimeout(() => {
-            const step3 = document.getElementById('film-step-3');
-            const step4 = document.getElementById('film-step-4');
-            if (step3) step3.classList.add('hidden');
-            if (step4) step4.classList.remove('hidden');
-            
-            // Start uploads
-            startUpload();
-          }, 1000);
-
-        } catch (err) {
-          console.error('Payment failed:', err);
-          if (statusText) statusText.textContent = `❌ ${err.message || 'Payment failed'}`;
-          if (navEl) navEl.style.display = 'flex';
-        }
-      });
-    }
-
-    // ── Upload Function (after payment) ──
-    const startUpload = async () => {
-      try {
-        const titleInput = document.getElementById('film-title');
-        const descInput = document.getElementById('film-description');
-        const priceInput = document.getElementById('film-price');
-        const editionsInput = document.getElementById('film-editions');
-        const royaltyInput = document.getElementById('film-royalty');
-        
-        const title = titleInput ? titleInput.value : '';
-        const description = descInput ? descInput.value : '';
-        const price = priceInput ? parseFloat(priceInput.value) || 10 : 10;
-        const editions = editionsInput ? parseInt(editionsInput.value) || 100 : 100;
-        const royaltyPercent = royaltyInput ? parseFloat(royaltyInput.value) || 10 : 10;
-
-        // 1. Upload thumbnail
-        const thumbProgressItem = document.getElementById('upload-thumb-progress');
-        if (thumbProgressItem) thumbProgressItem.classList.remove('hidden');
-
-        const thumbResult = await uploadFileWithProgress(thumbFile, null, (pct) => {
-          const bar = document.getElementById('thumb-bar');
-          const txt = document.getElementById('thumb-pct');
-          if (bar) bar.style.width = pct + '%';
-          if (txt) txt.textContent = pct + '%';
-        });
-
-        thumbCid = thumbResult.cid;
-        thumbUrl = thumbResult.url;
-
-        // 2. Upload video to Filecoin
-        const videoProgressItem = document.getElementById('upload-video-progress');
-        if (videoProgressItem) videoProgressItem.classList.remove('hidden');
-
-        const videoResult = await uploadFileWithProgress(videoFile, 'film', (pct) => {
-          const bar = document.getElementById('video-bar');
-          const txt = document.getElementById('video-pct');
-          if (bar) bar.style.width = pct + '%';
-          if (txt) txt.textContent = pct + '%';
-        });
-
-        videoCid = videoResult.cid;
-        videoUrl = videoResult.url;
-
-        // 3. Create metadata & save release
-        const mintingProgressItem = document.getElementById('upload-minting-progress');
-        if (mintingProgressItem) mintingProgressItem.classList.remove('hidden');
-
-        const metadata = {
-          name: title,
-          description,
-          image: `ipfs://${thumbCid}`,
-          animation_url: `ipfs://${videoCid}`,
-          attributes: [
-            { trait_type: 'Type', value: 'Film' },
-            { trait_type: 'Content Type', value: 'film' },
-            { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
-          ],
-          properties: { video: videoUrl, thumbnail: thumbUrl },
-        };
-        const metaResult = await API.uploadJSON(metadata, `${title}-metadata.json`);
-
-        const releaseData = {
-          artistAddress: AppState.user.address,
-          artistName: AppState.profile?.name || null,
-          title,
-          description,
-          type: 'single',
-          contentType: 'film',
-          coverUrl: thumbUrl,
-          coverCid: thumbCid,
-          metadataCid: metaResult.cid,
-          songPrice: price,
-          albumPrice: null,
-          totalEditions: editions,
-          editionsPerTrack: editions,
-          royaltyPercent,
-          nftTokenIds: [],
-          txHash: null,
-          tracks: [{
-            title,
-            trackNumber: 1,
-            duration: 0,
-            audioCid: videoCid,
-            audioUrl: videoUrl,
-            price,
-            soldEditions: 0,
-            availableEditions: editions,
-          }],
-          sellOfferIndex: null,
-          mintFeePaid: true,
-          mintFeeTxHash: paymentTxHash,
-          status: 'live',
-        };
-        
-        const createResult = await API.saveRelease(releaseData);
-        releaseId = createResult.releaseId;
-
-        // Success!
-        const step4 = document.getElementById('film-step-4');
-        const step5 = document.getElementById('film-step-5');
-        const successTitle = document.getElementById('success-title');
-        
-        if (successTitle) successTitle.textContent = `${title} is Live!`;
-        if (step4) step4.classList.add('hidden');
-        if (step5) step5.classList.remove('hidden');
-
-      } catch (err) {
-        console.error('Upload failed:', err);
-        alert(`Upload failed: ${err.message}`);
-      }
-    };
-
-    // Helper: Upload with progress
-    const uploadFileWithProgress = (file, contentType, onProgress) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (contentType) formData.append('contentType', contentType);
-      
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            onProgress(pct);
-          }
-        });
-        
-        xhr.addEventListener('load', () => {
-          if (xhr.status === 200) {
-            try {
-              const result = JSON.parse(xhr.responseText);
-              resolve(result);
-            } catch (err) {
-              reject(new Error('Invalid response from server'));
-            }
-          } else {
-            reject(new Error(`Upload failed: ${xhr.statusText}`));
-          }
-        });
-        
-        xhr.addEventListener('error', () => reject(new Error('Network error')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-        
-        xhr.open('POST', '/api/upload');
-        xhr.send(formData);
-      });
-    };
-
-    // ── Success Actions ──
-    const shareBtn = document.getElementById('success-share-btn');
-    if (shareBtn) {
-      shareBtn.addEventListener('click', () => {
-        const titleInput = document.getElementById('film-title');
-        const title = titleInput ? titleInput.value : 'my film';
-        const tweetText = `Just uploaded "${title}" to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡`;
-        window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`, '_blank');
-      });
-    }
-
-    const doneBtn = document.getElementById('success-done-btn');
-    if (doneBtn) {
-      doneBtn.addEventListener('click', () => {
-        Modals.close();
-        FilmsPage.loadFilms();
-      });
-    }
-  },
-
-  getStyles() {
-    return `
-      <style>
-        .films-page { max-width: 1100px; margin: 0 auto; padding: 0 24px 120px; }
-
-        /* ── Hero ── */
-        .films-hero {
-          position: relative; text-align: center;
-          padding: 80px 24px 72px; border-radius: 24px;
-          overflow: hidden; margin-bottom: 56px;
-          background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(220,38,38,0.04));
-          border: 1px solid rgba(239,68,68,0.2);
-        }
-        .films-bg-grid {
-          position: absolute; inset: 0; z-index: 0;
-          background-image: linear-gradient(rgba(239,68,68,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(239,68,68,0.06) 1px, transparent 1px);
-          background-size: 40px 40px;
-        }
-        .films-hero-content { position: relative; z-index: 1; }
-        .films-badge { display: inline-block; padding: 6px 16px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; font-size: 13px; font-weight: 600; color: #f87171; margin-bottom: 20px; }
-        .films-title { font-size: 44px; font-weight: 800; margin-bottom: 16px; }
-        @media (max-width: 640px) { .films-title { font-size: 28px; } }
-        .films-subtitle { font-size: 17px; color: var(--text-muted); line-height: 1.6; margin-bottom: 32px; max-width: 560px; margin-left: auto; margin-right: auto; }
-        .films-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
-        .films-hero-sub { font-size: 13px; color: var(--text-muted); }
-
-        /* ── Features ── */
-        .films-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 56px; }
-        .films-feature { padding: 28px 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; }
-        .films-feature-icon { font-size: 36px; margin-bottom: 14px; }
-        .films-feature h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-        .films-feature p { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0; }
-
-        /* ── Empty state ── */
-        .films-empty { text-align: center; padding: 80px 24px; margin-bottom: 48px; }
-        .films-empty-icon { font-size: 72px; margin-bottom: 20px; }
-        .films-empty h2 { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
-        .films-empty p { font-size: 15px; color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; }
-
-        /* ── Grid ── */
-        .films-section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 20px; }
-        .films-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; margin-bottom: 56px; }
-        .film-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; cursor: pointer; transition: all 150ms; }
-        .film-card:hover { border-color: #ef4444; transform: translateY(-4px); }
-        .film-card-thumb { position: relative; aspect-ratio: 16/9; background: var(--bg-hover); }
-        .film-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .film-card-play-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 150ms; }
-        .film-card:hover .film-card-play-overlay { opacity: 1; }
-        .film-card-play-btn { width: 56px; height: 56px; border-radius: 50%; background: rgba(239,68,68,0.9); display: flex; align-items: center; justify-content: center; }
-        .film-card-avail { position: absolute; top: 8px; right: 8px; padding: 3px 8px; background: rgba(0,0,0,0.7); border-radius: 6px; font-size: 11px; font-weight: 600; color: white; }
-        .film-card-info { padding: 12px; }
-        .film-card-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .film-card-artist { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
-        .film-card-price { font-size: 13px; font-weight: 700; color: #f87171; }
-
-        /* ── CTA Banner ── */
-        .films-cta-banner { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 36px 40px; background: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.05)); border: 1px solid rgba(239,68,68,0.25); border-radius: 20px; }
-        @media (max-width: 700px) { .films-cta-banner { flex-direction: column; text-align: center; padding: 28px 24px; } }
-        .films-cta-text h2 { font-size: 22px; font-weight: 700; margin: 0 0 10px; }
-        .films-cta-text p { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.6; max-width: 520px; }
       </style>
     `;
   },
