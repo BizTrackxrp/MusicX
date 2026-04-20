@@ -16,14 +16,9 @@
  * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
  * due to xrplcluster.com timeouts causing purchase failures.
  * 
- * MOBILE AUTH FIX: On mobile, Xaman opens a new tab. The original tab
- * detects login via the storage event, restores the pre-auth context
- * (release modal, etc.), and auto-dismisses the waiting modal.
- * The new auth tab closes itself after login completes.
- * 
- * POST-LOGIN CONTEXT: Before triggering auth, the current page state
- * (open release modal, etc.) is saved to sessionStorage so it can be
- * restored after login completes — users never lose their place.
+ * DESKTOP AUTH FIX (APR 2026): Desktop auth now opens Xaman in SAME TAB,
+ * redirects back automatically, and logs user in without any "close this tab"
+ * message. Mobile still uses new tab flow with cross-tab session detection.
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -44,154 +39,33 @@ const XamanWallet = {
   mintProgressInterval: null,
   
   /**
-   * Open Xaman URL in a popup window instead of a tab
+   * Open Xaman URL - Desktop uses SAME TAB, Mobile uses new tab
    */
   openXamanPopup(url) {
-    const width = 420;
-    const height = 700;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    const popup = window.open(
-      url,
-      'XamanSign',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
-    );
-    
-    if (popup) {
-      popup.focus();
+    if (isMobile) {
+      // Mobile: Open in NEW TAB (will deep link to Xaman app)
+      // Original tab will detect login via storage event
+      const popup = window.open(url, '_blank');
+      if (popup) popup.focus();
+      return popup;
+    } else {
+      // Desktop: Open in SAME TAB - redirects back automatically after auth
+      window.location.href = url;
+      return null;
     }
-    
-    return popup;
   },
   
   /**
-   * Snapshot everything the user is doing right now to localStorage.
-   * Called just before location.reload() so it survives the page reload.
-   * Captures: current track + timestamp, playback queue, open modal, current page.
-   */
-  savePageState() {
-    try {
-      const state = {
-        timestamp: Date.now(),
-        page: Router?.params?.page || null,
-        openReleaseId: null,
-        player: null,
-      };
-
-      // Capture open release modal via comments section data attribute
-      const commentsSection = document.querySelector('[data-release-id]');
-      if (commentsSection) {
-        state.openReleaseId = commentsSection.dataset.releaseId;
-      }
-
-      // Capture player state
-      if (typeof AppState !== 'undefined' && AppState.player?.currentTrack) {
-        const audio = typeof Player !== 'undefined' ? Player.audio : null;
-        state.player = {
-          currentTrack: AppState.player.currentTrack,
-          currentTime: audio?.currentTime || 0,
-          queue: AppState.player.queue || [],
-          queueIndex: AppState.player.queueIndex || 0,
-          isShuffled: AppState.player.isShuffled || false,
-          isRepeat: AppState.player.isRepeat || false,
-        };
-      }
-
-      localStorage.setItem('xrpmusic_page_state', JSON.stringify(state));
-      console.log('Page state saved:', state);
-    } catch (err) {
-      console.warn('Failed to save page state:', err);
-    }
-  },
-
-  /**
-   * Restore page state after a login-triggered reload.
-   * Re-opens the release modal and resumes playback from exact position.
-   */
-  async restorePageState() {
-    const raw = localStorage.getItem('xrpmusic_page_state');
-    if (!raw) return;
-    localStorage.removeItem('xrpmusic_page_state');
-
-    let state;
-    try {
-      state = JSON.parse(raw);
-      if (Date.now() - state.timestamp > 5 * 60 * 1000) return;
-    } catch {
-      return;
-    }
-
-    console.log('Restoring page state after reload:', state);
-
-    await new Promise(resolve => setTimeout(resolve, 600));
-
-    // 1. Restore player at exact timestamp — paused so user chooses to resume
-    if (state.player?.currentTrack && typeof Player !== 'undefined') {
-      try {
-        const { currentTrack, currentTime, queue, queueIndex, isShuffled, isRepeat } = state.player;
-
-        if (typeof QueueManager !== 'undefined') {
-          QueueManager.playNow(currentTrack, {
-            context: 'restore',
-            contextTracks: queue,
-            trackIndex: queueIndex,
-          });
-        } else {
-          Player.playTrack(currentTrack, queue, queueIndex);
-        }
-
-        // Seek to saved position once audio is ready
-        const seekToTime = () => {
-          if (Player.audio && currentTime > 0) {
-            Player.audio.currentTime = currentTime;
-            console.log(`Restored playback to ${currentTime.toFixed(1)}s`);
-          }
-        };
-        if (Player.audio?.readyState >= 2) {
-          seekToTime();
-        } else {
-          Player.audio?.addEventListener('canplay', seekToTime, { once: true });
-        }
-
-        // Pause — don't auto-blast audio on reload
-        setTimeout(() => {
-          Player.audio?.pause();
-          AppState.player.isPlaying = false;
-          if (typeof UI !== 'undefined') UI.updatePlayButton?.();
-        }, 400);
-
-        if (isShuffled && !AppState.player.isShuffled) Player.toggleShuffle?.();
-        if (isRepeat && !AppState.player.isRepeat) Player.toggleRepeat?.();
-
-      } catch (err) {
-        console.warn('Failed to restore player:', err);
-      }
-    }
-
-    // 2. Re-open release modal if one was open
-    if (state.openReleaseId && typeof Modals !== 'undefined' && typeof API !== 'undefined') {
-      try {
-        const data = await API.getRelease(state.openReleaseId);
-        if (data?.release) {
-          setTimeout(() => Modals.showRelease(data.release), 200);
-        }
-      } catch (err) {
-        console.warn('Failed to restore release modal:', err);
-      }
-    }
-  },
-
-  /**
    * Save the current page context before triggering auth
    * so we can restore it after login completes.
-   * Called by Modals.showAuth() before opening the auth modal.
    */
   saveAuthContext(context = {}) {
     const ctx = {
       page: Router?.params?.page || null,
       releaseId: context.releaseId || null,
-      action: context.action || null, // 'purchase', 'like', etc.
+      action: context.action || null,
       timestamp: Date.now(),
     };
     sessionStorage.setItem(AUTH_CONTEXT_KEY, JSON.stringify(ctx));
@@ -200,18 +74,14 @@ const XamanWallet = {
 
   /**
    * Read and clear the saved auth context.
-   * Checks sessionStorage first, then localStorage fallback (survives reload).
    */
   popAuthContext() {
-    // After a reload, context is in localStorage (sessionStorage was cleared)
     let raw = sessionStorage.getItem(AUTH_CONTEXT_KEY);
-    if (!raw) {
-      raw = localStorage.getItem(AUTH_CONTEXT_KEY + '_reload');
-      localStorage.removeItem(AUTH_CONTEXT_KEY + '_reload');
-    } else {
+    if (raw) {
       sessionStorage.removeItem(AUTH_CONTEXT_KEY);
     }
     if (!raw) return null;
+    
     try {
       const ctx = JSON.parse(raw);
       // Only restore if context is recent (< 10 minutes)
@@ -237,7 +107,6 @@ const XamanWallet = {
       try {
         const data = await API.getRelease(ctx.releaseId);
         if (data?.release && typeof Modals !== 'undefined') {
-          // Small delay to let UI settle after login
           setTimeout(() => {
             Modals.showRelease(data.release);
           }, 400);
@@ -268,12 +137,14 @@ const XamanWallet = {
         try {
           const account = await this.sdk.user.account;
           if (account) {
-            // Use sessionStorage - dies when tab closes
+            // Save session
             this.saveSessionToTab(account);
             saveSession(account);
             AppState.walletType = 'xaman';
-            // Write to localStorage so the original tab can detect login via storage event
+            
+            // Write to localStorage so mobile tabs can detect login
             localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
+            
             await this.loadUserData(account);
             UI.updateAuthUI();
             UI.showLoggedInState();
@@ -283,11 +154,12 @@ const XamanWallet = {
               MintNotifications.init();
             }
             
-            // If this tab was opened by Xaman for auth, close it
+            // Check if this is a MOBILE auth tab (not desktop)
             const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
             if (isAuthTab) {
+              // Mobile flow: This is the new tab that Xaman opened
               sessionStorage.removeItem('xrpmusic_auth_tab');
-              console.log('Auth complete in new tab, closing...');
+              console.log('Mobile auth complete in new tab, closing...');
               setTimeout(() => {
                 window.close();
                 // If window.close() is blocked, show a friendly message
@@ -307,7 +179,8 @@ const XamanWallet = {
               return;
             }
 
-            // This is the original tab — restore pre-auth context
+            // Desktop flow: Same tab - just restore context and continue
+            console.log('✅ Logged in successfully:', account);
             await this.restoreAuthContext();
           }
         } catch (err) {
@@ -322,7 +195,6 @@ const XamanWallet = {
         UI.updateAuthUI();
         UI.showLoggedOutState();
         
-        // Cleanup notifications
         if (typeof MintNotifications !== 'undefined') {
           MintNotifications.cleanup();
         }
@@ -333,31 +205,18 @@ const XamanWallet = {
         this.isConnecting = false;
       });
 
-      // ── Storage event: detect login from the auth tab (mobile flow) ──
-      // On mobile, Xaman opens a NEW tab. When that tab completes login
-      // it writes to localStorage. This original tab detects that, saves
-      // context to localStorage (survives reload), then reloads itself.
-      // On reload, handlePageLoad() restores the session automatically,
-      // and restoreAuthContext() re-opens whatever the user was doing.
+      // Storage event: MOBILE ONLY - detect login from auth tab
       window.addEventListener('storage', async (e) => {
         if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from auth tab — snapshotting state and reloading...');
+          console.log('Login detected from mobile auth tab, reloading...');
           try {
             const userData = JSON.parse(e.newValue);
             if (userData?.address) {
               // Save session so handlePageLoad sees it as same-tab after reload
               this.saveSessionToTab(userData.address);
               localStorage.removeItem('xrpmusic_pending_auth');
-
-              // Snapshot everything the user is doing right now
-              this.savePageState();
-
-              // Persist auth context to localStorage (survives reload)
-              const ctx = sessionStorage.getItem(AUTH_CONTEXT_KEY);
-              if (ctx) {
-                localStorage.setItem(AUTH_CONTEXT_KEY + '_reload', ctx);
-              }
-
+              
+              // Reload to complete login
               setTimeout(() => location.reload(), 300);
             }
           } catch (err) {
@@ -376,10 +235,7 @@ const XamanWallet = {
         console.warn('SDK ready timeout, continuing anyway');
       }
       
-      // Clear any persisted localStorage sessions on fresh page load
-      // Only restore if we have a valid sessionStorage session (same tab)
       this.handlePageLoad();
-      
       this.initialized = true;
     } catch (error) {
       console.error('Failed to initialize Xaman:', error);
@@ -391,8 +247,6 @@ const XamanWallet = {
    */
   setupAutoLogout() {
     window.addEventListener('beforeunload', () => {
-      // Clear localStorage session so it doesn't persist
-      // BUT not if this is an auth tab (don't clear the session we just set)
       const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
       if (!isAuthTab) {
         localStorage.removeItem('xrpmusic_user');
@@ -400,7 +254,7 @@ const XamanWallet = {
       }
     });
     
-    // Also handle visibility change (tab hidden for too long)
+    // Handle visibility change (tab hidden for too long)
     let hiddenTime = null;
     const MAX_HIDDEN_TIME = 30 * 60 * 1000; // 30 minutes
     
@@ -419,13 +273,13 @@ const XamanWallet = {
   },
   
   /**
-   * Handle page load - only restore session if it's a same-tab session
+   * Handle page load - restore session if same-tab
    */
   handlePageLoad() {
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     
     if (!tabSession) {
-      // Check if this is a new auth tab opened by Xaman
+      // Check if this is a mobile auth tab (new tab opened by Xaman)
       const urlParams = new URLSearchParams(window.location.search);
       const pendingAuth = localStorage.getItem('xrpmusic_pending_auth');
       const isXamanRedirect = urlParams.has('xumm') || 
@@ -434,12 +288,13 @@ const XamanWallet = {
         pendingAuth === '1';
       
       if (isXamanRedirect) {
+        // Mobile flow: Mark this as an auth tab
         sessionStorage.setItem('xrpmusic_auth_tab', 'true');
         localStorage.removeItem('xrpmusic_pending_auth');
-        console.log('Auth redirect tab detected');
+        console.log('Mobile auth redirect tab detected');
       } else {
-        // Fresh page load — clear any old sessions
-        console.log('Fresh page load detected — clearing any stale sessions');
+        // Fresh page load - clear stale sessions
+        console.log('Fresh page load - clearing stale sessions');
         localStorage.removeItem('xrpmusic_user');
         localStorage.removeItem('xrpmusic_profile');
         if (typeof clearSession === 'function') {
@@ -451,14 +306,11 @@ const XamanWallet = {
         }
       }
     } else {
-      // Same tab navigation or post-login reload — restore session
+      // Same tab navigation - restore session
       console.log('Same-tab session found, restoring...');
       this.checkSession().then(() => {
         if (AppState.user?.address) {
-          // Restore pre-auth context (release modal from showAuth flow)
           this.restoreAuthContext();
-          // Restore full page state (track, modal, position from login reload)
-          this.restorePageState();
         }
       }).catch(err => {
         console.warn('Session check failed:', err);
@@ -585,10 +437,10 @@ const XamanWallet = {
     
     try {
       sessionStorage.setItem('xrpmusic_return_url', window.location.href);
-      // Mark that the NEXT page load in this tab (or a new tab opened by Xaman)
-      // is an auth tab — so it knows to close itself after login completes.
-      // We write to localStorage so it persists across the tab that Xaman opens.
+      
+      // Mark pending auth for mobile detection
       localStorage.setItem('xrpmusic_pending_auth', '1');
+      
       await this.sdk.authorize();
     } catch (err) {
       console.error('Failed to connect wallet:', err);
