@@ -16,7 +16,7 @@ const FilmsPage = {
     try {
       const res = await fetch('/api/upload-config');
       const config = await res.json();
-      this.LIGHTHOUSE_API_KEY = config.lighthouseApiKey;
+      this.LIGHTHOUSE_API_KEY = config.key; // API returns 'key' not 'lighthouseApiKey'
       console.log('✅ Lighthouse direct upload enabled');
     } catch (err) {
       console.error('Failed to load Lighthouse config:', err);
@@ -209,7 +209,8 @@ const FilmsPage = {
     formData.append('file', file);
 
     // Build URL with Filecoin routing
-    let url = 'https://node.lighthouse.storage/api/v0/add';
+    // Using the endpoint from upload-config API
+    let url = 'https://upload.lighthouse.storage/api/v0/add';
     if (useFilecoin) {
       url += '?network=filecoin';
     }
