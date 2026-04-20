@@ -25,8 +25,9 @@ export default async function handler(req, res) {
   }
   
   try {
+    // Use formidable for proper multipart parsing (streams to disk, not memory)
     const form = formidable({ 
-      maxFileSize: 50 * 1024 * 1024,
+      maxFileSize: 50 * 1024 * 1024, // 50MB max
       keepExtensions: true,
     });
     
@@ -37,29 +38,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No file provided' });
     }
     
-    // ← THIS IS THE ONLY NEW LOGIC
+    // Check if this is for Filecoin (audiobook, podcast, film)
     const contentType = fields.contentType?.[0] || '';
     const useFilecoin = ['audiobook', 'podcast', 'film'].includes(contentType);
-    // ← END NEW LOGIC
     
     console.log('Uploading:', file.originalFilename, Math.round(file.size / 1024), 'KB', useFilecoin ? '(Filecoin)' : '(IPFS)');
     
+    // Upload to Lighthouse
     const lighthouseApiKey = process.env.LIGHTHOUSE_API_KEY;
     if (!lighthouseApiKey) {
       return res.status(500).json({ error: 'Lighthouse not configured' });
     }
     
+    // Read file and create FormData for Lighthouse
     const fileBuffer = fs.readFileSync(file.filepath);
     const formData = new FormData();
     const blob = new Blob([fileBuffer], { type: file.mimetype });
     formData.append('file', blob, file.originalFilename);
     
-    // ← THIS IS THE ONLY OTHER CHANGE
+    // Build upload URL with Filecoin option
     let uploadUrl = 'https://upload.lighthouse.storage/api/v0/add';
     if (useFilecoin) {
+      // Add Filecoin network parameters for Lighthouse
+      // Lighthouse will automatically back this up to Filecoin Mainnet
       uploadUrl += '?network=filecoin';
     }
-    // ← END CHANGE
     
     const lighthouseResponse = await fetch(uploadUrl, {
       method: 'POST',
@@ -69,6 +72,7 @@ export default async function handler(req, res) {
       body: formData,
     });
     
+    // Clean up temp file
     fs.unlink(file.filepath, () => {});
     
     if (!lighthouseResponse.ok) {
@@ -85,7 +89,8 @@ export default async function handler(req, res) {
       cid: cid,
       url: `https://gateway.lighthouse.storage/ipfs/${cid}`,
       ipfsUrl: `ipfs://${cid}`,
-      storage: useFilecoin ? 'filecoin' : 'ipfs',  // ← Just for logging
+      storage: useFilecoin ? 'filecoin' : 'ipfs',
+      // Filecoin deal info (if available - may take time to process)
       filecoinDeal: lighthouseData.dealId || null,
     });
     
