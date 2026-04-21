@@ -1,12 +1,12 @@
 /**
- * XRP Music - Videos Page (Combined Feed + Upload)
+ * XRP Music - Films Page (Combined Feed + Upload)
  * - Browse all video content
  * - Upload new videos with payment-before-upload flow
  * - Direct Lighthouse upload (bypasses Vercel 50MB limit)
  * - Auto-refund on upload failure
  */
 
-const VideosPage = {
+const FilmsPage = {
   videos: [],
   isLoading: false,
   sortBy: 'newest',
@@ -691,7 +691,7 @@ const VideosPage = {
 
         // 1. Upload thumbnail
         document.getElementById('upload-thumb-progress')?.classList.remove('hidden');
-        const thumbResult = await VideosPage.uploadToLighthouse(thumbFile, false, (pct) => {
+        const thumbResult = await FilmsPage.uploadToLighthouse(thumbFile, false, (pct) => {
           const bar = document.getElementById('thumb-bar');
           const txt = document.getElementById('thumb-pct');
           if (bar) bar.style.width = pct + '%';
@@ -700,7 +700,7 @@ const VideosPage = {
 
         // 2. Upload video to Filecoin
         document.getElementById('upload-video-progress')?.classList.remove('hidden');
-        const videoResult = await VideosPage.uploadToLighthouse(videoFile, true, (pct) => {
+        const videoResult = await FilmsPage.uploadToLighthouse(videoFile, true, (pct) => {
           const bar = document.getElementById('video-bar');
           const txt = document.getElementById('video-pct');
           if (bar) bar.style.width = pct + '%';
@@ -729,7 +729,7 @@ const VideosPage = {
 
         const metaBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
         const metaFile = new File([metaBlob], `${title}-metadata.json`, { type: 'application/json' });
-        const metaResult = await VideosPage.uploadToLighthouse(metaFile, false);
+        const metaResult = await FilmsPage.uploadToLighthouse(metaFile, false);
 
         // 4. Save to database
         const releaseData = {
@@ -808,7 +808,7 @@ const VideosPage = {
 
     document.getElementById('success-done-btn')?.addEventListener('click', () => {
       Modals.close();
-      VideosPage.loadVideos();
+      FilmsPage.loadVideos();
     });
   },
 
