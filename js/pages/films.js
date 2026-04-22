@@ -129,10 +129,20 @@ const FilmsPage = {
     // Bind card clicks
     document.querySelectorAll('.video-card').forEach(card => {
       card.addEventListener('click', () => {
-        const videoId = card.dataset.videoId;
-        const video = this.videos.find(v => v.id === videoId);
-        if (video && typeof Modals !== 'undefined') {
-          Modals.showRelease(video);
+        const videoData = card.dataset.video;
+        if (!videoData) return;
+        
+        try {
+          const video = JSON.parse(videoData);
+          // Open video player modal instead of regular release modal
+          if (typeof VideoPlayerModal !== 'undefined') {
+            VideoPlayerModal.show(video);
+          } else {
+            console.error('VideoPlayerModal not loaded');
+            alert('Video player not available. Please refresh the page.');
+          }
+        } catch (err) {
+          console.error('Failed to parse video data:', err);
         }
       });
     });
@@ -165,7 +175,7 @@ const FilmsPage = {
     const durationText = duration > 0 ? this.formatDuration(duration) : '';
 
     return `
-      <div class="video-card" data-video-id="${video.id}">
+      <div class="video-card" data-video-id="${video.id}" data-video='${JSON.stringify(video).replace(/'/g, "&apos;")}'>
         <div class="video-card-thumb">
           <img src="${thumb}" alt="${video.title}" onerror="this.src='/placeholder.png'">
           <div class="video-card-overlay">
@@ -753,8 +763,10 @@ const FilmsPage = {
             title,
             trackNumber: 1,
             duration: 0,
-            audioCid: videoResult.cid,
+            audioCid: videoResult.cid,  // Store in audio fields for compatibility
             audioUrl: videoResult.url,
+            videoCid: videoResult.cid,  // ALSO store in video fields
+            videoUrl: videoResult.url,  // ALSO store in video fields
             price,
             soldEditions: 0,
             availableEditions: editions,
@@ -763,7 +775,7 @@ const FilmsPage = {
           mintFeePaid: true,
           mintFeeTxHash: paymentTxHash,
           paymentAmount: paymentAmount,
-          status: 'live',
+          status: 'live',  // Make it live immediately after payment
         };
 
         await API.saveRelease(releaseData);
