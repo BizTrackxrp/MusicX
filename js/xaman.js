@@ -16,10 +16,11 @@
  * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
  * due to xrplcluster.com timeouts causing purchase failures.
  * 
- * APR 2026 AUTH/PAYMENT FIX:
- * - AUTH (wallet connect): Desktop uses same tab, mobile uses new tab
- * - TRANSACTIONS (payments/minting): Always use popup window (stay on page)
+ * APR 2026 AUTH/PAYMENT FIX V2:
+ * - AUTH (wallet connect): POPUP for both mobile and desktop (stays in current browser)
+ * - TRANSACTIONS (payments/minting): POPUP window (stay on page)
  * - Detection: isConnecting flag determines auth vs transaction
+ * - Mobile auth no longer opens new tab - uses popup like transactions
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -55,8 +56,18 @@ const XamanWallet = {
       console.log('🔐 Opening Xaman for AUTH');
       
       if (isMobile) {
-        // Mobile: Open in NEW TAB (will deep link to Xaman app)
-        const popup = window.open(url, '_blank');
+        // Mobile: Use POPUP (not new tab) - stays in current browser
+        const width = 420;
+        const height = 700;
+        const left = (window.screen.width - width) / 2;
+        const top = (window.screen.height - height) / 2;
+        
+        const popup = window.open(
+          url,
+          'XamanAuth',
+          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+        );
+        
         if (popup) popup.focus();
         return popup;
       } else {
@@ -173,7 +184,7 @@ const XamanWallet = {
             saveSession(account);
             AppState.walletType = 'xaman';
             
-            // Write to localStorage so mobile tabs can detect login
+            // Write to localStorage so mobile popups can detect login
             localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
             
             await this.loadUserData(account);
@@ -185,24 +196,24 @@ const XamanWallet = {
               MintNotifications.init();
             }
             
-            // Check if this is a MOBILE auth tab (not desktop)
-            const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
-            if (isAuthTab) {
-              // Mobile flow: This is the new tab that Xaman opened
-              sessionStorage.removeItem('xrpmusic_auth_tab');
-              console.log('Mobile auth complete in new tab, closing...');
+            // Check if this is a MOBILE auth popup (not desktop)
+            const isAuthPopup = sessionStorage.getItem('xrpmusic_auth_popup');
+            if (isAuthPopup) {
+              // Mobile flow: This is the popup that Xaman opened
+              sessionStorage.removeItem('xrpmusic_auth_popup');
+              console.log('Mobile auth complete in popup, closing...');
               setTimeout(() => {
                 window.close();
                 // If window.close() is blocked, show a friendly message
                 setTimeout(() => {
-                  document.title = '✅ Signed In — Go back to your music!';
+                  document.title = '✅ Signed In!';
                   const banner = document.createElement('div');
                   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:24px;';
                   banner.innerHTML = `
                     <div style="font-size:64px;margin-bottom:20px;">✅</div>
                     <div style="font-size:24px;font-weight:700;margin-bottom:12px;">You're signed in!</div>
-                    <div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">Go back to the other tab to continue</div>
-                    <div style="font-size:14px;color:rgba(255,255,255,0.4);">You can close this tab</div>
+                    <div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">This window will close automatically</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,0.4);">If not, you can close it manually</div>
                   `;
                   document.body.appendChild(banner);
                 }, 500);
@@ -236,10 +247,10 @@ const XamanWallet = {
         this.isConnecting = false;
       });
 
-      // Storage event: MOBILE ONLY - detect login from auth tab
+      // Storage event: MOBILE ONLY - detect login from auth popup
       window.addEventListener('storage', async (e) => {
         if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from mobile auth tab, reloading...');
+          console.log('Login detected from mobile auth popup, reloading...');
           try {
             const userData = JSON.parse(e.newValue);
             if (userData?.address) {
@@ -251,7 +262,7 @@ const XamanWallet = {
               setTimeout(() => location.reload(), 300);
             }
           } catch (err) {
-            console.error('Failed to handle login from auth tab:', err);
+            console.error('Failed to handle login from auth popup:', err);
           }
         }
       });
@@ -278,8 +289,8 @@ const XamanWallet = {
    */
   setupAutoLogout() {
     window.addEventListener('beforeunload', () => {
-      const isAuthTab = sessionStorage.getItem('xrpmusic_auth_tab');
-      if (!isAuthTab) {
+      const isAuthPopup = sessionStorage.getItem('xrpmusic_auth_popup');
+      if (!isAuthPopup) {
         localStorage.removeItem('xrpmusic_user');
         localStorage.removeItem('xrpmusic_profile');
       }
@@ -310,7 +321,7 @@ const XamanWallet = {
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     
     if (!tabSession) {
-      // Check if this is a mobile auth tab (new tab opened by Xaman)
+      // Check if this is a mobile auth popup (opened by Xaman)
       const urlParams = new URLSearchParams(window.location.search);
       const pendingAuth = localStorage.getItem('xrpmusic_pending_auth');
       const isXamanRedirect = urlParams.has('xumm') || 
@@ -319,10 +330,10 @@ const XamanWallet = {
         pendingAuth === '1';
       
       if (isXamanRedirect) {
-        // Mobile flow: Mark this as an auth tab
-        sessionStorage.setItem('xrpmusic_auth_tab', 'true');
+        // Mobile flow: Mark this as an auth popup
+        sessionStorage.setItem('xrpmusic_auth_popup', 'true');
         localStorage.removeItem('xrpmusic_pending_auth');
-        console.log('Mobile auth redirect tab detected');
+        console.log('Mobile auth redirect popup detected');
       } else {
         // Fresh page load - clear stale sessions
         console.log('Fresh page load - clearing stale sessions');
