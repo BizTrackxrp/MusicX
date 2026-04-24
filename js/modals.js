@@ -4659,7 +4659,7 @@ bindCreateEvents(existingDraft) {
           <div class="track-num">${idx + 1}</div>
           <input type="text" class="track-name-input" value="${track.title.replace(/"/g, '&quot;')}" data-idx="${idx}" placeholder="Click to edit song title" title="Click to edit">
           <div class="track-price-input-wrap">
-            <input type="number" class="track-price-input" value="${track.price}" data-idx="${idx}" step="0.01" min="0" placeholder="0.00" title="Track price in XRP">
+            <input type="number" class="track-price-input" value="${track.price}" data-idx="${idx}" step="0.0001" min="0" placeholder="0.00" title="Track price in XRP">
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
