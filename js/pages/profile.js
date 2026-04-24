@@ -949,7 +949,7 @@ renderDraftCard(draft) {
             </div>
           ` : ''}
           <div class="release-card-footer">
-            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-price">${price === 0 ? 'FREE' : price + ' XRP'}</span>
             <span class="release-card-tracks">${trackCount} track${trackCount > 1 ? 's' : ''}</span>
           </div>
           <div class="draft-card-actions">
@@ -2145,7 +2145,7 @@ renderDraftCard(draft) {
           <div class="release-card-title">${release.title}</div>
           <div class="release-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</div>
           <div class="release-card-footer">
-            <span class="release-card-price">${price} XRP</span>
+            <span class="release-card-price">${price === 0 ? 'FREE' : price + ' XRP'}</span>
             <span class="release-card-tracks">${release.tracks?.length || 0} tracks</span>
           </div>
         </div>
