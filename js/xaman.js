@@ -16,11 +16,11 @@
  * FEB 2026: Swapped xrplcluster.com → s1.ripple.com for tx lookups
  * due to xrplcluster.com timeouts causing purchase failures.
  * 
- * APR 2026 AUTH/PAYMENT FIX V2:
- * - AUTH (wallet connect): POPUP for both mobile and desktop (stays in current browser)
- * - TRANSACTIONS (payments/minting): POPUP window (stay on page)
- * - Detection: isConnecting flag determines auth vs transaction
- * - Mobile auth no longer opens new tab - uses popup like transactions
+ * APR 2026 AUTH/PAYMENT FIX V3:
+ * - AUTH (wallet connect): Same-tab redirect for ALL devices (no popups, no new tabs)
+ * - TRANSACTIONS (payments/minting): Popup window (stay on page)
+ * - Mobile deep links to Xaman app, returns to same tab
+ * - Clean UX: no blank tabs, no confusion
  */
 
 const XAMAN_API_KEY = '619aefc9-660a-4120-9e22-e8afd2980c8c';
@@ -48,36 +48,19 @@ const XamanWallet = {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
     // Detect if this is an AUTH request (wallet connect) vs TRANSACTION (payment/mint/etc)
-    // Auth happens when isConnecting flag is true
     const isAuthRequest = this.isConnecting === true;
     
     if (isAuthRequest) {
       // ===== AUTH FLOW (Connect Wallet) =====
       console.log('🔐 Opening Xaman for AUTH');
       
-      if (isMobile) {
-        // Mobile: Use POPUP (not new tab) - stays in current browser
-        const width = 420;
-        const height = 700;
-        const left = (window.screen.width - width) / 2;
-        const top = (window.screen.height - height) / 2;
-        
-        const popup = window.open(
-          url,
-          'XamanAuth',
-          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
-        );
-        
-        if (popup) popup.focus();
-        return popup;
-      } else {
-        // Desktop: Open in SAME TAB - redirects back automatically after auth
-        window.location.href = url;
-        return null;
-      }
+      // BOTH mobile and desktop: redirect same tab
+      // Mobile will deep link to Xaman app, user returns to same tab
+      window.location.href = url;
+      return null;
+      
     } else {
       // ===== TRANSACTION FLOW (Payments, Minting, NFT operations) =====
-      // Always use popup window to stay on current page
       console.log('💳 Opening Xaman for TRANSACTION');
       
       const width = 420;
@@ -91,9 +74,7 @@ const XamanWallet = {
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
       );
       
-      if (popup) {
-        popup.focus();
-      }
+      if (popup) popup.focus();
       
       return popup;
     }
@@ -184,9 +165,6 @@ const XamanWallet = {
             saveSession(account);
             AppState.walletType = 'xaman';
             
-            // Write to localStorage so mobile popups can detect login
-            localStorage.setItem('xrpmusic_user', JSON.stringify({ address: account }));
-            
             await this.loadUserData(account);
             UI.updateAuthUI();
             UI.showLoggedInState();
@@ -196,32 +174,7 @@ const XamanWallet = {
               MintNotifications.init();
             }
             
-            // Check if this is a MOBILE auth popup (not desktop)
-            const isAuthPopup = sessionStorage.getItem('xrpmusic_auth_popup');
-            if (isAuthPopup) {
-              // Mobile flow: This is the popup that Xaman opened
-              sessionStorage.removeItem('xrpmusic_auth_popup');
-              console.log('Mobile auth complete in popup, closing...');
-              setTimeout(() => {
-                window.close();
-                // If window.close() is blocked, show a friendly message
-                setTimeout(() => {
-                  document.title = '✅ Signed In!';
-                  const banner = document.createElement('div');
-                  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:24px;';
-                  banner.innerHTML = `
-                    <div style="font-size:64px;margin-bottom:20px;">✅</div>
-                    <div style="font-size:24px;font-weight:700;margin-bottom:12px;">You're signed in!</div>
-                    <div style="font-size:16px;color:rgba(255,255,255,0.7);margin-bottom:24px;">This window will close automatically</div>
-                    <div style="font-size:14px;color:rgba(255,255,255,0.4);">If not, you can close it manually</div>
-                  `;
-                  document.body.appendChild(banner);
-                }, 500);
-              }, 300);
-              return;
-            }
-
-            // Desktop flow: Same tab - just restore context and continue
+            // Restore context after login
             console.log('✅ Logged in successfully:', account);
             await this.restoreAuthContext();
           }
@@ -247,26 +200,6 @@ const XamanWallet = {
         this.isConnecting = false;
       });
 
-      // Storage event: MOBILE ONLY - detect login from auth popup
-      window.addEventListener('storage', async (e) => {
-        if (e.key === 'xrpmusic_user' && e.newValue && !AppState.user?.address) {
-          console.log('Login detected from mobile auth popup, reloading...');
-          try {
-            const userData = JSON.parse(e.newValue);
-            if (userData?.address) {
-              // Save session so handlePageLoad sees it as same-tab after reload
-              this.saveSessionToTab(userData.address);
-              localStorage.removeItem('xrpmusic_pending_auth');
-              
-              // Reload to complete login
-              setTimeout(() => location.reload(), 300);
-            }
-          } catch (err) {
-            console.error('Failed to handle login from auth popup:', err);
-          }
-        }
-      });
-
       const readyTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('SDK ready timeout')), 10000)
       );
@@ -289,11 +222,8 @@ const XamanWallet = {
    */
   setupAutoLogout() {
     window.addEventListener('beforeunload', () => {
-      const isAuthPopup = sessionStorage.getItem('xrpmusic_auth_popup');
-      if (!isAuthPopup) {
-        localStorage.removeItem('xrpmusic_user');
-        localStorage.removeItem('xrpmusic_profile');
-      }
+      localStorage.removeItem('xrpmusic_user');
+      localStorage.removeItem('xrpmusic_profile');
     });
     
     // Handle visibility change (tab hidden for too long)
@@ -321,31 +251,16 @@ const XamanWallet = {
     const tabSession = sessionStorage.getItem(SESSION_KEY);
     
     if (!tabSession) {
-      // Check if this is a mobile auth popup (opened by Xaman)
-      const urlParams = new URLSearchParams(window.location.search);
-      const pendingAuth = localStorage.getItem('xrpmusic_pending_auth');
-      const isXamanRedirect = urlParams.has('xumm') || 
-        document.referrer.includes('xumm.app') || 
-        document.referrer.includes('xaman.app') ||
-        pendingAuth === '1';
-      
-      if (isXamanRedirect) {
-        // Mobile flow: Mark this as an auth popup
-        sessionStorage.setItem('xrpmusic_auth_popup', 'true');
-        localStorage.removeItem('xrpmusic_pending_auth');
-        console.log('Mobile auth redirect popup detected');
-      } else {
-        // Fresh page load - clear stale sessions
-        console.log('Fresh page load - clearing stale sessions');
-        localStorage.removeItem('xrpmusic_user');
-        localStorage.removeItem('xrpmusic_profile');
-        if (typeof clearSession === 'function') {
-          clearSession();
-        }
-        if (typeof UI !== 'undefined' && UI.updateAuthUI) {
-          UI.updateAuthUI();
-          UI.showLoggedOutState();
-        }
+      // Fresh page load - clear stale sessions
+      console.log('Fresh page load - clearing stale sessions');
+      localStorage.removeItem('xrpmusic_user');
+      localStorage.removeItem('xrpmusic_profile');
+      if (typeof clearSession === 'function') {
+        clearSession();
+      }
+      if (typeof UI !== 'undefined' && UI.updateAuthUI) {
+        UI.updateAuthUI();
+        UI.showLoggedOutState();
       }
     } else {
       // Same tab navigation - restore session
@@ -480,13 +395,9 @@ const XamanWallet = {
     try {
       sessionStorage.setItem('xrpmusic_return_url', window.location.href);
       
-      // Mark pending auth for mobile detection
-      localStorage.setItem('xrpmusic_pending_auth', '1');
-      
       await this.sdk.authorize();
     } catch (err) {
       console.error('Failed to connect wallet:', err);
-      localStorage.removeItem('xrpmusic_pending_auth');
       this.isConnecting = false;
     }
   },
