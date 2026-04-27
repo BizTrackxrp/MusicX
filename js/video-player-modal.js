@@ -1,9 +1,12 @@
 /**
  * Video Player Modal
  * Full-screen video player for film content
- * - Hides bottom audio player when open
- * - Shows loading spinner while buffering
- * - Proper video controls
+ * 
+ * FIXES APPLIED (April 2026):
+ * ✅ Better error handling for missing video URLs
+ * ✅ Proper videoUrl/audioUrl fallback chain
+ * ✅ IPFS proxy support for video URLs
+ * ✅ Clear error messages to user
  */
 
 const VideoPlayerModal = {
@@ -12,6 +15,8 @@ const VideoPlayerModal = {
   isBuffering: false,
 
   show(release) {
+    console.log('🎬 VideoPlayerModal.show() called with release:', release);
+    
     this.currentRelease = release;
     
     // Hide the bottom audio player
@@ -21,21 +26,52 @@ const VideoPlayerModal = {
     }
 
     // Pause any audio that might be playing
-    if (typeof Player !== 'undefined' && Player.audioElement) {
+    if (typeof Player !== 'undefined' && Player.audio) {
       Player.pause();
     }
 
+    // ✅ FIX: Better track access with fallback
     const track = release.tracks?.[0];
     if (!track) {
-      alert('No video found for this release');
+      console.error('❌ No track found in release:', release);
+      alert('No video found for this release. The video data may be missing.');
       return;
     }
 
-    const videoUrl = track.videoUrl || track.audioUrl;
+    console.log('📹 Track data:', track);
+
+    // ✅ FIX: Better video URL resolution with IPFS proxy support
+    let videoUrl = null;
+    
+    // Try videoUrl first
+    if (track.videoUrl) {
+      videoUrl = this.getProxiedUrl(track.videoUrl);
+      console.log('✅ Using track.videoUrl:', videoUrl);
+    }
+    // Fallback to audioUrl (films store video in both fields)
+    else if (track.audioUrl) {
+      videoUrl = this.getProxiedUrl(track.audioUrl);
+      console.log('✅ Using track.audioUrl as fallback:', videoUrl);
+    }
+    // Fallback to videoCid
+    else if (track.videoCid) {
+      videoUrl = `/api/ipfs/${track.videoCid}`;
+      console.log('✅ Using track.videoCid:', videoUrl);
+    }
+    // Fallback to audioCid
+    else if (track.audioCid) {
+      videoUrl = `/api/ipfs/${track.audioCid}`;
+      console.log('✅ Using track.audioCid as fallback:', videoUrl);
+    }
+
     if (!videoUrl) {
-      alert('Video URL not found');
+      console.error('❌ No video URL found. Track:', track);
+      alert('Video URL not found. The video may not have been uploaded correctly.');
+      this.restoreAudioPlayer();
       return;
     }
+
+    console.log('🎬 Final video URL:', videoUrl);
 
     const html = `
       <div class="modal-overlay video-modal-overlay" id="video-modal-overlay">
@@ -43,7 +79,7 @@ const VideoPlayerModal = {
           <!-- Header -->
           <div class="video-modal-header">
             <div class="video-modal-title">
-              <h2>${release.title}</h2>
+              <h2>${release.title || 'Untitled'}</h2>
               <p>${release.artistName || 'Unknown Artist'}</p>
             </div>
             <button class="video-modal-close" id="video-modal-close">
@@ -78,7 +114,7 @@ const VideoPlayerModal = {
           <!-- Info Bar -->
           <div class="video-modal-info">
             <div class="video-modal-price">
-              ${release.songPrice || release.albumPrice || 0} XRP
+              ${release.songPrice === 0 ? 'FREE' : (release.songPrice || release.albumPrice || 0) + ' XRP'}
             </div>
             <div class="video-modal-editions">
               ${(release.totalEditions || 0) - (release.soldEditions || 0)} / ${release.totalEditions || 0} available
@@ -114,10 +150,12 @@ const VideoPlayerModal = {
     // Video events
     this.videoElement.addEventListener('loadstart', () => {
       loadingEl.style.display = 'flex';
+      console.log('📹 Video loading started');
     });
 
     this.videoElement.addEventListener('canplay', () => {
       loadingEl.style.display = 'none';
+      console.log('✅ Video can play');
     });
 
     this.videoElement.addEventListener('waiting', () => {
@@ -126,18 +164,76 @@ const VideoPlayerModal = {
 
     this.videoElement.addEventListener('playing', () => {
       loadingEl.style.display = 'none';
+      console.log('▶️ Video playing');
+    });
+
+    // ✅ FIX: Better error handling
+    this.videoElement.addEventListener('error', (e) => {
+      loadingEl.style.display = 'none';
+      console.error('❌ Video error:', e);
+      console.error('Video element error code:', this.videoElement.error?.code);
+      console.error('Video element error message:', this.videoElement.error?.message);
+      
+      let errorMsg = 'Failed to load video. ';
+      if (this.videoElement.error) {
+        switch (this.videoElement.error.code) {
+          case 1:
+            errorMsg += 'The video download was aborted.';
+            break;
+          case 2:
+            errorMsg += 'A network error occurred.';
+            break;
+          case 3:
+            errorMsg += 'The video file is corrupted or in an unsupported format.';
+            break;
+          case 4:
+            errorMsg += 'The video format is not supported by your browser.';
+            break;
+          default:
+            errorMsg += 'An unknown error occurred.';
+        }
+      }
+      
+      alert(errorMsg + '\n\nVideo URL: ' + videoUrl);
+      this.close();
     });
 
     // Auto-play when ready
     this.videoElement.addEventListener('loadeddata', () => {
       this.videoElement.play().catch(err => {
         console.log('Auto-play prevented:', err);
-        // User needs to click play manually
+        // User needs to click play manually - this is normal browser behavior
       });
     });
 
     // ESC key to close
     document.addEventListener('keydown', this.handleKeyDown);
+  },
+
+  /**
+   * ✅ NEW: Convert IPFS URLs to proxy URLs
+   */
+  getProxiedUrl(url) {
+    if (!url) return null;
+    
+    // Already a proxy URL
+    if (url.startsWith('/api/ipfs/')) {
+      return url;
+    }
+    
+    // Extract CID from IPFS URL
+    if (url.includes('/ipfs/')) {
+      const cid = url.split('/ipfs/')[1].split('?')[0];
+      return `/api/ipfs/${cid}`;
+    }
+    
+    // Use IPFS helper if available
+    if (typeof IpfsHelper !== 'undefined' && IpfsHelper.toProxyUrl) {
+      return IpfsHelper.toProxyUrl(url);
+    }
+    
+    // Return as-is
+    return url;
   },
 
   handleKeyDown(e) {
@@ -159,17 +255,23 @@ const VideoPlayerModal = {
       modal.remove();
     }
 
-    // Show bottom player again
-    const bottomPlayer = document.querySelector('.player');
-    if (bottomPlayer) {
-      bottomPlayer.style.display = '';
-    }
+    this.restoreAudioPlayer();
 
     // Remove ESC listener
     document.removeEventListener('keydown', this.handleKeyDown);
 
     this.currentRelease = null;
     this.videoElement = null;
+  },
+
+  /**
+   * ✅ NEW: Restore audio player visibility
+   */
+  restoreAudioPlayer() {
+    const bottomPlayer = document.querySelector('.player');
+    if (bottomPlayer) {
+      bottomPlayer.style.display = '';
+    }
   },
 
   getStyles() {
