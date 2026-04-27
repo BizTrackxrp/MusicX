@@ -247,33 +247,54 @@ const XamanWallet = {
   /**
    * Handle page load - restore session if same-tab
    */
-  handlePageLoad() {
-    const tabSession = sessionStorage.getItem(SESSION_KEY);
-    
-    if (!tabSession) {
-      // Fresh page load - clear stale sessions
-      console.log('Fresh page load - clearing stale sessions');
-      localStorage.removeItem('xrpmusic_user');
-      localStorage.removeItem('xrpmusic_profile');
-      if (typeof clearSession === 'function') {
-        clearSession();
-      }
-      if (typeof UI !== 'undefined' && UI.updateAuthUI) {
-        UI.updateAuthUI();
-        UI.showLoggedOutState();
-      }
-    } else {
-      // Same tab navigation - restore session
-      console.log('Same-tab session found, restoring...');
+ handlePageLoad() {
+  const tabSession = sessionStorage.getItem(SESSION_KEY);
+  
+  // Check if we just came back from Xaman auth (URL has xApp query param)
+  const urlParams = new URLSearchParams(window.location.search);
+  const comingFromXaman = urlParams.has('xApp') || urlParams.has('payload');
+  
+  if (comingFromXaman) {
+    // User just authenticated - force session check
+    console.log('Returned from Xaman auth, checking session...');
+    setTimeout(() => {
       this.checkSession().then(() => {
         if (AppState.user?.address) {
           this.restoreAuthContext();
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
       }).catch(err => {
         console.warn('Session check failed:', err);
       });
+    }, 1000);
+    return;
+  }
+  
+  if (!tabSession) {
+    // Fresh page load - clear stale sessions
+    console.log('Fresh page load - clearing stale sessions');
+    localStorage.removeItem('xrpmusic_user');
+    localStorage.removeItem('xrpmusic_profile');
+    if (typeof clearSession === 'function') {
+      clearSession();
     }
-  },
+    if (typeof UI !== 'undefined' && UI.updateAuthUI) {
+      UI.updateAuthUI();
+      UI.showLoggedOutState();
+    }
+  } else {
+    // Same tab navigation - restore session
+    console.log('Same-tab session found, restoring...');
+    this.checkSession().then(() => {
+      if (AppState.user?.address) {
+        this.restoreAuthContext();
+      }
+    }).catch(err => {
+      console.warn('Session check failed:', err);
+    });
+  }
+},
   
   /**
    * Save session marker to sessionStorage (tab-specific)
