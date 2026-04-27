@@ -750,6 +750,7 @@ this.updateVolumeIcon();
     // Set source and play
     this.audio.src = src;
     this.audio.load();
+    this.audio.currentTime = 0; 
     
     // Update UI
     this.updateTrackInfo(track);
