@@ -387,20 +387,29 @@ const XamanWallet = {
   /**
    * Connect wallet
    */
-  async connect() {
-    if (!this.sdk || this.isConnecting) return;
+ async connect() {
+  if (!this.sdk || this.isConnecting) return;
+  
+  this.isConnecting = true;
+  
+  try {
+    sessionStorage.setItem('xrpmusic_return_url', window.location.href);
     
-    this.isConnecting = true;
+    // Tell Xaman to redirect back to the current page after auth
+    const returnUrl = window.location.href.split('?')[0]; // Remove any existing query params
     
-    try {
-      sessionStorage.setItem('xrpmusic_return_url', window.location.href);
-      
-      await this.sdk.authorize();
-    } catch (err) {
-      console.error('Failed to connect wallet:', err);
-      this.isConnecting = false;
-    }
-  },
+    await this.sdk.authorize({
+      options: {
+        return_url: {
+          web: returnUrl
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to connect wallet:', err);
+    this.isConnecting = false;
+  }
+},
   
   /**
    * Disconnect wallet
