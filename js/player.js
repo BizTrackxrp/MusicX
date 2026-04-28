@@ -747,14 +747,17 @@ this.updateVolumeIcon();
     
     console.log('🔊 Audio source:', src);
     
-    // Set source and play
-    this.audio.src = src;
-    this.audio.load();
-    this.audio.currentTime = 0; 
-    
-    // Update UI
-    this.updateTrackInfo(track);
-    this.showPlayerBar();
+ // Set source and play
+this.audio.src = src;
+this.audio.load();
+this.audio.currentTime = 0;
+
+// Update UI
+this.updateTrackInfo(track);
+this.showPlayerBar();
+
+// Start playback
+this.play();
     
     // Start play tracking
     this.startPlayTracking(track);
@@ -1776,10 +1779,12 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
   // ============================================
   
  onCanPlay() {
-  // Only auto-play if we're NOT already playing
-  // This prevents the "4-second pause" bug where canplay event
-  // calls play() again after the track is already playing
-  if (AppState.player.currentTrack && !AppState.player.isPlaying) {
+  // Auto-play when a new track loads
+  const track = AppState.player.currentTrack;
+  if (!track) return;
+  
+  // Start playing immediately
+  if (this.audio.paused) {
     this.play();
   }
 },
