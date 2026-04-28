@@ -1,11 +1,13 @@
 /**
  * Video Player Modal
- * Full-screen video player for film content
+ * Full-screen video player for film content & music videos
  * 
  * FIXES APPLIED (April 2026):
  * ✅ Better error handling for missing video URLs
  * ✅ Proper videoUrl/audioUrl fallback chain
- * ✅ IPFS proxy support for video URLs
+ * ✅ Lighthouse IPFS gateway support (don't proxy)
+ * ✅ Filecoin gateway support (don't proxy)
+ * ✅ IPFS proxy support for music videos
  * ✅ Clear error messages to user
  */
 
@@ -40,7 +42,7 @@ const VideoPlayerModal = {
 
     console.log('📹 Track data:', track);
 
-    // ✅ FIX: Better video URL resolution with IPFS proxy support
+    // ✅ FIX: Better video URL resolution with multi-gateway support
     let videoUrl = null;
     
     // Try videoUrl first
@@ -211,19 +213,35 @@ const VideoPlayerModal = {
   },
 
   /**
-   * ✅ NEW: Convert IPFS URLs to proxy URLs
+   * Get video URL - handle different storage gateways
+   * - Lighthouse IPFS: Use directly (existing films)
+   * - Filecoin S3: Use directly (future films)
+   * - Regular IPFS: Proxy through /api/ipfs (music videos)
    */
   getProxiedUrl(url) {
     if (!url) return null;
+    
+    // Lighthouse IPFS gateway - use directly, DON'T proxy
+    if (url.includes('gateway.lighthouse.storage')) {
+      console.log('🎬 Using Lighthouse IPFS gateway directly:', url);
+      return url;
+    }
+    
+    // Filecoin gateway - use directly, DON'T proxy  
+    if (url.includes('.fil.one') || url.includes('filecoin')) {
+      console.log('🎬 Using Filecoin gateway directly:', url);
+      return url;
+    }
     
     // Already a proxy URL
     if (url.startsWith('/api/ipfs/')) {
       return url;
     }
     
-    // Extract CID from IPFS URL
+    // Regular IPFS URLs (music videos) - extract CID and proxy
     if (url.includes('/ipfs/')) {
       const cid = url.split('/ipfs/')[1].split('?')[0];
+      console.log('🎬 Proxying IPFS CID for music video:', cid);
       return `/api/ipfs/${cid}`;
     }
     
@@ -232,7 +250,7 @@ const VideoPlayerModal = {
       return IpfsHelper.toProxyUrl(url);
     }
     
-    // Return as-is
+    // Return as-is for any other direct URLs
     return url;
   },
 
@@ -265,7 +283,7 @@ const VideoPlayerModal = {
   },
 
   /**
-   * ✅ NEW: Restore audio player visibility
+   * Restore audio player visibility
    */
   restoreAudioPlayer() {
     const bottomPlayer = document.querySelector('.player');
