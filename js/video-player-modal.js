@@ -5,8 +5,7 @@
  * FIXES APPLIED (April 2026):
  * ✅ Better error handling for missing video URLs
  * ✅ Proper videoUrl/audioUrl fallback chain
- * ✅ Filecoin gateway support for video files
- * ✅ IPFS proxy support for music videos
+ * ✅ IPFS proxy support for video URLs
  * ✅ Clear error messages to user
  */
 
@@ -41,7 +40,7 @@ const VideoPlayerModal = {
 
     console.log('📹 Track data:', track);
 
-    // ✅ FIX: Better video URL resolution with Filecoin + IPFS support
+    // ✅ FIX: Better video URL resolution with IPFS proxy support
     let videoUrl = null;
     
     // Try videoUrl first
@@ -56,12 +55,12 @@ const VideoPlayerModal = {
     }
     // Fallback to videoCid
     else if (track.videoCid) {
-      videoUrl = this.buildFilecoinUrl(track.videoCid);
+      videoUrl = `/api/ipfs/${track.videoCid}`;
       console.log('✅ Using track.videoCid:', videoUrl);
     }
     // Fallback to audioCid
     else if (track.audioCid) {
-      videoUrl = this.buildFilecoinUrl(track.audioCid);
+      videoUrl = `/api/ipfs/${track.audioCid}`;
       console.log('✅ Using track.audioCid as fallback:', videoUrl);
     }
 
@@ -212,20 +211,7 @@ const VideoPlayerModal = {
   },
 
   /**
-   * Build Filecoin gateway URL from CID
-   */
-  buildFilecoinUrl(cid) {
-    if (!cid) return null;
-    
-    // If it's already a full URL, return as-is
-    if (cid.startsWith('http')) return cid;
-    
-    // Build Filecoin gateway URL
-    return `https://eu-west-1.s3.fil.one/xrpmusic/${cid}`;
-  },
-
-  /**
-   * Get video URL - use Filecoin for videos, IPFS proxy for music videos
+   * ✅ NEW: Convert IPFS URLs to proxy URLs
    */
   getProxiedUrl(url) {
     if (!url) return null;
@@ -235,12 +221,7 @@ const VideoPlayerModal = {
       return url;
     }
     
-    // Filecoin URLs (videos) - use directly, don't proxy
-    if (url.includes('.fil.one') || url.includes('filecoin')) {
-      return url;
-    }
-    
-    // IPFS URLs (music videos) - extract CID and use proxy
+    // Extract CID from IPFS URL
     if (url.includes('/ipfs/')) {
       const cid = url.split('/ipfs/')[1].split('?')[0];
       return `/api/ipfs/${cid}`;
@@ -251,7 +232,7 @@ const VideoPlayerModal = {
       return IpfsHelper.toProxyUrl(url);
     }
     
-    // Return as-is (for direct URLs)
+    // Return as-is
     return url;
   },
 
