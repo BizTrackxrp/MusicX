@@ -9,6 +9,7 @@
  * ✅ Filecoin gateway support (don't proxy)
  * ✅ IPFS proxy support for music videos
  * ✅ Clear error messages to user
+ * ✅ FIX: Added setTimeout for DOM binding (May 2026)
  */
 
 const VideoPlayerModal = {
@@ -136,12 +137,30 @@ const VideoPlayerModal = {
 
     // Add to page
     document.body.insertAdjacentHTML('beforeend', html);
+    console.log('✅ Modal HTML injected into DOM');
 
+    // ✅ NEW FIX: Wait for DOM to be ready before binding events
+    setTimeout(() => {
+      this.bindModalEvents(videoUrl);
+    }, 50);
+  },
+
+  /**
+   * ✅ NEW METHOD: Bind all modal events (separated for cleaner code)
+   */
+  bindModalEvents(videoUrl) {
     // Get elements
     this.videoElement = document.getElementById('video-player');
     const loadingEl = document.getElementById('video-loading');
     const closeBtn = document.getElementById('video-modal-close');
     const overlay = document.getElementById('video-modal-overlay');
+
+    if (!this.videoElement) {
+      console.error('❌ Video element not found in DOM after injection');
+      return;
+    }
+
+    console.log('✅ Binding events to video player');
 
     // Bind events
     closeBtn.addEventListener('click', () => this.close());
