@@ -2,14 +2,15 @@
  * Video Player Modal
  * Full-screen video player for film content & music videos
  * 
- * FIXES APPLIED (April 2026):
+ * FIXES APPLIED (May 2026):
  * ✅ Better error handling for missing video URLs
  * ✅ Proper videoUrl/audioUrl fallback chain
  * ✅ Lighthouse IPFS gateway support (don't proxy)
  * ✅ Filecoin gateway support (don't proxy)
  * ✅ IPFS proxy support for music videos
  * ✅ Clear error messages to user
- * ✅ FIX: Added setTimeout for DOM binding (May 2026)
+ * ✅ Added setTimeout for DOM binding
+ * ✅ FORCE MODAL VISIBILITY with z-index 999999
  */
 
 const VideoPlayerModal = {
@@ -114,14 +115,19 @@ const VideoPlayerModal = {
             </video>
           </div>
 
-          <!-- Info Bar -->
+          <!-- Info Bar with Buy Button -->
           <div class="video-modal-info">
-            <div class="video-modal-price">
-              ${release.songPrice === 0 ? 'FREE' : (release.songPrice || release.albumPrice || 0) + ' XRP'}
+            <div class="video-modal-meta">
+              <div class="video-modal-price">
+                ${release.songPrice === 0 ? 'FREE' : (release.songPrice || release.albumPrice || 0) + ' XRP'}
+              </div>
+              <div class="video-modal-editions">
+                ${(release.totalEditions || 0) - (release.soldEditions || 0)} / ${release.totalEditions || 0} available
+              </div>
             </div>
-            <div class="video-modal-editions">
-              ${(release.totalEditions || 0) - (release.soldEditions || 0)} / ${release.totalEditions || 0} available
-            </div>
+            <button class="video-modal-buy-btn" id="video-modal-buy-btn">
+              🛒 Buy NFT
+            </button>
           </div>
         </div>
       </div>
@@ -141,19 +147,20 @@ const VideoPlayerModal = {
 
     // ✅ NEW FIX: Wait for DOM to be ready before binding events
     setTimeout(() => {
-      this.bindModalEvents(videoUrl);
+      this.bindModalEvents(videoUrl, release);
     }, 50);
   },
 
   /**
-   * ✅ NEW METHOD: Bind all modal events (separated for cleaner code)
+   * ✅ Bind all modal events (separated for cleaner code)
    */
-  bindModalEvents(videoUrl) {
+  bindModalEvents(videoUrl, release) {
     // Get elements
     this.videoElement = document.getElementById('video-player');
     const loadingEl = document.getElementById('video-loading');
     const closeBtn = document.getElementById('video-modal-close');
     const overlay = document.getElementById('video-modal-overlay');
+    const buyBtn = document.getElementById('video-modal-buy-btn');
 
     if (!this.videoElement) {
       console.error('❌ Video element not found in DOM after injection');
@@ -162,11 +169,28 @@ const VideoPlayerModal = {
 
     console.log('✅ Binding events to video player');
 
-    // Bind events
+    // Bind close events
     closeBtn.addEventListener('click', () => this.close());
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) this.close();
     });
+
+    // ✅ NEW: Buy button click
+    if (buyBtn) {
+      buyBtn.addEventListener('click', () => {
+        console.log('🛒 Buy button clicked for release:', release);
+        // Pause video
+        if (this.videoElement) {
+          this.videoElement.pause();
+        }
+        // Open purchase modal
+        if (typeof Modals !== 'undefined' && typeof Modals.showPurchase === 'function') {
+          Modals.showPurchase(release);
+        } else {
+          alert('Purchase system not available. Please refresh the page.');
+        }
+      });
+    }
 
     // Video events
     this.videoElement.addEventListener('loadstart', () => {
@@ -280,6 +304,8 @@ const VideoPlayerModal = {
   },
 
   close() {
+    console.log('🔴 Closing video player modal');
+    
     // Stop video
     if (this.videoElement) {
       this.videoElement.pause();
@@ -315,14 +341,20 @@ const VideoPlayerModal = {
     return `
       <style>
         .video-modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.95);
-          z-index: 10000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          background: rgba(0, 0, 0, 0.95) !important;
+          z-index: 999999 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
           animation: fadeIn 200ms ease;
+          pointer-events: auto !important;
         }
 
         @keyframes fadeIn {
@@ -339,6 +371,8 @@ const VideoPlayerModal = {
           background: var(--bg-primary, #000);
           border-radius: 12px;
           overflow: hidden;
+          position: relative;
+          z-index: 1000000;
         }
 
         /* Header */
@@ -432,7 +466,7 @@ const VideoPlayerModal = {
           margin: 0;
         }
 
-        /* Info Bar */
+        /* Info Bar with Buy Button */
         .video-modal-info {
           display: flex;
           align-items: center;
@@ -440,6 +474,14 @@ const VideoPlayerModal = {
           padding: 16px 24px;
           background: rgba(0, 0, 0, 0.5);
           border-top: 1px solid rgba(255, 255, 255, 0.1);
+          gap: 16px;
+        }
+
+        .video-modal-meta {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          flex: 1;
         }
 
         .video-modal-price {
@@ -451,6 +493,28 @@ const VideoPlayerModal = {
         .video-modal-editions {
           font-size: 14px;
           color: rgba(255, 255, 255, 0.7);
+        }
+
+        .video-modal-buy-btn {
+          padding: 10px 24px;
+          background: #ef4444;
+          border: none;
+          border-radius: 8px;
+          color: white;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 150ms;
+          white-space: nowrap;
+        }
+
+        .video-modal-buy-btn:hover {
+          background: #dc2626;
+          transform: scale(1.05);
+        }
+
+        .video-modal-buy-btn:active {
+          transform: scale(0.98);
         }
 
         /* Mobile */
@@ -472,6 +536,19 @@ const VideoPlayerModal = {
 
           .video-modal-title p {
             font-size: 13px;
+          }
+
+          .video-modal-info {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .video-modal-meta {
+            width: 100%;
+          }
+
+          .video-modal-buy-btn {
+            width: 100%;
           }
         }
       </style>
