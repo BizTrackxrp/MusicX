@@ -6,6 +6,7 @@
  * ✅ Issue 2: Upload defaults to LIVE status (not draft)
  * ✅ Issue 3: Improved thumbnail upload + storage
  * ✅ Issue 4: Proper video URL storage (videoUrl + audioUrl fallback)
+ * ✅ Issue 5: MIGRATED TO FILECOIN S3 (replaced Lighthouse)
  */
 
 const FilmsPage = {
@@ -19,9 +20,9 @@ const FilmsPage = {
       const res = await fetch('/api/upload-config');
       const config = await res.json();
       this.LIGHTHOUSE_API_KEY = config.key;
-      console.log('✅ Lighthouse direct upload enabled');
+      console.log('✅ Upload config loaded');
     } catch (err) {
-      console.error('Failed to load Lighthouse config:', err);
+      console.error('Failed to load upload config:', err);
     }
   },
 
@@ -198,10 +199,6 @@ const FilmsPage = {
           if (typeof Modals !== 'undefined') Modals.showAuth();
           return;
         }
-        if (!this.LIGHTHOUSE_API_KEY) {
-          alert('Upload system not ready. Please refresh the page.');
-          return;
-        }
         this.showUploadModal();
       });
     });
@@ -245,6 +242,73 @@ const FilmsPage = {
     return plays.toString();
   },
 
+  /**
+   * ✅ NEW: Upload file directly to Filecoin S3 bucket
+   * Replaces uploadToLighthouse for video/thumbnail uploads
+   */
+  async uploadToFilecoin(file, onProgress = () => {}) {
+    try {
+      // Step 1: Get presigned upload URL from our API
+      const urlRes = await fetch('/api/upload-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+        }),
+      });
+
+      if (!urlRes.ok) {
+        const error = await urlRes.json();
+        throw new Error(error.error || 'Failed to get upload URL');
+      }
+
+      const { uploadUrl, publicUrl, key } = await urlRes.json();
+
+      console.log('📤 Uploading to Filecoin S3:', file.name, '→', key);
+
+      // Step 2: Upload directly to Filecoin S3 using presigned URL
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            onProgress(pct);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200 || xhr.status === 204) {
+            console.log('✅ Filecoin upload complete:', publicUrl);
+            resolve({
+              cid: key, // Use S3 key as identifier
+              url: publicUrl,
+              size: file.size,
+              name: file.name,
+            });
+          } else {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+        xhr.open('PUT', uploadUrl);
+        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.send(file);
+      });
+    } catch (error) {
+      console.error('❌ Filecoin upload failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * ⚠️ LEGACY: Keep for metadata uploads only
+   * Video/thumbnail now use uploadToFilecoin instead
+   */
   async uploadToLighthouse(file, useFilecoin = false, onProgress = () => {}) {
     if (!this.LIGHTHOUSE_API_KEY) {
       throw new Error('Lighthouse API key not loaded');
@@ -341,7 +405,7 @@ const FilmsPage = {
                 <p class="form-hint">You earn this on every secondary sale</p>
               </div>
 
-              <!-- ✅ NEW: PUBLIC VS NFT HOLDERS TOGGLE -->
+              <!-- ✅ PUBLIC VS NFT HOLDERS TOGGLE -->
               <div class="form-group">
                 <label class="form-label">Who Can Watch This Video? *</label>
                 <div class="access-toggle-group">
@@ -416,7 +480,7 @@ const FilmsPage = {
               </div>
             </div>
 
-            <!-- Step 3-5: Payment, Upload, Success (unchanged) -->
+            <!-- Step 3-5: Payment, Upload, Success -->
             ${this.getPaymentSteps()}
 
           </div>
@@ -715,44 +779,49 @@ const FilmsPage = {
         const editions = parseInt(document.getElementById('video-editions')?.value) || 100;
         const royaltyPercent = parseFloat(document.getElementById('video-royalty')?.value) || 10;
 
-        console.log('🎬 Starting upload with access type:', accessType);
+        console.log('🎬 Starting Filecoin upload with access type:', accessType);
 
+        // ✅ UPLOAD THUMBNAIL TO FILECOIN S3
         document.getElementById('upload-thumb-progress')?.classList.remove('hidden');
-        const thumbResult = await FilmsPage.uploadToLighthouse(thumbFile, false, (pct) => {
+        const thumbResult = await FilmsPage.uploadToFilecoin(thumbFile, (pct) => {
           const bar = document.getElementById('thumb-bar');
           const txt = document.getElementById('thumb-pct');
           if (bar) bar.style.width = pct + '%';
           if (txt) txt.textContent = pct + '%';
         });
-        console.log('✅ Thumbnail uploaded:', thumbResult.cid);
+        console.log('✅ Thumbnail uploaded to Filecoin:', thumbResult.url);
 
+        // ✅ UPLOAD VIDEO TO FILECOIN S3
         document.getElementById('upload-video-progress')?.classList.remove('hidden');
-        const videoResult = await FilmsPage.uploadToLighthouse(videoFile, true, (pct) => {
+        const videoResult = await FilmsPage.uploadToFilecoin(videoFile, (pct) => {
           const bar = document.getElementById('video-bar');
           const txt = document.getElementById('video-pct');
           if (bar) bar.style.width = pct + '%';
           if (txt) txt.textContent = pct + '%';
         });
-        console.log('✅ Video uploaded:', videoResult.cid);
+        console.log('✅ Video uploaded to Filecoin:', videoResult.url);
 
+        // ✅ UPLOAD METADATA TO LIGHTHOUSE IPFS (still use IPFS for metadata)
         document.getElementById('upload-minting-progress')?.classList.remove('hidden');
         
         const metadata = {
           name: title,
           description,
-          image: `ipfs://${thumbResult.cid}`,
-          animation_url: `ipfs://${videoResult.cid}`,
+          image: thumbResult.url,
+          animation_url: videoResult.url,
           attributes: [
             { trait_type: 'Type', value: 'Video' },
             { trait_type: 'Content Type', value: 'film' },
             { trait_type: 'Access Type', value: accessType },
             { trait_type: 'Artist', value: AppState.profile?.name || AppState.user.address },
+            { trait_type: 'Storage', value: 'Filecoin S3' },
           ],
           properties: {
             video: videoResult.url,
             thumbnail: thumbResult.url,
             videoSize: videoResult.size,
             accessType: accessType,
+            storage: 'filecoin',
           },
         };
 
@@ -761,6 +830,7 @@ const FilmsPage = {
         const metaResult = await FilmsPage.uploadToLighthouse(metaFile, false);
         console.log('✅ Metadata uploaded:', metaResult.cid);
 
+        // ✅ SAVE TO DATABASE WITH FILECOIN URLS
         const releaseData = {
           artistAddress: AppState.user.address,
           artistName: AppState.profile?.name || null,
@@ -805,7 +875,7 @@ const FilmsPage = {
         document.getElementById('video-step-4')?.classList.add('hidden');
         document.getElementById('video-step-5')?.classList.remove('hidden');
 
-        console.log('🎉 Video upload complete!');
+        console.log('🎉 Video upload complete to Filecoin S3!');
 
       } catch (err) {
         console.error('Upload failed:', err);
@@ -835,7 +905,7 @@ const FilmsPage = {
 
     document.getElementById('success-share-btn')?.addEventListener('click', () => {
       const title = document.getElementById('video-title')?.value || 'my video';
-      const text = `Just uploaded "${title}" to @XRP_MUSIC and minted it as an NFT on XRPL. No platform can delete it. 🎬⚡`;
+      const text = `Just uploaded "${title}" to @XRP_MUSIC and minted it as an NFT on XRPL. Stored permanently on Filecoin. 🎬⚡`;
       window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
     });
 
