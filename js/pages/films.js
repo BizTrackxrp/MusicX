@@ -1,12 +1,20 @@
 /**
  * XRP Music - Films Page (Combined Feed + Upload)
- * 
+ *
  * FIXES APPLIED (April 2026):
  * ✅ Issue 1: Added Public vs NFT Holders access toggle
  * ✅ Issue 2: Upload defaults to LIVE status (not draft)
  * ✅ Issue 3: Improved thumbnail upload + storage
  * ✅ Issue 4: Proper video URL storage (videoUrl + audioUrl fallback)
  * ✅ Issue 5: MIGRATED TO FILECOIN S3 (replaced Lighthouse)
+ *
+ * MAY 2026 — MOBILE LOCKDOWN:
+ * ✅ Validates video format BEFORE upload using VideoValidator
+ * ✅ File picker limited to MP4/MOV/M4V (no .webm, .avi, etc.)
+ * ✅ Rejection at file-select catches bad files BEFORE payment is taken
+ * ✅ Clear error message guides artists to correct export settings
+ *
+ * REQUIRES: /js/pages/video-validator.js to be loaded BEFORE this file.
  */
 
 const FilmsPage = {
@@ -55,7 +63,7 @@ const FilmsPage = {
         </div>
       </div>
     `);
-    
+
     await this.loadVideos();
     this.bindEvents();
   },
@@ -63,12 +71,12 @@ const FilmsPage = {
   async loadVideos() {
     this.isLoading = true;
     const container = document.getElementById('videos-content');
-    
+
     try {
       const response = await fetch('/api/releases?contentType=film');
       const data = await response.json();
       this.videos = data.releases || [];
-      
+
       this.sortVideos();
       this.renderGrid();
     } catch (err) {
@@ -124,7 +132,7 @@ const FilmsPage = {
       card.addEventListener('click', () => {
         const videoData = card.dataset.video;
         if (!videoData) return;
-        
+
         try {
           const video = JSON.parse(videoData);
           if (typeof VideoPlayerModal !== 'undefined') {
@@ -161,7 +169,7 @@ const FilmsPage = {
     const total = video.totalEditions || video.total_editions || 0;
     const available = total - sold;
     const plays = video.totalPlays || video.total_plays || 0;
-    
+
     const track = video.tracks?.[0];
     const duration = track?.duration || 0;
     const durationText = duration > 0 ? this.formatDuration(duration) : '';
@@ -207,10 +215,10 @@ const FilmsPage = {
       tab.addEventListener('click', () => {
         const sort = tab.dataset.sort;
         if (sort === this.sortBy) return;
-        
+
         document.querySelectorAll('.sort-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        
+
         this.sortBy = sort;
         this.sortVideos();
         this.renderGrid();
@@ -243,12 +251,11 @@ const FilmsPage = {
   },
 
   /**
-   * ✅ NEW: Upload file directly to Filecoin S3 bucket
-   * Replaces uploadToLighthouse for video/thumbnail uploads
+   * Upload file directly to Filecoin S3 bucket
+   * Used for video AND thumbnail uploads
    */
   async uploadToFilecoin(file, onProgress = () => {}) {
     try {
-      // Step 1: Get presigned upload URL from our API
       const urlRes = await fetch('/api/upload-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -267,7 +274,6 @@ const FilmsPage = {
 
       console.log('📤 Uploading to Filecoin S3:', file.name, '→', key);
 
-      // Step 2: Upload directly to Filecoin S3 using presigned URL
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
@@ -282,7 +288,7 @@ const FilmsPage = {
           if (xhr.status === 200 || xhr.status === 204) {
             console.log('✅ Filecoin upload complete:', publicUrl);
             resolve({
-              cid: key, // Use S3 key as identifier
+              cid: key,
               url: publicUrl,
               size: file.size,
               name: file.name,
@@ -306,8 +312,7 @@ const FilmsPage = {
   },
 
   /**
-   * ⚠️ LEGACY: Keep for metadata uploads only
-   * Video/thumbnail now use uploadToFilecoin instead
+   * LEGACY: kept for metadata JSON uploads only
    */
   async uploadToLighthouse(file, useFilecoin = false, onProgress = () => {}) {
     if (!this.LIGHTHOUSE_API_KEY) {
@@ -405,7 +410,6 @@ const FilmsPage = {
                 <p class="form-hint">You earn this on every secondary sale</p>
               </div>
 
-              <!-- ✅ PUBLIC VS NFT HOLDERS TOGGLE -->
               <div class="form-group">
                 <label class="form-label">Who Can Watch This Video? *</label>
                 <div class="access-toggle-group">
@@ -457,11 +461,11 @@ const FilmsPage = {
               <div class="form-group">
                 <label class="form-label">Video File *</label>
                 <div class="upload-zone video-video-zone" id="video-video-zone">
-                  <input type="file" id="video-video-input" accept="video/*" style="display:none;">
+                  <input type="file" id="video-video-input" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" style="display:none;">
                   <div class="upload-placeholder" id="video-video-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"></rect><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"></polygon></svg>
                     <span>Click to select video</span>
-                    <span class="upload-hint">MP4, MOV, WebM — up to 10GB</span>
+                    <span class="upload-hint">MP4 or MOV (H.264) — up to 10GB</span>
                   </div>
                   <div class="upload-file-info hidden" id="video-video-info">
                     <div class="file-info-icon">🎬</div>
@@ -471,7 +475,12 @@ const FilmsPage = {
                     </div>
                     <button type="button" class="file-info-remove" id="video-video-remove">×</button>
                   </div>
+                  <div class="upload-validating hidden" id="video-validating">
+                    <div class="spinner"></div>
+                    <span>Checking video format...</span>
+                  </div>
                 </div>
+                <div class="video-format-error hidden" id="video-format-error"></div>
               </div>
 
               <div class="video-nav">
@@ -601,7 +610,7 @@ const FilmsPage = {
                 <div class="success-icon">🎬</div>
                 <h2 class="success-title" id="success-title">Video is Live!</h2>
                 <p class="success-text">Your video is on Filecoin forever. No one can delete it.</p>
-                
+
                 <div class="success-share">
                   <button class="btn btn-secondary" id="success-share-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>
@@ -617,7 +626,7 @@ const FilmsPage = {
   bindUploadEvents() {
     const STORAGE_RATE_PER_GB = 0.29;
     const PLATFORM_FEE = 0.10;
-    
+
     let thumbFile = null;
     let videoFile = null;
     let paymentTxHash = null;
@@ -629,11 +638,11 @@ const FilmsPage = {
     document.getElementById('video-next-1')?.addEventListener('click', () => {
       const title = document.getElementById('video-title')?.value.trim();
       if (!title) { alert('Please enter a title'); return; }
-      
+
       const selectedAccess = document.querySelector('input[name="video-access"]:checked');
       accessType = selectedAccess ? selectedAccess.value : 'public';
       console.log('📹 Video access type:', accessType);
-      
+
       document.getElementById('video-step-1')?.classList.add('hidden');
       document.getElementById('video-step-2')?.classList.remove('hidden');
     });
@@ -643,6 +652,7 @@ const FilmsPage = {
       document.getElementById('video-step-1')?.classList.remove('hidden');
     });
 
+    // ==================== THUMBNAIL ====================
     const thumbZone = document.getElementById('video-thumb-zone');
     const thumbInput = document.getElementById('video-thumb-input');
     if (thumbZone && thumbInput) {
@@ -651,7 +661,7 @@ const FilmsPage = {
         const file = thumbInput.files[0];
         if (!file || !file.type.startsWith('image/')) return;
         if (file.size > 10 * 1024 * 1024) { alert('Thumbnail too large (max 10MB)'); return; }
-        
+
         thumbFile = file;
         document.getElementById('video-thumb-img').src = URL.createObjectURL(file);
         document.getElementById('video-thumb-placeholder')?.classList.add('hidden');
@@ -669,22 +679,78 @@ const FilmsPage = {
       thumbZone?.classList.remove('has-file');
     });
 
+    // ==================== VIDEO FILE ====================
     const videoZone = document.getElementById('video-video-zone');
     const videoInput = document.getElementById('video-video-input');
     if (videoZone && videoInput) {
       videoZone.addEventListener('click', () => { if (!videoFile) videoInput.click(); });
-      
-      videoInput.addEventListener('change', () => {
+
+      videoInput.addEventListener('change', async () => {
         const file = videoInput.files[0];
         if (!file) return;
         if (file.size > 10 * 1024 * 1024 * 1024) { alert('File too large (max 10GB)'); return; }
 
+        // ==================== VALIDATION ====================
+        // Run BEFORE we let them proceed to payment
+        const validatingEl = document.getElementById('video-validating');
+        const placeholderEl = document.getElementById('video-video-placeholder');
+        const errorEl = document.getElementById('video-format-error');
+
+        // Reset any previous error
+        errorEl?.classList.add('hidden');
+        if (errorEl) errorEl.innerHTML = '';
+
+        // Show "checking..." state
+        placeholderEl?.classList.add('hidden');
+        validatingEl?.classList.remove('hidden');
+
+        if (typeof VideoValidator === 'undefined') {
+          console.error('VideoValidator not loaded — skipping client-side validation');
+        } else {
+          const validation = await VideoValidator.validate(file);
+
+          if (!validation.valid) {
+            console.error('❌ Video rejected:', validation.code, validation.diagnostics);
+
+            // Reset UI
+            validatingEl?.classList.add('hidden');
+            placeholderEl?.classList.remove('hidden');
+            videoInput.value = ''; // clear so they can pick another file
+
+            // Show inline error with helpful message
+            if (errorEl) {
+              errorEl.classList.remove('hidden');
+              errorEl.innerHTML = `
+                <div class="video-format-error-icon">⚠️</div>
+                <div class="video-format-error-content">
+                  <div class="video-format-error-title">This file won't play on phones</div>
+                  <div class="video-format-error-text">${validation.message}</div>
+                  <details class="video-format-error-details">
+                    <summary>How to fix this</summary>
+                    <ul>
+                      <li><strong>iMovie / Final Cut:</strong> Export → File → Format: Video and Audio → Compression: H.264</li>
+                      <li><strong>Premiere Pro:</strong> Export → Format: H.264 → Preset: Match Source - High Bitrate</li>
+                      <li><strong>iPhone Photos app:</strong> Settings → Camera → Formats → "Most Compatible" (instead of "High Efficiency")</li>
+                      <li><strong>Already exported HEVC?</strong> Re-export from your editor with H.264 codec, 8-bit color</li>
+                    </ul>
+                  </details>
+                </div>
+              `;
+            }
+            return;
+          }
+
+          console.log('✅ Video validated:', validation.diagnostics);
+        }
+        // ==================== END VALIDATION ====================
+
+        // Validation passed — show file info
         videoFile = file;
         const sizeGB = file.size / (1024 * 1024 * 1024);
         const sizeMB = file.size / (1024 * 1024);
         const sizeText = sizeGB >= 1 ? `${sizeGB.toFixed(2)} GB` : `${sizeMB.toFixed(0)} MB`;
-        
-        document.getElementById('video-video-placeholder')?.classList.add('hidden');
+
+        validatingEl?.classList.add('hidden');
         document.getElementById('video-video-info')?.classList.remove('hidden');
         document.getElementById('video-video-name').textContent = file.name;
         document.getElementById('video-video-size').textContent = sizeText;
@@ -696,11 +762,14 @@ const FilmsPage = {
     document.getElementById('video-video-remove')?.addEventListener('click', (e) => {
       e.stopPropagation();
       videoFile = null;
+      videoInput.value = '';
       document.getElementById('video-video-placeholder')?.classList.remove('hidden');
       document.getElementById('video-video-info')?.classList.add('hidden');
+      document.getElementById('video-format-error')?.classList.add('hidden');
       videoZone?.classList.remove('has-file');
     });
 
+    // ==================== STEP 2 -> 3 ====================
     document.getElementById('video-next-2')?.addEventListener('click', () => {
       if (!thumbFile) { alert('Please select a thumbnail'); return; }
       if (!videoFile) { alert('Please select a video file'); return; }
@@ -729,17 +798,18 @@ const FilmsPage = {
       document.getElementById('video-step-2')?.classList.remove('hidden');
     });
 
+    // ==================== PAYMENT ====================
     document.getElementById('video-pay-btn')?.addEventListener('click', async () => {
       const statusEl = document.getElementById('video-payment-status');
       const navEl = document.getElementById('video-nav-3');
       const statusText = document.getElementById('video-payment-status-text');
-      
+
       statusEl?.classList.remove('hidden');
       if (navEl) navEl.style.display = 'none';
 
       try {
         const title = document.getElementById('video-title')?.value || '';
-        
+
         const configRes = await fetch('/api/batch-mint', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -749,15 +819,15 @@ const FilmsPage = {
         if (!platformAddress) throw new Error('Platform not configured');
 
         if (statusText) statusText.textContent = '📱 Waiting for payment in Xaman...';
-        
+
         const payResult = await XamanWallet.sendPayment(platformAddress, paymentAmount, `XRP Music Videos: ${title}`);
-        
+
         if (!payResult.success) throw new Error(payResult.error || 'Payment cancelled');
 
         paymentTxHash = payResult.txHash;
 
         if (statusText) statusText.textContent = '✅ Payment confirmed!';
-        
+
         setTimeout(() => {
           document.getElementById('video-step-3')?.classList.add('hidden');
           document.getElementById('video-step-4')?.classList.remove('hidden');
@@ -781,7 +851,6 @@ const FilmsPage = {
 
         console.log('🎬 Starting Filecoin upload with access type:', accessType);
 
-        // ✅ UPLOAD THUMBNAIL TO FILECOIN S3
         document.getElementById('upload-thumb-progress')?.classList.remove('hidden');
         const thumbResult = await FilmsPage.uploadToFilecoin(thumbFile, (pct) => {
           const bar = document.getElementById('thumb-bar');
@@ -791,7 +860,6 @@ const FilmsPage = {
         });
         console.log('✅ Thumbnail uploaded to Filecoin:', thumbResult.url);
 
-        // ✅ UPLOAD VIDEO TO FILECOIN S3
         document.getElementById('upload-video-progress')?.classList.remove('hidden');
         const videoResult = await FilmsPage.uploadToFilecoin(videoFile, (pct) => {
           const bar = document.getElementById('video-bar');
@@ -801,9 +869,8 @@ const FilmsPage = {
         });
         console.log('✅ Video uploaded to Filecoin:', videoResult.url);
 
-        // ✅ UPLOAD METADATA TO LIGHTHOUSE IPFS (still use IPFS for metadata)
         document.getElementById('upload-minting-progress')?.classList.remove('hidden');
-        
+
         const metadata = {
           name: title,
           description,
@@ -830,7 +897,6 @@ const FilmsPage = {
         const metaResult = await FilmsPage.uploadToLighthouse(metaFile, false);
         console.log('✅ Metadata uploaded:', metaResult.cid);
 
-        // ✅ SAVE TO DATABASE WITH FILECOIN URLS
         const releaseData = {
           artistAddress: AppState.user.address,
           artistName: AppState.profile?.name || null,
@@ -879,9 +945,9 @@ const FilmsPage = {
 
       } catch (err) {
         console.error('Upload failed:', err);
-        
+
         alert(`Upload failed: ${err.message}\n\nRefunding ${paymentAmount} XRP...`);
-        
+
         try {
           await fetch('/api/refund', {
             method: 'POST',
@@ -898,7 +964,7 @@ const FilmsPage = {
           console.error('Refund failed:', refundErr);
           alert(`Upload failed AND refund failed. Please contact support with tx: ${paymentTxHash}`);
         }
-        
+
         Modals.close();
       }
     };
@@ -969,7 +1035,7 @@ const FilmsPage = {
         .video-step.hidden { display: none; }
         .video-nav { display: flex; gap: 12px; margin-top: 24px; }
         .video-nav .btn { flex: 1; }
-        
+
         .access-toggle-group { display: grid; gap: 12px; margin-bottom: 8px; }
         .access-option { cursor: pointer; }
         .access-option input[type="radio"] { display: none; }
@@ -1002,7 +1068,7 @@ const FilmsPage = {
           color: var(--text-muted);
           line-height: 1.4;
         }
-        
+
         .upload-file-info { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-card); border-radius: 12px; }
         .upload-file-info.hidden { display: none; }
         .file-info-icon { font-size: 32px; }
@@ -1010,6 +1076,78 @@ const FilmsPage = {
         .file-info-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
         .file-info-size { font-size: 12px; color: var(--text-muted); }
         .file-info-remove { width: 24px; height: 24px; background: var(--error); border: none; border-radius: 50%; color: white; font-size: 16px; cursor: pointer; }
+
+        /* NEW: validation states */
+        .upload-validating {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 24px;
+          color: var(--text-muted);
+          font-size: 14px;
+        }
+        .upload-validating.hidden { display: none; }
+        .upload-validating .spinner {
+          width: 20px;
+          height: 20px;
+          border-width: 2px;
+        }
+
+        /* NEW: format error display */
+        .video-format-error {
+          margin-top: 12px;
+          display: flex;
+          gap: 12px;
+          padding: 16px;
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          border-radius: var(--radius-lg);
+        }
+        .video-format-error.hidden { display: none; }
+        .video-format-error-icon {
+          font-size: 24px;
+          flex-shrink: 0;
+        }
+        .video-format-error-content {
+          flex: 1;
+          min-width: 0;
+        }
+        .video-format-error-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: #ef4444;
+          margin-bottom: 6px;
+        }
+        .video-format-error-text {
+          font-size: 13px;
+          color: var(--text-secondary);
+          line-height: 1.5;
+          margin-bottom: 8px;
+        }
+        .video-format-error-details {
+          margin-top: 8px;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .video-format-error-details summary {
+          cursor: pointer;
+          color: #ef4444;
+          font-weight: 500;
+          padding: 4px 0;
+        }
+        .video-format-error-details ul {
+          margin: 8px 0 0;
+          padding-left: 20px;
+          line-height: 1.6;
+        }
+        .video-format-error-details li {
+          margin-bottom: 6px;
+        }
+        .video-format-error-details strong {
+          color: var(--text-secondary);
+        }
+
         .payment-warning { display: flex; gap: 12px; padding: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 12px; margin-bottom: 20px; }
         .payment-warning-icon { font-size: 24px; }
         .payment-warning-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #fbbf24; }
