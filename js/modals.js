@@ -2148,7 +2148,7 @@ showAuth() {
 
             <!-- Xaman -->
             <button class="xaman-btn" id="xaman-connect-btn">
-              <img src="data:image/webp;base64,UklGRpRsAABXRUJQVlA4WAoAAAAwAAAA8wEA8wEASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADY=" alt="Xaman" class="trust-logo xaman" style="width:48px;height:48px;border-radius:12px;object-fit:contain;">
+            <img src="/public/Xaman-logo.png" alt="Xaman" class="trust-logo xaman" style="width:48px;height:48px;border-radius:12px;object-fit:contain;">
               <div class="xaman-btn-info">
                 <span class="xaman-btn-title">Connect with Xaman</span>
                 <span class="xaman-btn-subtitle">Secure XRPL wallet</span>
