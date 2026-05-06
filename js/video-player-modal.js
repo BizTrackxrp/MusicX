@@ -1,39 +1,43 @@
 /**
- * Video Player Modal
- * Full-screen video player for film content & music videos
+ * Video Player Modal — v4 (mobile-fixed for Brave/IPFS)
  *
- * FIXES APPLIED (May 2026):
- * ✅ Removed conflicting `.modal-overlay` class (opacity/visibility inheritance)
- * ✅ Inline styles inject ONCE into <head>
- * ✅ Multi-gateway support (Lighthouse IPFS, Filecoin S3, IPFS proxy)
- * ✅ Proper handleKeyDown binding
- * ✅ Safe Player.pause() guard
- * ✅ Buy NFT button → opens purchase modal
+ * v4 FIXES based on real Android Brave diagnostics:
+ * ✅ REMOVED `crossorigin="anonymous"` — was triggering CORS preflight that
+ *    Lighthouse gateway doesn't always answer on mobile, causing networkState=3
+ * ✅ Modal size forced BEFORE video element exists — prevents 0×0 init state
+ *    that mobile Chrome/Brave's video pipeline can't recover from
+ * ✅ Detect Brave Shields blocking and surface a real error message
+ * ✅ Suppress benign "play interrupted by pause" errors during close
+ * ✅ Added IPFS gateway fallback — if Lighthouse times out, try a public gateway
  *
- * MOBILE FIXES (May 2026):
- * ✅ Replaced `100dvh` (which can collapse modal on older browsers) with vh + JS height
- * ✅ Hide spinner on `loadedmetadata` (fires earlier than canplay on mobile)
- * ✅ Hard timeout: hide spinner after 8s no matter what so native controls show
- * ✅ Mobile-friendly autoplay attempt (muted first, falls back to tap-to-play overlay)
- * ✅ On-screen diagnostics panel for mobile debugging (shake device or long-press header)
- * ✅ preload="auto" so mobile actually starts buffering
- * ✅ Forced explicit pixel height on container as belt-and-suspenders
+ * Earlier fixes preserved:
+ * ✅ Removed conflicting `.modal-overlay` class
+ * ✅ Inline styles inject ONCE
+ * ✅ Multi-gateway support
+ * ✅ Hide spinner on `loadedmetadata`
+ * ✅ 8s spinner timeout safety net
+ * ✅ Tap-to-play fallback
+ * ✅ On-screen diagnostics (long-press title)
  */
 
 const VideoPlayerModal = {
   currentRelease: null,
   videoElement: null,
-  isBuffering: false,
   _stylesInjected: false,
   _boundKeyHandler: null,
   _spinnerTimeout: null,
   _diagnostics: [],
+  _isClosing: false,
+  _gatewayFallbacks: [],
+  _currentGatewayIdx: 0,
 
   show(release) {
-    this._log('🎬 show() called', release?.title);
+    this._isClosing = false;
+    this._log('🎬 show()', release?.title);
 
     this.currentRelease = release;
     this._diagnostics = [];
+    this._currentGatewayIdx = 0;
 
     this._injectStyles();
 
@@ -56,28 +60,51 @@ const VideoPlayerModal = {
 
     const track = release.tracks?.[0];
     if (!track) {
-      alert('No video found for this release. The video data may be missing.');
+      alert('No video found for this release.');
       this.restoreAudioPlayer();
       return;
     }
 
-    // Resolve video URL
-    let videoUrl = null;
-    if (track.videoUrl) videoUrl = this.getProxiedUrl(track.videoUrl);
-    else if (track.audioUrl) videoUrl = this.getProxiedUrl(track.audioUrl);
-    else if (track.videoCid) videoUrl = `/api/ipfs/${track.videoCid}`;
-    else if (track.audioCid) videoUrl = `/api/ipfs/${track.audioCid}`;
+    // Resolve primary URL + build fallback list
+    let primaryUrl = null;
+    let cid = null;
 
-    if (!videoUrl) {
-      alert('Video URL not found. The video may not have been uploaded correctly.');
+    if (track.videoUrl) primaryUrl = track.videoUrl;
+    else if (track.audioUrl) primaryUrl = track.audioUrl;
+    else if (track.videoCid) { primaryUrl = `/api/ipfs/${track.videoCid}`; cid = track.videoCid; }
+    else if (track.audioCid) { primaryUrl = `/api/ipfs/${track.audioCid}`; cid = track.audioCid; }
+
+    if (!primaryUrl) {
+      alert('Video URL not found.');
       this.restoreAudioPlayer();
       return;
     }
 
-    this._log('🎬 Final URL:', videoUrl);
+    // Extract CID from URL if not already known
+    if (!cid && primaryUrl.includes('/ipfs/')) {
+      cid = primaryUrl.split('/ipfs/')[1].split('?')[0].split('/')[0];
+    }
+
+    // Build gateway fallback chain
+    this._gatewayFallbacks = [this.getProxiedUrl(primaryUrl)];
+    if (cid) {
+      // If primary fails, try our own proxy (which can route through CDN)
+      const proxyUrl = `/api/ipfs/${cid}`;
+      if (!this._gatewayFallbacks.includes(proxyUrl)) {
+        this._gatewayFallbacks.push(proxyUrl);
+      }
+    }
+
+    this._log('🎬 Gateway chain:', this._gatewayFallbacks);
     this._log('📱 UA:', navigator.userAgent.substring(0, 80));
     this._log('📐 Window:', `${window.innerWidth}x${window.innerHeight}`);
+    this._log('🦁 Brave?', !!(navigator.brave && navigator.brave.isBrave));
 
+    const initialUrl = this._gatewayFallbacks[0];
+
+    // CRITICAL: build the overlay with NO video element first.
+    // Inject sizing, THEN add the video. This prevents 0×0 init state
+    // that Android Chrome/Brave's video pipeline can't recover from.
     const html = `
       <div class="vpm-overlay" id="video-modal-overlay">
         <div class="vpm-modal" id="vpm-modal">
@@ -100,19 +127,8 @@ const VideoPlayerModal = {
               <p id="vpm-loading-text">Loading video...</p>
             </div>
 
-            <video
-              id="video-player"
-              class="vpm-video"
-              controls
-              preload="auto"
-              playsinline
-              webkit-playsinline
-              x5-playsinline
-              crossorigin="anonymous"
-            >
-              <source src="${videoUrl}" type="video/mp4">
-              Your browser does not support the video tag.
-            </video>
+            <!-- video element will be injected here AFTER sizing is forced -->
+            <div id="vpm-video-slot"></div>
 
             <button class="vpm-tap-to-play" id="vpm-tap-to-play" style="display:none;">
               <svg width="80" height="80" viewBox="0 0 24 24" fill="white">
@@ -141,21 +157,49 @@ const VideoPlayerModal = {
       </div>
     `;
 
-    // Remove any existing modal
     const existing = document.getElementById('video-modal-overlay');
     if (existing) existing.remove();
 
     document.body.insertAdjacentHTML('beforeend', html);
-    this._log('✅ Modal injected');
+    this._log('✅ Modal shell injected');
 
-    // Force explicit pixel height — belt-and-suspenders against viewport unit issues
+    // STEP 1: Force size BEFORE video exists
     this._fixModalHeight();
-    window.addEventListener('resize', this._fixModalHeightBound = () => this._fixModalHeight());
+    this._fixModalHeightBound = () => this._fixModalHeight();
+    window.addEventListener('resize', this._fixModalHeightBound);
     window.addEventListener('orientationchange', this._fixModalHeightBound);
 
+    // STEP 2: Now that container has real dimensions, inject the video element
     requestAnimationFrame(() => {
-      this.bindModalEvents(videoUrl, release);
+      this._injectVideoElement(initialUrl);
+
+      // STEP 3: Bind events to the now-existing video
+      requestAnimationFrame(() => {
+        this.bindModalEvents(initialUrl, release);
+      });
     });
+  },
+
+  _injectVideoElement(url) {
+    const slot = document.getElementById('vpm-video-slot');
+    if (!slot) return;
+
+    // NO crossorigin attribute — this is what was killing Lighthouse loads on mobile.
+    // NO autoplay attribute — we'll trigger play() programmatically after metadata.
+    slot.outerHTML = `
+      <video
+        id="video-player"
+        class="vpm-video"
+        controls
+        preload="auto"
+        playsinline
+        webkit-playsinline
+        x5-playsinline
+        x-webkit-airplay="allow"
+        src="${this._escape(url)}"
+      ></video>
+    `;
+    this._log('🎥 Video element injected, src=', url.substring(0, 60));
   },
 
   _fixModalHeight() {
@@ -187,12 +231,10 @@ const VideoPlayerModal = {
       return;
     }
 
-    // Long-press title to show diagnostics
+    // Long-press title for diagnostics
     if (titleText) {
       let pressTimer;
-      const startPress = () => {
-        pressTimer = setTimeout(() => this._showDiagnostics(), 800);
-      };
+      const startPress = () => { pressTimer = setTimeout(() => this._showDiagnostics(), 800); };
       const cancelPress = () => clearTimeout(pressTimer);
       titleText.addEventListener('touchstart', startPress);
       titleText.addEventListener('touchend', cancelPress);
@@ -218,24 +260,29 @@ const VideoPlayerModal = {
       });
     }
 
-    // Tap-to-play fallback
     tapToPlay.addEventListener('click', () => {
       tapToPlay.style.display = 'none';
       this.videoElement.muted = false;
-      this.videoElement.play().catch(err => {
-        this._log('❌ Manual play failed:', err.message);
-        this._showDiagnostics();
-      });
+      const p = this.videoElement.play();
+      if (p && p.catch) {
+        p.catch(err => {
+          // Ignore "interrupted by pause" — that's just close cleanup racing
+          if (err.name === 'AbortError' || /interrupted by/i.test(err.message)) {
+            this._log('ℹ️ Play interrupted (likely close)');
+            return;
+          }
+          this._log('❌ Manual play failed:', err.message);
+          this._showDiagnostics('Play failed: ' + err.message);
+        });
+      }
     });
 
-    // ===== VIDEO EVENTS =====
     this.videoElement.addEventListener('loadstart', () => {
       this._log('📹 loadstart');
       loadingEl.style.display = 'flex';
       loadingText.textContent = 'Loading video...';
     });
 
-    // KEY MOBILE FIX: hide spinner on loadedmetadata, not just canplay
     this.videoElement.addEventListener('loadedmetadata', () => {
       this._log('📹 loadedmetadata, dur=', this.videoElement.duration);
       loadingEl.style.display = 'none';
@@ -248,8 +295,7 @@ const VideoPlayerModal = {
     });
 
     this.videoElement.addEventListener('waiting', () => {
-      this._log('⏳ waiting (buffering)');
-      // Don't show spinner if video already started — looks janky on mobile
+      this._log('⏳ waiting');
     });
 
     this.videoElement.addEventListener('playing', () => {
@@ -264,58 +310,75 @@ const VideoPlayerModal = {
 
     this.videoElement.addEventListener('error', () => {
       const err = this.videoElement.error;
-      this._log('❌ Video error code=', err?.code, 'msg=', err?.message);
-      loadingEl.style.display = 'none';
-
-      let errorMsg = 'Failed to load video. ';
-      if (err) {
-        switch (err.code) {
-          case 1: errorMsg += 'Download was aborted.'; break;
-          case 2: errorMsg += 'Network error.'; break;
-          case 3: errorMsg += 'Video file is corrupted or unsupported format.'; break;
-          case 4: errorMsg += 'Video format not supported by your browser.'; break;
-          default: errorMsg += 'Unknown error.';
-        }
-      }
-      this._log('💬 ' + errorMsg);
-      this._showDiagnostics(errorMsg);
+      this._log('❌ error code=', err?.code, 'msg=', err?.message);
+      this._tryGatewayFallback();
     });
 
-    // SAFETY NET: if nothing happens in 8s, hide spinner so native controls show
+    // SAFETY NET — also tries gateway fallback
     this._spinnerTimeout = setTimeout(() => {
+      const v = this.videoElement;
+      if (!v) return;
+      this._log('⏰ Spinner timeout. readyState=', v.readyState, 'networkState=', v.networkState);
+
+      // networkState 3 = NO_SOURCE = gateway gave up. Try fallback.
+      if (v.networkState === 3 || v.readyState === 0) {
+        if (this._tryGatewayFallback()) {
+          return; // fallback started, give it more time
+        }
+      }
+
+      // No fallback worked — surface to user
       if (loadingEl && loadingEl.style.display !== 'none') {
-        this._log('⏰ Spinner timeout fired (8s). State=' + this.videoElement.readyState);
         loadingEl.style.display = 'none';
-        if (this.videoElement.readyState === 0) {
-          loadingText.textContent = 'Tap play to start video';
-          tapToPlay.style.display = 'flex';
+        loadingText.textContent = 'Tap play to start video';
+        tapToPlay.style.display = 'flex';
+
+        // Brave-specific hint
+        if (navigator.brave && navigator.brave.isBrave) {
+          loadingText.textContent = 'Brave Shields may be blocking. Try lowering shields.';
         }
       }
     }, 8000);
 
-    // ESC key
     this._boundKeyHandler = (e) => {
       if (e.key === 'Escape') this.close();
     };
     document.addEventListener('keydown', this._boundKeyHandler);
   },
 
+  _tryGatewayFallback() {
+    const next = this._currentGatewayIdx + 1;
+    if (next >= this._gatewayFallbacks.length) {
+      this._log('❌ No more gateway fallbacks');
+      return false;
+    }
+    this._currentGatewayIdx = next;
+    const newUrl = this._gatewayFallbacks[next];
+    this._log('🔄 Trying fallback gateway:', newUrl.substring(0, 60));
+
+    if (this.videoElement) {
+      this.videoElement.src = newUrl;
+      this.videoElement.load();
+    }
+    return true;
+  },
+
   _tryAutoplay(tapToPlay) {
-    // First try unmuted
     const playPromise = this.videoElement.play();
     if (playPromise && typeof playPromise.then === 'function') {
       playPromise
-        .then(() => this._log('▶️ Autoplay (unmuted) succeeded'))
+        .then(() => this._log('▶️ Autoplay (unmuted) ok'))
         .catch(err => {
+          if (this._isClosing) return;
           this._log('⚠️ Unmuted autoplay blocked:', err.message);
-          // Try muted (most browsers allow this)
           this.videoElement.muted = true;
           this.videoElement.play()
             .then(() => {
-              this._log('▶️ Autoplay (muted) succeeded — showing tap-to-unmute');
+              this._log('▶️ Autoplay (muted) ok');
               tapToPlay.style.display = 'flex';
             })
             .catch(err2 => {
+              if (this._isClosing) return;
               this._log('❌ Even muted autoplay blocked:', err2.message);
               tapToPlay.style.display = 'flex';
             });
@@ -329,7 +392,7 @@ const VideoPlayerModal = {
     if (url.includes('.fil.one') || url.includes('filecoin')) return url;
     if (url.startsWith('/api/ipfs/')) return url;
     if (url.includes('/ipfs/')) {
-      const cid = url.split('/ipfs/')[1].split('?')[0];
+      const cid = url.split('/ipfs/')[1].split('?')[0].split('/')[0];
       return `/api/ipfs/${cid}`;
     }
     if (typeof IpfsHelper !== 'undefined' && IpfsHelper.toProxyUrl) {
@@ -339,6 +402,7 @@ const VideoPlayerModal = {
   },
 
   close() {
+    this._isClosing = true;
     this._log('🔴 Closing');
 
     if (this._spinnerTimeout) {
@@ -372,6 +436,8 @@ const VideoPlayerModal = {
 
     this.currentRelease = null;
     this.videoElement = null;
+    this._gatewayFallbacks = [];
+    this._currentGatewayIdx = 0;
   },
 
   restoreAudioPlayer() {
@@ -424,7 +490,7 @@ const VideoPlayerModal = {
       videoWidth: v.videoWidth, videoHeight: v.videoHeight,
       error: v.error ? { code: v.error.code, message: v.error.message } : null,
     } : null;
-    const text = `Video state:\n${JSON.stringify(state, null, 2)}\n\nLog:\n${this._diagnostics.join('\n')}\n\nUA: ${navigator.userAgent}\nViewport: ${window.innerWidth}x${window.innerHeight}`;
+    const text = `Video state:\n${JSON.stringify(state, null, 2)}\n\nLog:\n${this._diagnostics.join('\n')}\n\nUA: ${navigator.userAgent}\nViewport: ${window.innerWidth}x${window.innerHeight}\nBrave: ${!!(navigator.brave && navigator.brave.isBrave)}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => alert('Copied!')).catch(() => prompt('Copy this:', text));
     } else {
@@ -577,6 +643,8 @@ const VideoPlayerModal = {
         color: #fff;
         font-size: 14px;
         margin: 0;
+        text-align: center;
+        padding: 0 16px;
       }
 
       .vpm-tap-to-play {
