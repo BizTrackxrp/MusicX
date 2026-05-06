@@ -1,23 +1,19 @@
 /**
- * Video Player Modal — v4 (mobile-fixed for Brave/IPFS)
+ * Video Player Modal — v5
  *
- * v4 FIXES based on real Android Brave diagnostics:
- * ✅ REMOVED `crossorigin="anonymous"` — was triggering CORS preflight that
- *    Lighthouse gateway doesn't always answer on mobile, causing networkState=3
- * ✅ Modal size forced BEFORE video element exists — prevents 0×0 init state
- *    that mobile Chrome/Brave's video pipeline can't recover from
- * ✅ Detect Brave Shields blocking and surface a real error message
- * ✅ Suppress benign "play interrupted by pause" errors during close
- * ✅ Added IPFS gateway fallback — if Lighthouse times out, try a public gateway
+ * v5 FIX: Detect format-incompatibility (error code 4) and show clear message
+ * instead of confusing spinner. Diagnostic data confirmed: video files use
+ * codecs/containers Android Chrome can't decode (likely HEVC or .mov from Mac).
  *
  * Earlier fixes preserved:
- * ✅ Removed conflicting `.modal-overlay` class
- * ✅ Inline styles inject ONCE
- * ✅ Multi-gateway support
- * ✅ Hide spinner on `loadedmetadata`
- * ✅ 8s spinner timeout safety net
- * ✅ Tap-to-play fallback
- * ✅ On-screen diagnostics (long-press title)
+ * - Removed conflicting `.modal-overlay` class
+ * - Inline styles inject ONCE
+ * - Multi-gateway support with fallback chain
+ * - Modal sized BEFORE video element exists
+ * - No `crossorigin` (was triggering failed CORS preflight on Lighthouse)
+ * - 8s spinner timeout safety net
+ * - Tap-to-play fallback
+ * - On-screen diagnostics (long-press title)
  */
 
 const VideoPlayerModal = {
@@ -30,9 +26,11 @@ const VideoPlayerModal = {
   _isClosing: false,
   _gatewayFallbacks: [],
   _currentGatewayIdx: 0,
+  _formatErrorCount: 0,
 
   show(release) {
     this._isClosing = false;
+    this._formatErrorCount = 0;
     this._log('🎬 show()', release?.title);
 
     this.currentRelease = release;
@@ -41,14 +39,12 @@ const VideoPlayerModal = {
 
     this._injectStyles();
 
-    // Hide bottom audio player
     const bottomPlayer = document.querySelector('.player') || document.getElementById('player-bar');
     if (bottomPlayer) {
       bottomPlayer.dataset.vpmHidden = 'true';
       bottomPlayer.style.display = 'none';
     }
 
-    // Pause audio
     if (typeof Player !== 'undefined' && Player.audio) {
       try {
         if (typeof Player.pause === 'function') Player.pause();
@@ -65,7 +61,6 @@ const VideoPlayerModal = {
       return;
     }
 
-    // Resolve primary URL + build fallback list
     let primaryUrl = null;
     let cid = null;
 
@@ -80,15 +75,12 @@ const VideoPlayerModal = {
       return;
     }
 
-    // Extract CID from URL if not already known
     if (!cid && primaryUrl.includes('/ipfs/')) {
       cid = primaryUrl.split('/ipfs/')[1].split('?')[0].split('/')[0];
     }
 
-    // Build gateway fallback chain
     this._gatewayFallbacks = [this.getProxiedUrl(primaryUrl)];
     if (cid) {
-      // If primary fails, try our own proxy (which can route through CDN)
       const proxyUrl = `/api/ipfs/${cid}`;
       if (!this._gatewayFallbacks.includes(proxyUrl)) {
         this._gatewayFallbacks.push(proxyUrl);
@@ -97,14 +89,10 @@ const VideoPlayerModal = {
 
     this._log('🎬 Gateway chain:', this._gatewayFallbacks);
     this._log('📱 UA:', navigator.userAgent.substring(0, 80));
-    this._log('📐 Window:', `${window.innerWidth}x${window.innerHeight}`);
     this._log('🦁 Brave?', !!(navigator.brave && navigator.brave.isBrave));
 
     const initialUrl = this._gatewayFallbacks[0];
 
-    // CRITICAL: build the overlay with NO video element first.
-    // Inject sizing, THEN add the video. This prevents 0×0 init state
-    // that Android Chrome/Brave's video pipeline can't recover from.
     const html = `
       <div class="vpm-overlay" id="video-modal-overlay">
         <div class="vpm-modal" id="vpm-modal">
@@ -127,7 +115,6 @@ const VideoPlayerModal = {
               <p id="vpm-loading-text">Loading video...</p>
             </div>
 
-            <!-- video element will be injected here AFTER sizing is forced -->
             <div id="vpm-video-slot"></div>
 
             <button class="vpm-tap-to-play" id="vpm-tap-to-play" style="display:none;">
@@ -136,6 +123,22 @@ const VideoPlayerModal = {
               </svg>
               <span>Tap to play</span>
             </button>
+
+            <div class="vpm-format-error" id="vpm-format-error" style="display:none;">
+              <div class="vpm-format-icon">📱</div>
+              <div class="vpm-format-title">Video format not supported</div>
+              <div class="vpm-format-msg">
+                This video uses a format that doesn't play on this device. The audio still plays through the music player, and the video should work on desktop or iOS.
+              </div>
+              <div class="vpm-format-actions">
+                <button class="vpm-format-btn" id="vpm-format-audio-btn">
+                  🎵 Listen instead
+                </button>
+                <button class="vpm-format-btn vpm-format-btn-ghost" id="vpm-format-diag-btn">
+                  Show diagnostics
+                </button>
+              </div>
+            </div>
 
             <div class="vpm-diag" id="vpm-diag" style="display:none;"></div>
           </div>
@@ -161,19 +164,14 @@ const VideoPlayerModal = {
     if (existing) existing.remove();
 
     document.body.insertAdjacentHTML('beforeend', html);
-    this._log('✅ Modal shell injected');
 
-    // STEP 1: Force size BEFORE video exists
     this._fixModalHeight();
     this._fixModalHeightBound = () => this._fixModalHeight();
     window.addEventListener('resize', this._fixModalHeightBound);
     window.addEventListener('orientationchange', this._fixModalHeightBound);
 
-    // STEP 2: Now that container has real dimensions, inject the video element
     requestAnimationFrame(() => {
       this._injectVideoElement(initialUrl);
-
-      // STEP 3: Bind events to the now-existing video
       requestAnimationFrame(() => {
         this.bindModalEvents(initialUrl, release);
       });
@@ -183,9 +181,6 @@ const VideoPlayerModal = {
   _injectVideoElement(url) {
     const slot = document.getElementById('vpm-video-slot');
     if (!slot) return;
-
-    // NO crossorigin attribute — this is what was killing Lighthouse loads on mobile.
-    // NO autoplay attribute — we'll trigger play() programmatically after metadata.
     slot.outerHTML = `
       <video
         id="video-player"
@@ -199,7 +194,7 @@ const VideoPlayerModal = {
         src="${this._escape(url)}"
       ></video>
     `;
-    this._log('🎥 Video element injected, src=', url.substring(0, 60));
+    this._log('🎥 Video injected, src=', url.substring(0, 60));
   },
 
   _fixModalHeight() {
@@ -213,7 +208,6 @@ const VideoPlayerModal = {
     } else {
       modal.style.height = Math.min(h * 0.9, h) + 'px';
     }
-    this._log('📐 Forced height:', h);
   },
 
   bindModalEvents(videoUrl, release) {
@@ -225,13 +219,15 @@ const VideoPlayerModal = {
     const overlay = document.getElementById('video-modal-overlay');
     const buyBtn = document.getElementById('video-modal-buy-btn');
     const titleText = document.getElementById('vpm-title-text');
+    const formatErrorEl = document.getElementById('vpm-format-error');
+    const formatAudioBtn = document.getElementById('vpm-format-audio-btn');
+    const formatDiagBtn = document.getElementById('vpm-format-diag-btn');
 
     if (!this.videoElement) {
       this._log('❌ Video element not found');
       return;
     }
 
-    // Long-press title for diagnostics
     if (titleText) {
       let pressTimer;
       const startPress = () => { pressTimer = setTimeout(() => this._showDiagnostics(), 800); };
@@ -260,19 +256,43 @@ const VideoPlayerModal = {
       });
     }
 
+    // Format-error fallback: play audio in main player and close video modal
+    if (formatAudioBtn) {
+      formatAudioBtn.addEventListener('click', () => {
+        const track = release.tracks?.[0];
+        if (track && typeof Player !== 'undefined' && typeof Player.playTrack === 'function') {
+          this.close();
+          try {
+            Player.playTrack({
+              ...track,
+              releaseId: release.id,
+              cover: release.coverUrl,
+              artist: release.artistName,
+              title: release.title || track.title,
+              artistAddress: release.artistAddress,
+            });
+          } catch (err) {
+            this._log('❌ Audio fallback failed:', err.message);
+            alert('Could not start audio playback.');
+          }
+        } else {
+          this.close();
+        }
+      });
+    }
+
+    if (formatDiagBtn) {
+      formatDiagBtn.addEventListener('click', () => this._showDiagnostics());
+    }
+
     tapToPlay.addEventListener('click', () => {
       tapToPlay.style.display = 'none';
       this.videoElement.muted = false;
       const p = this.videoElement.play();
       if (p && p.catch) {
         p.catch(err => {
-          // Ignore "interrupted by pause" — that's just close cleanup racing
-          if (err.name === 'AbortError' || /interrupted by/i.test(err.message)) {
-            this._log('ℹ️ Play interrupted (likely close)');
-            return;
-          }
+          if (err.name === 'AbortError' || /interrupted by/i.test(err.message)) return;
           this._log('❌ Manual play failed:', err.message);
-          this._showDiagnostics('Play failed: ' + err.message);
         });
       }
     });
@@ -294,10 +314,6 @@ const VideoPlayerModal = {
       loadingEl.style.display = 'none';
     });
 
-    this.videoElement.addEventListener('waiting', () => {
-      this._log('⏳ waiting');
-    });
-
     this.videoElement.addEventListener('playing', () => {
       this._log('▶️ playing');
       loadingEl.style.display = 'none';
@@ -308,35 +324,41 @@ const VideoPlayerModal = {
       }
     });
 
+    // KEY v5 CHANGE: detect format errors and show clear message
     this.videoElement.addEventListener('error', () => {
       const err = this.videoElement.error;
       this._log('❌ error code=', err?.code, 'msg=', err?.message);
+
+      // Code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED — codec/format incompatible
+      if (err?.code === 4) {
+        this._formatErrorCount++;
+        // Try ONE gateway fallback in case it's a partial download issue
+        if (this._formatErrorCount === 1 && this._tryGatewayFallback()) {
+          return;
+        }
+        // Both gateways returned the same format error → it's the file, not the network
+        this._log('🚫 Format error confirmed across all gateways');
+        this._showFormatError(formatErrorEl, loadingEl, tapToPlay);
+        return;
+      }
+
+      // Other errors: try gateway fallback
       this._tryGatewayFallback();
     });
 
-    // SAFETY NET — also tries gateway fallback
     this._spinnerTimeout = setTimeout(() => {
       const v = this.videoElement;
       if (!v) return;
       this._log('⏰ Spinner timeout. readyState=', v.readyState, 'networkState=', v.networkState);
 
-      // networkState 3 = NO_SOURCE = gateway gave up. Try fallback.
       if (v.networkState === 3 || v.readyState === 0) {
-        if (this._tryGatewayFallback()) {
-          return; // fallback started, give it more time
-        }
+        if (this._tryGatewayFallback()) return;
       }
 
-      // No fallback worked — surface to user
       if (loadingEl && loadingEl.style.display !== 'none') {
         loadingEl.style.display = 'none';
         loadingText.textContent = 'Tap play to start video';
         tapToPlay.style.display = 'flex';
-
-        // Brave-specific hint
-        if (navigator.brave && navigator.brave.isBrave) {
-          loadingText.textContent = 'Brave Shields may be blocking. Try lowering shields.';
-        }
       }
     }, 8000);
 
@@ -344,6 +366,14 @@ const VideoPlayerModal = {
       if (e.key === 'Escape') this.close();
     };
     document.addEventListener('keydown', this._boundKeyHandler);
+  },
+
+  _showFormatError(formatErrorEl, loadingEl, tapToPlay) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (tapToPlay) tapToPlay.style.display = 'none';
+    if (formatErrorEl) formatErrorEl.style.display = 'flex';
+    // Hide the broken video element
+    if (this.videoElement) this.videoElement.style.display = 'none';
   },
 
   _tryGatewayFallback() {
@@ -438,6 +468,7 @@ const VideoPlayerModal = {
     this.videoElement = null;
     this._gatewayFallbacks = [];
     this._currentGatewayIdx = 0;
+    this._formatErrorCount = 0;
   },
 
   restoreAudioPlayer() {
@@ -514,12 +545,8 @@ const VideoPlayerModal = {
     style.textContent = `
       .vpm-overlay {
         position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
+        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+        width: 100vw !important; height: 100vh !important;
         background: rgba(0, 0, 0, 0.95) !important;
         z-index: 999999 !important;
         display: flex !important;
@@ -532,26 +559,18 @@ const VideoPlayerModal = {
       }
 
       @keyframes vpm-fade-in {
-        from { opacity: 0; }
-        to   { opacity: 1; }
+        from { opacity: 0; } to { opacity: 1; }
       }
 
       .vpm-modal {
-        width: 95vw;
-        max-width: 1400px;
-        height: 90vh;
-        display: flex;
-        flex-direction: column;
-        background: #000;
-        border-radius: 12px;
-        overflow: hidden;
-        position: relative;
+        width: 95vw; max-width: 1400px; height: 90vh;
+        display: flex; flex-direction: column;
+        background: #000; border-radius: 12px;
+        overflow: hidden; position: relative;
       }
 
       .vpm-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        display: flex; align-items: center; justify-content: space-between;
         padding: 16px 24px;
         background: rgba(0, 0, 0, 0.5);
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -559,34 +578,19 @@ const VideoPlayerModal = {
       }
 
       .vpm-title h2 {
-        font-size: 18px;
-        font-weight: 700;
-        margin: 0 0 4px;
-        color: #fff;
-        cursor: pointer;
-        -webkit-user-select: none;
-        user-select: none;
+        font-size: 18px; font-weight: 700; margin: 0 0 4px;
+        color: #fff; cursor: pointer;
+        -webkit-user-select: none; user-select: none;
       }
 
-      .vpm-title p {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.7);
-        margin: 0;
-      }
+      .vpm-title p { font-size: 14px; color: rgba(255, 255, 255, 0.7); margin: 0; }
 
       .vpm-close {
-        width: 40px;
-        height: 40px;
-        border: none;
+        width: 40px; height: 40px; border: none;
         background: rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        color: #fff;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 150ms;
-        flex-shrink: 0;
+        border-radius: 50%; color: #fff; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 150ms; flex-shrink: 0;
       }
 
       .vpm-close:hover {
@@ -595,39 +599,26 @@ const VideoPlayerModal = {
       }
 
       .vpm-container {
-        flex: 1 1 auto;
-        position: relative;
-        background: #000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 200px;
-        overflow: hidden;
+        flex: 1 1 auto; position: relative; background: #000;
+        display: flex; align-items: center; justify-content: center;
+        min-height: 200px; overflow: hidden;
       }
 
       .vpm-video {
-        width: 100%;
-        height: 100%;
-        max-height: 100%;
-        max-width: 100%;
-        object-fit: contain;
-        background: #000;
+        width: 100%; height: 100%;
+        max-height: 100%; max-width: 100%;
+        object-fit: contain; background: #000;
       }
 
       .vpm-loading {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.8);
-        z-index: 2;
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, 0.8); z-index: 2;
       }
 
       .vpm-spinner {
-        width: 60px;
-        height: 60px;
+        width: 60px; height: 60px;
         border: 4px solid rgba(255, 255, 255, 0.2);
         border-top-color: #ef4444;
         border-radius: 50%;
@@ -635,136 +626,110 @@ const VideoPlayerModal = {
         margin-bottom: 16px;
       }
 
-      @keyframes vpm-spin {
-        to { transform: rotate(360deg); }
-      }
+      @keyframes vpm-spin { to { transform: rotate(360deg); } }
 
       .vpm-loading p {
-        color: #fff;
-        font-size: 14px;
-        margin: 0;
-        text-align: center;
-        padding: 0 16px;
+        color: #fff; font-size: 14px; margin: 0;
+        text-align: center; padding: 0 16px;
       }
 
       .vpm-tap-to-play {
-        position: absolute;
-        inset: 0;
-        z-index: 3;
+        position: absolute; inset: 0; z-index: 3;
         background: rgba(0,0,0,0.5);
-        border: none;
-        color: white;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-size: 18px;
-        gap: 12px;
+        border: none; color: white;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        cursor: pointer; font-size: 18px; gap: 12px;
       }
 
-      .vpm-tap-to-play:active {
-        background: rgba(0,0,0,0.7);
+      .vpm-tap-to-play:active { background: rgba(0,0,0,0.7); }
+
+      /* v5 NEW: Format error overlay */
+      .vpm-format-error {
+        position: absolute; inset: 0; z-index: 4;
+        background: rgba(0,0,0,0.95);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        padding: 24px; text-align: center;
+        color: white;
+      }
+      .vpm-format-icon { font-size: 64px; margin-bottom: 16px; }
+      .vpm-format-title {
+        font-size: 20px; font-weight: 700;
+        margin-bottom: 12px; color: #fff;
+      }
+      .vpm-format-msg {
+        font-size: 14px; line-height: 1.5;
+        color: rgba(255,255,255,0.7);
+        max-width: 360px; margin-bottom: 24px;
+      }
+      .vpm-format-actions {
+        display: flex; flex-direction: column;
+        gap: 8px; width: 100%; max-width: 280px;
+      }
+      .vpm-format-btn {
+        padding: 12px 20px;
+        background: #ef4444; border: none;
+        border-radius: 8px; color: #fff;
+        font-size: 15px; font-weight: 600;
+        cursor: pointer; transition: all 150ms;
+      }
+      .vpm-format-btn:active { transform: scale(0.98); }
+      .vpm-format-btn-ghost {
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.2);
+        color: rgba(255,255,255,0.7);
+        font-weight: 500;
       }
 
       .vpm-diag {
-        position: absolute;
-        inset: 16px;
-        z-index: 10;
-        background: rgba(0, 0, 0, 0.95);
-        color: white;
-        padding: 16px;
-        border-radius: 8px;
-        font-size: 12px;
-        overflow-y: auto;
+        position: absolute; inset: 16px; z-index: 10;
+        background: rgba(0, 0, 0, 0.95); color: white;
+        padding: 16px; border-radius: 8px;
+        font-size: 12px; overflow-y: auto;
         border: 1px solid #ef4444;
       }
 
       .vpm-info {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        display: flex; align-items: center; justify-content: space-between;
         padding: 16px 24px;
         background: rgba(0, 0, 0, 0.5);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
-        gap: 16px;
-        flex-shrink: 0;
+        gap: 16px; flex-shrink: 0;
       }
 
-      .vpm-meta {
-        display: flex;
-        align-items: center;
-        gap: 24px;
-        flex: 1;
-      }
-
-      .vpm-price {
-        font-size: 16px;
-        font-weight: 700;
-        color: #ef4444;
-      }
-
-      .vpm-editions {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.7);
-      }
+      .vpm-meta { display: flex; align-items: center; gap: 24px; flex: 1; }
+      .vpm-price { font-size: 16px; font-weight: 700; color: #ef4444; }
+      .vpm-editions { font-size: 14px; color: rgba(255, 255, 255, 0.7); }
 
       .vpm-buy-btn {
         padding: 10px 24px;
-        background: #ef4444;
-        border: none;
-        border-radius: 8px;
-        color: #fff;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 150ms;
+        background: #ef4444; border: none;
+        border-radius: 8px; color: #fff;
+        font-size: 15px; font-weight: 600;
+        cursor: pointer; transition: all 150ms;
         white-space: nowrap;
       }
 
-      .vpm-buy-btn:hover {
-        background: #dc2626;
-        transform: scale(1.05);
-      }
-
-      .vpm-buy-btn:active {
-        transform: scale(0.98);
-      }
+      .vpm-buy-btn:hover { background: #dc2626; transform: scale(1.05); }
+      .vpm-buy-btn:active { transform: scale(0.98); }
 
       @media (max-width: 768px) {
         .vpm-modal {
-          width: 100vw;
-          height: 100vh;
-          max-width: 100vw;
-          border-radius: 0;
+          width: 100vw; height: 100vh;
+          max-width: 100vw; border-radius: 0;
         }
-
-        .vpm-header {
-          padding: 12px 16px;
-        }
-
-        .vpm-title h2 {
-          font-size: 16px;
-        }
-
-        .vpm-title p {
-          font-size: 13px;
-        }
-
+        .vpm-header { padding: 12px 16px; }
+        .vpm-title h2 { font-size: 16px; }
+        .vpm-title p { font-size: 13px; }
         .vpm-info {
-          flex-direction: column;
-          align-items: stretch;
+          flex-direction: column; align-items: stretch;
           padding: 12px 16px;
         }
-
-        .vpm-meta {
-          width: 100%;
-          justify-content: space-between;
-        }
-
-        .vpm-buy-btn {
-          width: 100%;
-        }
+        .vpm-meta { width: 100%; justify-content: space-between; }
+        .vpm-buy-btn { width: 100%; }
+        .vpm-format-title { font-size: 18px; }
+        .vpm-format-msg { font-size: 13px; }
       }
     `;
     document.head.appendChild(style);
