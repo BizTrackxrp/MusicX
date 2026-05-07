@@ -6,11 +6,14 @@
  *   - Videos (.mp4, .mov, .m4v) → /videos/ folder
  *   - Images (.jpg, .png, .webp, .gif) → /thumbnails/ folder
  *
- * v3 GUARDS (May 2026):
- * - Allowlist for video AND image extensions (thumbnails use same endpoint)
- * - Rejects .webm, .avi, etc. that won't play on mobile
- * - Filename length cap
- * - Routes images to a separate folder for organization
+ * v4 FIXES (May 2026):
+ * ✅ forcePathStyle: true — fil.one requires path-style URLs
+ *    Without this, SDK builds URLs like https://xrpmusic.eu-west-1.s3.fil.one/...
+ *    which doesn't resolve in DNS. With it, URLs are
+ *    https://eu-west-1.s3.fil.one/xrpmusic/... which works.
+ * ✅ publicUrl construction also matches path-style format
+ * ✅ Allowlist for video AND image extensions (thumbnails use same endpoint)
+ * ✅ Routes images to a separate folder for organization
  */
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -18,6 +21,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const s3Client = new S3Client({
   region: process.env.FILONE_REGION,
   endpoint: process.env.FILONE_ENDPOINT,
+  forcePathStyle: true, // ← REQUIRED for fil.one
   credentials: {
     accessKeyId: process.env.FILONE_ACCESS_KEY_ID,
     secretAccessKey: process.env.FILONE_SECRET_ACCESS_KEY,
@@ -26,7 +30,6 @@ const s3Client = new S3Client({
 
 // ===== Allowlists =====
 
-// Video formats that play reliably on mobile (Android Chrome, iOS Safari)
 const ALLOWED_VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
 const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/mp4',
@@ -34,7 +37,6 @@ const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/x-m4v',
 ]);
 
-// Image formats for thumbnails / cover art
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -61,7 +63,6 @@ function classifyFile(extension, mimeType) {
 }
 
 export default async function handler(req, res) {
-  // CORS
   const allowedOrigins = [
     'https://xrpmusic.io',
     'https://www.xrpmusic.io',
@@ -89,17 +90,14 @@ export default async function handler(req, res) {
   try {
     const { fileName, fileType } = req.body;
 
-    // ===== Basic presence =====
     if (!fileName || !fileType) {
       return res.status(400).json({ error: 'fileName and fileType required' });
     }
 
-    // ===== Filename sanity =====
     if (typeof fileName !== 'string' || fileName.length > MAX_FILENAME_LENGTH) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
 
-    // ===== Classify and validate =====
     const ext = getExtension(fileName);
     const kind = classifyFile(ext, fileType);
 
@@ -119,24 +117,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // ===== Build storage key =====
     const timestamp = Date.now();
     const sanitized = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const folder = kind === 'video' ? 'videos' : 'thumbnails';
     const key = `${folder}/${timestamp}_${sanitized}`;
 
-    // ===== Generate presigned URL =====
     const command = new PutObjectCommand({
       Bucket: process.env.FILONE_BUCKET,
       Key: key,
       ContentType: fileType,
     });
 
+    // With forcePathStyle: true, the SDK generates a URL like:
+    //   https://eu-west-1.s3.fil.one/xrpmusic/videos/12345_file.mp4
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
+    // Public URL needs to match the same path-style structure
     const publicUrl = `${process.env.FILONE_ENDPOINT}/${process.env.FILONE_BUCKET}/${key}`;
 
-    console.log(`✅ Generated Filecoin upload URL [${kind}]:`, fileName);
+    console.log(`✅ Generated Filecoin upload URL [${kind}]:`, fileName, '→', key);
 
     res.status(200).json({
       success: true,
