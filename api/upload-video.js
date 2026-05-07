@@ -1,16 +1,16 @@
 /**
- * XRP Music - Video Upload to Filecoin S3
+ * XRP Music - Upload to Filecoin S3
  * Generates presigned URLs for direct browser → Filecoin uploads
- * Bypasses Lighthouse completely for videos
  *
- * v2 GUARDS (added May 2026):
- * - Extension allowlist (.mp4, .mov, .m4v) — rejects junk before it reaches Filecoin
- * - Content-Type allowlist (video/mp4, video/quicktime)
- * - Filename length cap to prevent absurd keys
+ * Handles BOTH:
+ *   - Videos (.mp4, .mov, .m4v) → /videos/ folder
+ *   - Images (.jpg, .png, .webp, .gif) → /thumbnails/ folder
  *
- * The browser-side VideoValidator already does the heavy lifting (codec probe).
- * These server-side checks are belt-and-suspenders against direct API calls
- * that bypass the frontend validator.
+ * v3 GUARDS (May 2026):
+ * - Allowlist for video AND image extensions (thumbnails use same endpoint)
+ * - Rejects .webm, .avi, etc. that won't play on mobile
+ * - Filename length cap
+ * - Routes images to a separate folder for organization
  */
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -25,17 +25,39 @@ const s3Client = new S3Client({
 });
 
 // ===== Allowlists =====
-const ALLOWED_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
-const ALLOWED_MIME_TYPES = new Set([
+
+// Video formats that play reliably on mobile (Android Chrome, iOS Safari)
+const ALLOWED_VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
+const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/mp4',
   'video/quicktime',
   'video/x-m4v',
 ]);
+
+// Image formats for thumbnails / cover art
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 const MAX_FILENAME_LENGTH = 255;
 
 function getExtension(name) {
   const m = (name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
   return m ? m[1] : '';
+}
+
+function classifyFile(extension, mimeType) {
+  if (ALLOWED_VIDEO_EXTENSIONS.has(extension) || ALLOWED_VIDEO_MIME_TYPES.has(mimeType)) {
+    return 'video';
+  }
+  if (ALLOWED_IMAGE_EXTENSIONS.has(extension) || ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
+    return 'image';
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -77,25 +99,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
 
-    // ===== Extension allowlist =====
+    // ===== Classify and validate =====
     const ext = getExtension(fileName);
-    if (!ALLOWED_EXTENSIONS.has(ext)) {
-      return res.status(400).json({
-        error: `Unsupported video format ".${ext}". Please upload an MP4 or MOV file with H.264 video.`,
-      });
-    }
+    const kind = classifyFile(ext, fileType);
 
-    // ===== Content-Type allowlist =====
-    if (!ALLOWED_MIME_TYPES.has(fileType)) {
+    if (!kind) {
+      if (fileType?.startsWith('image/')) {
+        return res.status(400).json({
+          error: `Unsupported image format ".${ext}". Allowed: JPG, PNG, WebP, GIF.`,
+        });
+      }
+      if (fileType?.startsWith('video/')) {
+        return res.status(400).json({
+          error: `Unsupported video format ".${ext}". Please upload an MP4 or MOV file with H.264 video.`,
+        });
+      }
       return res.status(400).json({
-        error: `Unsupported content type "${fileType}". Allowed: video/mp4, video/quicktime.`,
+        error: `Unsupported file type ".${ext}" (${fileType}). Allowed: MP4/MOV videos, JPG/PNG/WebP/GIF images.`,
       });
     }
 
     // ===== Build storage key =====
     const timestamp = Date.now();
     const sanitized = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const key = `videos/${timestamp}_${sanitized}`;
+    const folder = kind === 'video' ? 'videos' : 'thumbnails';
+    const key = `${folder}/${timestamp}_${sanitized}`;
 
     // ===== Generate presigned URL =====
     const command = new PutObjectCommand({
@@ -108,13 +136,14 @@ export default async function handler(req, res) {
 
     const publicUrl = `${process.env.FILONE_ENDPOINT}/${process.env.FILONE_BUCKET}/${key}`;
 
-    console.log('✅ Generated Filecoin upload URL for:', fileName);
+    console.log(`✅ Generated Filecoin upload URL [${kind}]:`, fileName);
 
     res.status(200).json({
       success: true,
       uploadUrl,
       publicUrl,
       key,
+      kind,
     });
   } catch (error) {
     console.error('❌ Filecoin upload URL generation failed:', error);
