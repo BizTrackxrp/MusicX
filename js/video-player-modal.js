@@ -1,10 +1,11 @@
 /**
- * Video Player Modal — v7
+ * Video Player Modal — v8.1
  *
- * v7 NEW:
- *   - Sticky buy bar on mobile (always visible, no scroll needed)
- *   - Buy button now navigates to PurchasePage with correct URL params
- *   - Tries Router first, falls back to hash navigation
+ * v8.1 FIXES:
+ *   - Mobile: explicit pixel heights so buy bar is ALWAYS visible (no scroll)
+ *   - Buy button: separate icon + text spans with !important so theme can't hide
+ *   - Body scroll locked while modal open (no auto-scroll bounce)
+ *   - Buy button now uses /purchase + history.pushState (matches marketplace pattern)
  *
  * v6 (preserved):
  *   - Presigned URL support for fil.one
@@ -22,6 +23,7 @@ const VideoPlayerModal = {
   _gatewayFallbacks: [],
   _currentGatewayIdx: 0,
   _formatErrorCount: 0,
+  _bodyScrollY: 0,
 
   show(release) {
     this._isClosing = false;
@@ -33,6 +35,7 @@ const VideoPlayerModal = {
     this._currentGatewayIdx = 0;
 
     this._injectStyles();
+    this._lockBodyScroll();
 
     const bottomPlayer = document.querySelector('.player') || document.getElementById('player-bar');
     if (bottomPlayer) {
@@ -90,7 +93,7 @@ const VideoPlayerModal = {
     const html = `
       <div class="vpm-overlay" id="video-modal-overlay">
         <div class="vpm-modal" id="vpm-modal">
-          <div class="vpm-header">
+          <div class="vpm-header" id="vpm-header">
             <div class="vpm-title">
               <h2 id="vpm-title-text">${this._escape(release.title || 'Untitled')}</h2>
               <p>${this._escape(release.artistName || 'Unknown Artist')}</p>
@@ -137,7 +140,7 @@ const VideoPlayerModal = {
             <div class="vpm-diag" id="vpm-diag" style="display:none;"></div>
           </div>
 
-          <div class="vpm-info">
+          <div class="vpm-info" id="vpm-info">
             <div class="vpm-meta">
               <div class="vpm-price">
                 ${release.songPrice === 0 ? 'FREE' : (release.songPrice || release.albumPrice || 0) + ' XRP'}
@@ -146,8 +149,9 @@ const VideoPlayerModal = {
                 ${(release.totalEditions || 0) - (release.soldEditions || 0)} / ${release.totalEditions || 0} available
               </div>
             </div>
-            <button class="vpm-buy-btn" id="video-modal-buy-btn">
-              🛒 Buy NFT
+            <button type="button" class="vpm-buy-btn" id="video-modal-buy-btn">
+              <span class="vpm-buy-icon">🛒</span>
+              <span class="vpm-buy-text">Buy NFT</span>
             </button>
           </div>
         </div>
@@ -172,6 +176,7 @@ const VideoPlayerModal = {
           this._injectVideoElement(resolvedUrl);
           requestAnimationFrame(() => {
             this.bindModalEvents(resolvedUrl, release);
+            this._fixModalHeight();
           });
         });
       })
@@ -181,9 +186,35 @@ const VideoPlayerModal = {
           this._injectVideoElement(initialUrl);
           requestAnimationFrame(() => {
             this.bindModalEvents(initialUrl, release);
+            this._fixModalHeight();
           });
         });
       });
+  },
+
+  _lockBodyScroll() {
+    this._bodyScrollY = window.scrollY || window.pageYOffset || 0;
+    const body = document.body;
+    body.style.position = 'fixed';
+    body.style.top = `-${this._bodyScrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+  },
+
+  _unlockBodyScroll() {
+    const body = document.body;
+    body.style.position = '';
+    body.style.top = '';
+    body.style.left = '';
+    body.style.right = '';
+    body.style.width = '';
+    body.style.overflow = '';
+    if (this._bodyScrollY) {
+      window.scrollTo(0, this._bodyScrollY);
+      this._bodyScrollY = 0;
+    }
   },
 
   async _resolveUrl(url) {
@@ -231,22 +262,44 @@ const VideoPlayerModal = {
     this._log('🎥 Video injected');
   },
 
+  /**
+   * v8.1: Set EXPLICIT pixel heights so layout is bulletproof on mobile.
+   */
   _fixModalHeight() {
     const overlay = document.getElementById('video-modal-overlay');
     const modal = document.getElementById('vpm-modal');
+    const header = document.getElementById('vpm-header');
+    const info = document.getElementById('vpm-info');
+    const container = document.getElementById('vpm-container');
     if (!overlay || !modal) return;
-    const h = window.innerHeight;
-    overlay.style.height = h + 'px';
+
+    const viewportHeight = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+
+    overlay.style.height = viewportHeight + 'px';
+
     if (window.innerWidth <= 768) {
-      modal.style.height = h + 'px';
+      modal.style.height = viewportHeight + 'px';
+      modal.style.maxHeight = viewportHeight + 'px';
+
+      if (header && info && container) {
+        const headerH = header.offsetHeight;
+        const infoH = info.offsetHeight;
+        const containerH = Math.max(120, viewportHeight - headerH - infoH);
+        container.style.height = containerH + 'px';
+        container.style.maxHeight = containerH + 'px';
+      }
     } else {
-      modal.style.height = Math.min(h * 0.9, h) + 'px';
+      modal.style.height = Math.min(viewportHeight * 0.9, viewportHeight) + 'px';
+      modal.style.maxHeight = '90vh';
+      if (container) {
+        container.style.height = '';
+        container.style.maxHeight = '';
+      }
     }
   },
 
   /**
-   * v7 NEW: Navigate to the purchase page with correct URL params.
-   * Tries multiple navigation paths because Router pattern varies.
+   * v8.1: Navigate to /purchase using the same pattern marketplace uses.
    */
   _navigateToPurchase(release) {
     const releaseId = release.id;
@@ -255,46 +308,42 @@ const VideoPlayerModal = {
       return;
     }
 
-    // Films are single-track sales
     const track = release.tracks?.[0];
     const trackId = track?.id;
 
-    // Build query string
     const params = new URLSearchParams();
     params.set('release', releaseId);
     if (trackId) params.set('track', trackId);
-
     const queryString = params.toString();
 
-    this._log('🛒 Navigating to purchase:', queryString);
+    const targetUrl = `/purchase?${queryString}`;
+    this._log('🛒 Navigating to:', targetUrl);
 
-    // Close the video modal FIRST so it doesn't sit on top
     this.close();
 
-    // Try Router (most likely)
+    try {
+      window.history.pushState({}, '', targetUrl);
+    } catch (e) {
+      this._log('⚠️ pushState failed:', e.message);
+    }
+
     if (typeof Router !== 'undefined' && typeof Router.navigate === 'function') {
       try {
-        Router.navigate('purchase?' + queryString);
+        Router.navigate('purchase');
         return;
       } catch (e) {
         this._log('⚠️ Router.navigate failed:', e.message);
       }
     }
 
-    // Fallback: hash-based navigation
     try {
-      window.location.hash = '#purchase?' + queryString;
-      // Some routers also need history.pushState — but hash change should fire popstate
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
     } catch (e) {
-      this._log('⚠️ Hash navigation failed:', e.message);
+      this._log('⚠️ popstate dispatch failed:', e.message);
     }
 
-    // Last resort: full page navigation
-    try {
-      window.location.href = '/?page=purchase&' + queryString + window.location.hash;
-    } catch (e) {
-      alert('Could not open purchase page. Please navigate manually.');
-    }
+    window.location.href = targetUrl;
   },
 
   bindModalEvents(videoUrl, release) {
@@ -332,7 +381,6 @@ const VideoPlayerModal = {
       if (e.target === overlay) this.close();
     });
 
-    // v7: Use the new navigation method
     if (buyBtn) {
       buyBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -550,6 +598,7 @@ const VideoPlayerModal = {
     const modal = document.getElementById('video-modal-overlay');
     if (modal) modal.remove();
 
+    this._unlockBodyScroll();
     this.restoreAudioPlayer();
 
     if (this._boundKeyHandler) {
@@ -639,7 +688,7 @@ const VideoPlayerModal = {
       .vpm-overlay {
         position: fixed !important;
         top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-        width: 100vw !important; height: 100vh !important;
+        width: 100vw !important;
         background: rgba(0, 0, 0, 0.95) !important;
         z-index: 999999 !important;
         display: flex !important;
@@ -649,12 +698,15 @@ const VideoPlayerModal = {
         visibility: visible !important;
         pointer-events: auto !important;
         animation: vpm-fade-in 200ms ease;
+        overflow: hidden !important;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: auto;
       }
       @keyframes vpm-fade-in {
         from { opacity: 0; } to { opacity: 1; }
       }
       .vpm-modal {
-        width: 95vw; max-width: 1400px; height: 90vh;
+        width: 95vw; max-width: 1400px;
         display: flex; flex-direction: column;
         background: #000; border-radius: 12px;
         overflow: hidden; position: relative;
@@ -686,7 +738,7 @@ const VideoPlayerModal = {
       .vpm-container {
         flex: 1 1 auto; position: relative; background: #000;
         display: flex; align-items: center; justify-content: center;
-        min-height: 200px; overflow: hidden;
+        min-height: 0; overflow: hidden;
       }
       .vpm-video {
         width: 100%; height: 100%;
@@ -763,11 +815,10 @@ const VideoPlayerModal = {
         font-size: 12px; overflow-y: auto;
         border: 1px solid #ef4444;
       }
-      /* v7: Sticky info bar — always visible */
       .vpm-info {
         display: flex; align-items: center; justify-content: space-between;
         padding: 16px 24px;
-        background: rgba(0, 0, 0, 0.95);
+        background: #000;
         border-top: 1px solid rgba(255, 255, 255, 0.1);
         gap: 16px;
         flex-shrink: 0;
@@ -778,55 +829,77 @@ const VideoPlayerModal = {
       .vpm-price { font-size: 16px; font-weight: 700; color: #ef4444; white-space: nowrap; }
       .vpm-editions { font-size: 14px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; }
       .vpm-buy-btn {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px;
         padding: 10px 24px;
-        background: #ef4444; border: none;
-        border-radius: 8px; color: #fff;
-        font-size: 15px; font-weight: 600;
-        cursor: pointer; transition: all 150ms;
+        background: #ef4444 !important;
+        border: none;
+        border-radius: 8px;
+        color: #fff !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        cursor: pointer;
+        transition: all 150ms;
         white-space: nowrap;
         position: relative;
         z-index: 6;
+        line-height: 1;
+        min-height: 44px;
+        font-family: inherit;
       }
-      .vpm-buy-btn:hover { background: #dc2626; transform: scale(1.05); }
+      .vpm-buy-btn .vpm-buy-icon { font-size: 16px; line-height: 1; }
+      .vpm-buy-btn .vpm-buy-text {
+        color: #fff !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+      }
+      .vpm-buy-btn:hover { background: #dc2626 !important; transform: scale(1.05); }
       .vpm-buy-btn:active { transform: scale(0.98); }
 
       @media (max-width: 768px) {
+        .vpm-overlay {
+          align-items: stretch !important;
+          justify-content: stretch !important;
+        }
         .vpm-modal {
-          width: 100vw; height: 100vh;
-          max-width: 100vw; border-radius: 0;
+          width: 100vw;
+          max-width: 100vw;
+          border-radius: 0;
         }
         .vpm-header {
-          padding: 12px 16px;
-          flex-shrink: 0;
+          padding: 10px 14px;
         }
-        .vpm-title h2 { font-size: 16px; }
-        .vpm-title p { font-size: 13px; }
-        /* v7: video container shrinks so info bar stays visible */
+        .vpm-title h2 { font-size: 15px; }
+        .vpm-title p { font-size: 12px; }
+        .vpm-close { width: 36px; height: 36px; }
         .vpm-container {
-          flex: 1 1 0;
-          min-height: 0;
+          min-height: 120px;
         }
-        /* v7: bottom bar takes ONLY what it needs, sticks to bottom */
         .vpm-info {
-          flex-direction: row;
-          align-items: center;
-          padding: 12px 16px;
-          gap: 12px;
-          flex-shrink: 0;
+          padding: 10px 14px;
+          padding-bottom: max(10px, env(safe-area-inset-bottom));
+          gap: 10px;
           background: #000;
-          padding-bottom: max(12px, env(safe-area-inset-bottom));
+          border-top: 1px solid rgba(255, 255, 255, 0.15);
         }
         .vpm-meta {
           flex-direction: column;
           align-items: flex-start;
           gap: 2px;
+          flex: 1;
         }
         .vpm-price { font-size: 15px; }
-        .vpm-editions { font-size: 12px; }
+        .vpm-editions { font-size: 11px; }
         .vpm-buy-btn {
+          padding: 12px 20px;
+          font-size: 14px !important;
+          min-height: 48px;
           flex-shrink: 0;
-          padding: 12px 18px;
-          font-size: 14px;
+        }
+        .vpm-buy-btn .vpm-buy-text {
+          font-size: 14px !important;
         }
         .vpm-format-title { font-size: 18px; }
         .vpm-format-msg { font-size: 13px; }
