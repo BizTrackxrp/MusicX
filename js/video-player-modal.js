@@ -1,11 +1,14 @@
 /**
- * Video Player Modal — v6
+ * Video Player Modal — v7
  *
- * v6 NEW: Presigned URL support for fil.one
- *   fil.one doesn't yet support public bucket access (Phase 2 feature).
- *   When the modal sees a fil.one URL, it calls /api/get-video-url to get
- *   a 6-hour signed URL, then uses THAT as the video src. Lighthouse URLs
- *   are unchanged — they're already public.
+ * v7 NEW:
+ *   - Sticky buy bar on mobile (always visible, no scroll needed)
+ *   - Buy button now navigates to PurchasePage with correct URL params
+ *   - Tries Router first, falls back to hash navigation
+ *
+ * v6 (preserved):
+ *   - Presigned URL support for fil.one
+ *   - 8s spinner timeout, tap-to-play, format error fallback, diagnostics
  */
 
 const VideoPlayerModal = {
@@ -162,7 +165,6 @@ const VideoPlayerModal = {
     window.addEventListener('resize', this._fixModalHeightBound);
     window.addEventListener('orientationchange', this._fixModalHeightBound);
 
-    // v6 NEW: resolve URL (sign if needed) BEFORE injecting video
     this._resolveUrl(initialUrl)
       .then(resolvedUrl => {
         this._log('🔓 Resolved URL ready');
@@ -184,13 +186,8 @@ const VideoPlayerModal = {
       });
   },
 
-  /**
-   * v6 NEW: If the URL points at fil.one, swap it for a presigned URL.
-   * Lighthouse URLs and IPFS proxy URLs are returned unchanged.
-   */
   async _resolveUrl(url) {
     if (!url) return url;
-
     const isFilOne = url.includes('.fil.one') || url.includes('filecoin');
     if (!isFilOne) return url;
 
@@ -247,6 +244,59 @@ const VideoPlayerModal = {
     }
   },
 
+  /**
+   * v7 NEW: Navigate to the purchase page with correct URL params.
+   * Tries multiple navigation paths because Router pattern varies.
+   */
+  _navigateToPurchase(release) {
+    const releaseId = release.id;
+    if (!releaseId) {
+      alert('Cannot start purchase — release ID missing.');
+      return;
+    }
+
+    // Films are single-track sales
+    const track = release.tracks?.[0];
+    const trackId = track?.id;
+
+    // Build query string
+    const params = new URLSearchParams();
+    params.set('release', releaseId);
+    if (trackId) params.set('track', trackId);
+
+    const queryString = params.toString();
+
+    this._log('🛒 Navigating to purchase:', queryString);
+
+    // Close the video modal FIRST so it doesn't sit on top
+    this.close();
+
+    // Try Router (most likely)
+    if (typeof Router !== 'undefined' && typeof Router.navigate === 'function') {
+      try {
+        Router.navigate('purchase?' + queryString);
+        return;
+      } catch (e) {
+        this._log('⚠️ Router.navigate failed:', e.message);
+      }
+    }
+
+    // Fallback: hash-based navigation
+    try {
+      window.location.hash = '#purchase?' + queryString;
+      // Some routers also need history.pushState — but hash change should fire popstate
+    } catch (e) {
+      this._log('⚠️ Hash navigation failed:', e.message);
+    }
+
+    // Last resort: full page navigation
+    try {
+      window.location.href = '/?page=purchase&' + queryString + window.location.hash;
+    } catch (e) {
+      alert('Could not open purchase page. Please navigate manually.');
+    }
+  },
+
   bindModalEvents(videoUrl, release) {
     this.videoElement = document.getElementById('video-player');
     const loadingEl = document.getElementById('video-loading');
@@ -282,14 +332,16 @@ const VideoPlayerModal = {
       if (e.target === overlay) this.close();
     });
 
+    // v7: Use the new navigation method
     if (buyBtn) {
-      buyBtn.addEventListener('click', () => {
-        if (this.videoElement) this.videoElement.pause();
-        if (typeof Modals !== 'undefined' && typeof Modals.showPurchase === 'function') {
-          Modals.showPurchase(release);
-        } else {
-          alert('Purchase system not available. Please refresh the page.');
+      buyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this._log('🛒 Buy NFT clicked');
+        if (this.videoElement) {
+          try { this.videoElement.pause(); } catch (e) {}
         }
+        this._navigateToPurchase(release);
       });
     }
 
@@ -711,16 +763,20 @@ const VideoPlayerModal = {
         font-size: 12px; overflow-y: auto;
         border: 1px solid #ef4444;
       }
+      /* v7: Sticky info bar — always visible */
       .vpm-info {
         display: flex; align-items: center; justify-content: space-between;
         padding: 16px 24px;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.95);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
-        gap: 16px; flex-shrink: 0;
+        gap: 16px;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 5;
       }
-      .vpm-meta { display: flex; align-items: center; gap: 24px; flex: 1; }
-      .vpm-price { font-size: 16px; font-weight: 700; color: #ef4444; }
-      .vpm-editions { font-size: 14px; color: rgba(255, 255, 255, 0.7); }
+      .vpm-meta { display: flex; align-items: center; gap: 24px; flex: 1; min-width: 0; }
+      .vpm-price { font-size: 16px; font-weight: 700; color: #ef4444; white-space: nowrap; }
+      .vpm-editions { font-size: 14px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; }
       .vpm-buy-btn {
         padding: 10px 24px;
         background: #ef4444; border: none;
@@ -728,23 +784,50 @@ const VideoPlayerModal = {
         font-size: 15px; font-weight: 600;
         cursor: pointer; transition: all 150ms;
         white-space: nowrap;
+        position: relative;
+        z-index: 6;
       }
       .vpm-buy-btn:hover { background: #dc2626; transform: scale(1.05); }
       .vpm-buy-btn:active { transform: scale(0.98); }
+
       @media (max-width: 768px) {
         .vpm-modal {
           width: 100vw; height: 100vh;
           max-width: 100vw; border-radius: 0;
         }
-        .vpm-header { padding: 12px 16px; }
+        .vpm-header {
+          padding: 12px 16px;
+          flex-shrink: 0;
+        }
         .vpm-title h2 { font-size: 16px; }
         .vpm-title p { font-size: 13px; }
-        .vpm-info {
-          flex-direction: column; align-items: stretch;
-          padding: 12px 16px;
+        /* v7: video container shrinks so info bar stays visible */
+        .vpm-container {
+          flex: 1 1 0;
+          min-height: 0;
         }
-        .vpm-meta { width: 100%; justify-content: space-between; }
-        .vpm-buy-btn { width: 100%; }
+        /* v7: bottom bar takes ONLY what it needs, sticks to bottom */
+        .vpm-info {
+          flex-direction: row;
+          align-items: center;
+          padding: 12px 16px;
+          gap: 12px;
+          flex-shrink: 0;
+          background: #000;
+          padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+        .vpm-meta {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+        }
+        .vpm-price { font-size: 15px; }
+        .vpm-editions { font-size: 12px; }
+        .vpm-buy-btn {
+          flex-shrink: 0;
+          padding: 12px 18px;
+          font-size: 14px;
+        }
         .vpm-format-title { font-size: 18px; }
         .vpm-format-msg { font-size: 13px; }
       }
