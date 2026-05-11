@@ -1,48 +1,36 @@
 /**
  * XRP Music - Releases API
  * Vercel Serverless Function
- * 
- * With lazy minting, releases are "live" when mint_fee_paid = true.
- * NFTs mint on-demand at purchase time, not upfront.
- * 
- * DRAFT SYSTEM:
- * - status='draft' releases are saved but not minted
- * - visibility='private': only artist sees (+ anyone with direct link)
- * - visibility='public': shows on artist's profile page with "Coming Soon" badge
+ *
+ * v2 (May 2026):
+ * ✅ createRelease now honors mintFeePaid, mintFeeTxHash, paymentAmount,
+ *    status, and accessType passed from the upload flow.
+ * ✅ Defaults: if mintFeePaid=true is sent, status defaults to 'live'
+ *    (still overridable). This kills the "paid but stuck on draft" bug.
+ * ✅ accessType written to access_type column (films / NFT-gated viewing).
+ *
+ * Other notes unchanged from v1:
+ * - With lazy minting, releases are "live" when mint_fee_paid = true.
+ * - status='draft' = saved but not minted
+ * - visibility='private': only artist sees
+ * - visibility='public': shows on artist's profile with "Coming Soon" badge
  * - Drafts NEVER appear in Stream, Marketplace, search, or genre pages
- * 
- * Visibility rules:
- * - Public pages: show is_minted = true OR mint_fee_paid = true OR r.status = 'live'
- * - Public feeds (Stream/Marketplace): when ?feed=true, additionally require artist has >= 20 XRP in total sales
- * - Artist's own page (includeUnminted=true): show ALL their releases (including drafts)
- * - Artist's public page: show live releases + public drafts (visibility='public')
- * - Single release by ID: always visible (for purchase flow, direct links, draft preview)
- * 
- * CONTENT TYPE FILTERING:
- * - Stream/Marketplace pages: show ALL content types (no filter)
- * - Audiobooks page (?contentType=audiobook): audiobook releases only
- * - Podcasts page (?contentType=podcast): podcast releases only
- * - Stats/totals: count ALL content types (no filter)
- * - Player queue: frontend filters to music only (not handled here)
- * 
- * TRACK UPDATES:
- * - Tracks are updated IN PLACE (not deleted + re-inserted) to preserve
- *   foreign key references from plays, sales, and nfts tables.
+ * - Tracks updated IN PLACE to preserve FK references
  */
 
 import { neon } from '@neondatabase/serverless';
 
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
-  
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   try {
     if (req.method === 'GET') {
       return await getReleases(req, res, sql);
@@ -53,7 +41,7 @@ export default async function handler(req, res) {
     } else if (req.method === 'DELETE') {
       return await deleteRelease(req, res, sql);
     }
-    
+
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Releases API error:', error);
@@ -63,12 +51,12 @@ export default async function handler(req, res) {
 
 async function getReleases(req, res, sql) {
   const { artist, id, includeUnminted, feed, contentType } = req.query;
-  
+
   let releases;
-  
+
   if (id) {
     releases = await sql`
-      SELECT r.*, 
+      SELECT r.*,
         p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
@@ -98,18 +86,18 @@ async function getReleases(req, res, sql) {
       WHERE r.id = ${id}
       GROUP BY r.id, p.avatar_url
     `;
-    
+
     if (releases.length === 0) {
       return res.status(404).json({ error: 'Release not found' });
     }
-    
+
     return res.json({ release: formatRelease(releases[0]) });
   }
-  
+
   if (artist) {
     if (includeUnminted === 'true') {
       releases = await sql`
-        SELECT r.*, 
+        SELECT r.*,
           p.avatar_url as artist_avatar,
           COALESCE(
             json_agg(
@@ -142,7 +130,7 @@ async function getReleases(req, res, sql) {
       `;
     } else {
       releases = await sql`
-        SELECT r.*, 
+        SELECT r.*,
           p.avatar_url as artist_avatar,
           COALESCE(
             json_agg(
@@ -180,7 +168,7 @@ async function getReleases(req, res, sql) {
     }
   } else if (feed === 'true') {
     releases = await sql`
-      SELECT r.*, 
+      SELECT r.*,
         p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
@@ -216,12 +204,8 @@ async function getReleases(req, res, sql) {
       ORDER BY r.created_at DESC
     `;
   } else if (contentType) {
-    // ============================================================
-    // CONTENT TYPE FILTERED (Audiobooks or Podcasts pages)
-    // Show only releases matching the specified content type
-    // ============================================================
     releases = await sql`
-      SELECT r.*, 
+      SELECT r.*,
         p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
@@ -252,12 +236,8 @@ async function getReleases(req, res, sql) {
       ORDER BY r.created_at DESC
     `;
   } else {
-    // ============================================================
-    // UNFILTERED (Stream page, stats, everything else)
-    // Show ALL content types - NO contentType filter
-    // ============================================================
     releases = await sql`
-      SELECT r.*, 
+      SELECT r.*,
         p.avatar_url as artist_avatar,
         COALESCE(
           json_agg(
@@ -287,10 +267,13 @@ async function getReleases(req, res, sql) {
       ORDER BY r.created_at DESC
     `;
   }
-  
+
   return res.json({ releases: releases.map(formatRelease) });
 }
 
+// ============================================================
+// v2: createRelease — now honors payment & status fields
+// ============================================================
 async function createRelease(req, res, sql) {
   const {
     artistAddress,
@@ -312,14 +295,39 @@ async function createRelease(req, res, sql) {
     visibility,
     draftGenres,
     contentType = 'music',
+    // ⚡ NEW: payment + status fields (films.js sends all of these)
+    mintFeePaid,
+    mintFeeTxHash,
+    mintFeeAmount,
+    paymentAmount,    // legacy alias from films.js
+    status,           // 'live' or 'draft'
+    accessType,       // 'public' or 'nft_holders'
   } = req.body;
-  
+
   if (!artistAddress || !title || !type) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
-  
+
   const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
+  // ⚡ Status logic:
+  //   - If client explicitly sends a status, use it
+  //   - Otherwise: paid = live, unpaid = draft
+  const paidFlag = mintFeePaid === true;
+  const resolvedStatus = status || (paidFlag ? 'live' : 'draft');
+
+  // Accept either mintFeeAmount or paymentAmount as the fee amount
+  const resolvedMintFeeAmount = mintFeeAmount ?? paymentAmount ?? null;
+
+  // accessType — only set if provided, defaults to 'public' for films later
+  const resolvedAccessType = accessType || 'public';
+
+  console.log('📝 createRelease:', {
+    releaseId, title, contentType,
+    paidFlag, resolvedStatus, resolvedAccessType,
+    songPrice, totalEditions,
+  });
+
   const [release] = await sql`
     INSERT INTO releases (
       id,
@@ -341,10 +349,13 @@ async function createRelease(req, res, sql) {
       sell_offer_index,
       is_minted,
       mint_fee_paid,
+      mint_fee_tx_hash,
+      mint_fee_amount,
       status,
       visibility,
       draft_genres,
       content_type,
+      access_type,
       created_at
     ) VALUES (
       ${releaseId},
@@ -356,7 +367,7 @@ async function createRelease(req, res, sql) {
       ${coverUrl || null},
       ${coverCid || null},
       ${metadataCid || null},
-      ${songPrice || 0},
+      ${songPrice !== undefined && songPrice !== null ? songPrice : 0},
       ${albumPrice || null},
       ${totalEditions || 100},
       0,
@@ -365,21 +376,29 @@ async function createRelease(req, res, sql) {
       ${txHash || null},
       ${sellOfferIndex || null},
       false,
-      false,
-      'draft',
-      ${visibility || 'private'},
+      ${paidFlag},
+      ${mintFeeTxHash || null},
+      ${resolvedMintFeeAmount},
+      ${resolvedStatus},
+      ${visibility || (resolvedStatus === 'live' ? 'public' : 'private')},
       ${draftGenres ? JSON.stringify(draftGenres) : null},
       ${contentType},
+      ${resolvedAccessType},
       NOW()
     )
     RETURNING *
   `;
-  
+
   const trackIds = [];
   if (tracks && tracks.length > 0) {
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
       const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // ⚡ If track doesn't have its own metadataCid, fall back to release-level metadataCid.
+      // broker-sale reads tracks.metadata_cid — without this, films couldn't be sold.
+      const trackMetadataCid = track.metadataCid || metadataCid || null;
+
       await sql`
         INSERT INTO tracks (
           id,
@@ -407,7 +426,7 @@ async function createRelease(req, res, sql) {
           ${track.duration || null},
           ${track.audioCid || null},
           ${track.audioUrl || null},
-          ${track.metadataCid || null},
+          ${trackMetadataCid},
           0,
           0,
           ${i + 1},
@@ -422,22 +441,26 @@ async function createRelease(req, res, sql) {
       trackIds.push(trackId);
     }
   }
-  
-  return res.json({ 
-    success: true, 
+
+  console.log('✅ Release saved:', release.id, 'status=', release.status, 'paid=', release.mint_fee_paid);
+
+  return res.json({
+    success: true,
     releaseId: release.id,
-    trackIds: trackIds
+    trackIds: trackIds,
+    status: release.status,
+    mintFeePaid: release.mint_fee_paid,
   });
 }
 
 async function updateRelease(req, res, sql) {
   const { id } = req.query;
   const updates = req.body;
-  
+
   if (!id) {
     return res.status(400).json({ error: 'Missing release ID' });
   }
-  
+
   const nftTokenIds = updates.nftTokenIds || null;
   const txHash = updates.txHash || null;
   const sellOfferIndex = updates.sellOfferIndex || null;
@@ -450,7 +473,8 @@ async function updateRelease(req, res, sql) {
   const visibility = updates.visibility || null;
   const draftGenres = updates.draftGenres !== undefined ? JSON.stringify(updates.draftGenres) : null;
   const contentType = updates.contentType || null;
-  
+  const accessType = updates.accessType || null;
+
   const title = updates.title || null;
   const description = updates.description !== undefined ? updates.description : null;
   const songPrice = updates.songPrice !== undefined ? updates.songPrice : null;
@@ -459,7 +483,7 @@ async function updateRelease(req, res, sql) {
   const royaltyPercent = updates.royaltyPercent !== undefined ? updates.royaltyPercent : null;
   const coverUrl = updates.coverUrl || null;
   const coverCid = updates.coverCid || null;
-  
+
   const [updated] = await sql`
     UPDATE releases
     SET
@@ -475,6 +499,7 @@ async function updateRelease(req, res, sql) {
       visibility = COALESCE(${visibility}, visibility),
       draft_genres = COALESCE(${draftGenres}, draft_genres),
       content_type = COALESCE(${contentType}, content_type),
+      access_type = COALESCE(${accessType}, access_type),
       title = COALESCE(${title}, title),
       description = COALESCE(${description}, description),
       song_price = COALESCE(${songPrice}, song_price),
@@ -486,19 +511,19 @@ async function updateRelease(req, res, sql) {
     WHERE id = ${id}
     RETURNING *
   `;
-  
+
   if (!updated) {
     return res.status(404).json({ error: 'Release not found' });
   }
-  
+
   if (updates.tracks && Array.isArray(updates.tracks) && updates.tracks.length > 0) {
     const existingTracks = await sql`
       SELECT id, track_order FROM tracks WHERE release_id = ${id} ORDER BY track_order
     `;
-    
+
     for (let i = 0; i < updates.tracks.length; i++) {
       const track = updates.tracks[i];
-      
+
       if (i < existingTracks.length) {
         await sql`
           UPDATE tracks SET
@@ -537,40 +562,40 @@ async function updateRelease(req, res, sql) {
       }
     }
   }
-  
-  return res.json({ 
-    success: true, 
+
+  return res.json({
+    success: true,
     release: formatRelease(updated)
   });
 }
 
 async function deleteRelease(req, res, sql) {
   const { id } = req.query;
-  
+
   if (!id) {
     return res.status(400).json({ error: 'Missing release ID' });
   }
-  
+
   console.log('🗑️ Deleting release:', id);
-  
+
   try {
     const sales = await sql`
       SELECT COUNT(*) as count FROM sales WHERE release_id = ${id}
     `;
-    
+
     if (parseInt(sales[0]?.count) > 0) {
       console.log('❌ Cannot delete release with sales');
-      return res.status(400).json({ 
-        error: 'Cannot delete release that has sales. Contact support.' 
+      return res.status(400).json({
+        error: 'Cannot delete release that has sales. Contact support.'
       });
     }
-    
+
     const deletedNfts = await sql`
       DELETE FROM nfts WHERE release_id = ${id}
       RETURNING id
     `;
     console.log(`  Deleted ${deletedNfts.length} NFT records`);
-    
+
     const trackIds = await sql`
       SELECT id FROM tracks WHERE release_id = ${id}
     `;
@@ -579,13 +604,13 @@ async function deleteRelease(req, res, sql) {
       await sql`DELETE FROM plays WHERE track_id = ANY(${ids})`;
       console.log(`  Deleted play records for ${ids.length} tracks`);
     }
-    
+
     const deletedTracks = await sql`
       DELETE FROM tracks WHERE release_id = ${id}
       RETURNING id
     `;
     console.log(`  Deleted ${deletedTracks.length} track records`);
-    
+
     try {
       const deletedJobs = await sql`
         DELETE FROM mint_jobs WHERE release_id = ${id}
@@ -595,27 +620,27 @@ async function deleteRelease(req, res, sql) {
     } catch (e) {
       // Table might not exist
     }
-    
+
     const deletedRelease = await sql`
       DELETE FROM releases WHERE id = ${id}
       RETURNING id
     `;
-    
+
     if (deletedRelease.length === 0) {
       return res.status(404).json({ error: 'Release not found' });
     }
-    
+
     console.log('✅ Successfully deleted release:', id);
-    
-    return res.json({ 
-      success: true, 
+
+    return res.json({
+      success: true,
       deleted: {
         releaseId: id,
         nfts: deletedNfts.length,
         tracks: deletedTracks.length
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Delete release error:', error);
     return res.status(500).json({ error: 'Failed to delete release: ' + error.message });
@@ -653,6 +678,7 @@ function formatRelease(row) {
     visibility: row.visibility || 'private',
     draftGenres: row.draft_genres || null,
     contentType: row.content_type || 'music',
+    accessType: row.access_type || 'public',
     createdAt: row.created_at,
     tracks: row.tracks || [],
   };
@@ -663,7 +689,7 @@ function calculateSoldEditions(row) {
   if (tracks.length === 0) {
     return row.sold_editions || 0;
   }
-  
+
   let maxSold = 0;
   for (const track of tracks) {
     const trackSold = parseInt(track.soldCount) || 0;
@@ -671,6 +697,6 @@ function calculateSoldEditions(row) {
       maxSold = trackSold;
     }
   }
-  
+
   return maxSold;
 }
