@@ -1,20 +1,20 @@
 /**
  * XRP Music - Purchase API (Single-Signature Flow)
- * 
+ *
+ * v2 FIXES (May 2026):
+ * ✅ handleConfirmSale now verifies the buyer's NFTokenAcceptOffer tx
+ *    actually succeeded on-chain BEFORE writing to DB. If the tx failed
+ *    (e.g. tecNO_PERMISSION because the wrong wallet signed), the sale
+ *    is NOT recorded and the buyer gets a clear error.
+ * ✅ Also verifies the tx's signer matches the buyerAddress we expected,
+ *    so a wrong wallet signing can never produce a fake sale row.
+ *
  * NEW FLOW (1 buyer signature):
  * 1. Frontend calls 'prepare' → API mints NFT + creates sell offer for full price
  * 2. Frontend has buyer sign NFTokenAcceptOffer (ONLY signature)
- * 3. Frontend calls 'confirm' → API pays artist 98%, records sale
- * 
+ * 3. Frontend calls 'confirm' → API verifies tx on-chain, then pays artist + records sale
+ *
  * Supports LAZY MINT (mint_fee_paid=true) and LEGACY (is_minted=true)
- * 
- * FIX: Stale trackId fallback - falls back to first track if trackId not found
- * FIX: overridePrice support in handlePrepare for album discount pricing
- * FIX: Retry logic on sell offer creation (intermittent xrpl.js validation errors)
- * FIX: Batch cancel of stale offers with ledger settle delay
- * FIX: Address validation before XRPL calls
- * FIX: tecNO_ENTRY recovery — stale DB NFTs auto-invalidated, fresh lazy mint retry
- * FIX: Post-mint ledger propagation delay to prevent race conditions
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -24,18 +24,19 @@ const PLATFORM_FEE_PERCENT = 2;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
 const POST_MINT_DELAY_MS = 2500; // Wait for ledger propagation after minting
+const TX_VERIFY_MAX_ATTEMPTS = 6; // ~12 seconds total — gives ledger time to validate
 
 // ─── Notification Helpers ────────────────────────────────────────────
 
 async function createArtistSaleNotification(sql, sale) {
   const { artistAddress, trackTitle, releaseTitle, price, editionNumber, totalEditions } = sale;
   if (!artistAddress) return;
-  
+
   try {
     const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const title = `1 copy of "${trackTitle || releaseTitle}" sold!`;
     const message = `Edition #${editionNumber}${totalEditions ? ` of ${totalEditions}` : ''}`;
-    
+
     await sql`
       INSERT INTO artist_notifications (id, artist_address, type, title, message, release_id, track_id, amount, created_at)
       VALUES (${id}, ${artistAddress}, 'sale', ${title}, ${message}, ${sale.releaseId || null}, ${sale.trackId || null}, ${price}, NOW())
@@ -154,7 +155,7 @@ function resolveTargetTrack(release, trackId) {
 
 function extractNFTokenID(meta) {
   if (!meta?.AffectedNodes) return null;
-  
+
   for (const node of meta.AffectedNodes) {
     if (node.CreatedNode?.LedgerEntryType === 'NFTokenPage') {
       const nfts = node.CreatedNode.NewFields?.NFTokens;
@@ -178,7 +179,7 @@ function extractNFTokenID(meta) {
 
 async function getReleaseWithTracks(sql, releaseId) {
   const releases = await sql`
-    SELECT r.*, 
+    SELECT r.*,
       COALESCE(
         json_agg(
           json_build_object(
@@ -201,7 +202,6 @@ async function getReleaseWithTracks(sql, releaseId) {
 
 /**
  * Cancel all platform-owned sell offers for an NFT.
- * Batches into a single transaction and waits for ledger to settle.
  */
 async function cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId) {
   try {
@@ -218,11 +218,9 @@ async function cancelExistingOffers(client, platformWallet, platformAddress, nft
       const signedCancel = platformWallet.sign(cancelTx);
       const cancelResult = await client.submitAndWait(signedCancel.tx_blob);
       console.log(`🧹 Cancel result: ${cancelResult.result.meta.TransactionResult}`);
-      // Wait for ledger to settle before creating new offer
       await new Promise(r => setTimeout(r, 1500));
     }
   } catch (e) {
-    // "object was not found" means no offers exist — that's fine
     if (!e.message?.includes('object was not found')) {
       console.warn('⚠️ Offer cancel warning:', e.message);
     }
@@ -231,18 +229,12 @@ async function cancelExistingOffers(client, platformWallet, platformAddress, nft
 
 /**
  * Create a sell offer with retry logic.
- * Handles intermittent xrpl.js validation errors by reconnecting and retrying.
- * Now also treats tecNO_ENTRY as a non-retryable error (caller should handle recovery).
- * Returns { sellOfferIndex, offerResult } on success, throws on failure.
  */
 async function createSellOfferWithRetry(client, platformWallet, platformAddress, nftTokenId, priceInDrops, buyerAddress, maxAttempts = 3) {
   let lastError = null;
-  
-  // PRE-FLIGHT: Check buyer account and platform reserve (skip NFT check — 
-  // account_nfts has a 400 limit and platform holds 6000+ NFTs, so paginated
-  // lookup is too slow. We trust the DB/mint result instead.)
+
+  // PRE-FLIGHT: Check buyer account and platform reserve
   try {
-    // 1. Verify buyer account exists on ledger
     try {
       const buyerInfo = await client.request({ command: 'account_info', account: buyerAddress });
       const buyerBalance = buyerInfo.result.account_data?.Balance;
@@ -253,18 +245,17 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
       }
       console.warn('⚠️ Could not verify buyer account:', e.message);
     }
-    
-    // 2. Check platform reserve
+
     try {
       const platformInfo = await client.request({ command: 'account_info', account: platformAddress });
       const balance = parseInt(platformInfo.result.account_data?.Balance || '0');
       const ownerCount = platformInfo.result.account_data?.OwnerCount || 0;
-      const reserveBase = 1000000; // 1 XRP base reserve (in drops)
-      const reserveInc = 200000;  // 0.2 XRP per owned object (in drops)
+      const reserveBase = 1000000;
+      const reserveInc = 200000;
       const totalReserve = reserveBase + (ownerCount * reserveInc);
       const available = balance - totalReserve;
       console.log(`🔍 Pre-flight: Platform balance: ${balance/1000000} XRP, ownerCount: ${ownerCount}, reserve: ${totalReserve/1000000} XRP, available: ${available/1000000} XRP`);
-      
+
       if (available < 200000) {
         throw new Error(`Platform wallet reserve too low (${(available/1000000).toFixed(2)} XRP available). Cannot create sell offer.`);
       }
@@ -276,7 +267,7 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
     console.error('❌ Pre-flight check failed:', preflightError.message);
     throw preflightError;
   }
-  
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       console.log(`🔍 Creating sell offer (attempt ${attempt}/${maxAttempts}):`, {
@@ -284,19 +275,19 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
         priceInDrops,
         buyerAddress,
       });
-      
+
       const createOfferTx = await client.autofill({
         TransactionType: 'NFTokenCreateOffer',
         Account: platformAddress,
         NFTokenID: nftTokenId,
         Amount: priceInDrops,
-        Flags: 1, // tfSellNFToken
+        Flags: 1,
         Destination: buyerAddress,
       });
-      
+
       const signedOffer = platformWallet.sign(createOfferTx);
       const offerResult = await client.submitAndWait(signedOffer.tx_blob);
-      
+
       if (offerResult.result.meta.TransactionResult === 'tesSUCCESS') {
         let sellOfferIndex = null;
         for (const node of offerResult.result.meta.AffectedNodes) {
@@ -316,24 +307,20 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
           buyerAddress,
           txHash: offerResult.result.hash,
         }));
-        
-        // tecNO_ENTRY means the NFT doesn't exist on-chain — retrying won't help.
-        // Throw immediately so the caller can handle recovery (e.g. fresh lazy mint).
+
         if (txResult === 'tecNO_ENTRY') {
           throw lastError;
         }
       }
     } catch (offerError) {
       lastError = offerError;
-      
-      // tecNO_ENTRY: bail out immediately — caller handles recovery
+
       if (offerError.message?.includes('tecNO_ENTRY')) {
         throw offerError;
       }
-      
+
       console.warn(`⚠️ Attempt ${attempt} error: ${offerError.message}`);
-      
-      // If validation error, reconnect — stale connection state can cause this
+
       if (offerError.message?.includes('invalid field') || offerError.message?.includes('ValidationError')) {
         console.log('🔄 Reconnecting to XRPL...');
         try { await client.disconnect(); } catch (e) {}
@@ -341,79 +328,143 @@ async function createSellOfferWithRetry(client, platformWallet, platformAddress,
         await client.connect();
       }
     }
-    
-    // Backoff before retry
+
     if (attempt < maxAttempts) {
       await new Promise(r => setTimeout(r, 1000 * attempt));
     }
   }
-  
+
   throw lastError || new Error('Failed to create sell offer after all attempts');
+}
+
+/**
+ * ⚡ NEW (v2): Verify an XRPL transaction exists and succeeded.
+ * Polls for up to ~12 seconds because validated state can lag a few seconds
+ * behind submission. Returns the tx object on success, throws otherwise.
+ */
+async function verifyTransactionSuccess(client, txHash, expectedAccount = null) {
+  if (!txHash || typeof txHash !== 'string' || txHash.length < 32) {
+    throw new Error('Invalid transaction hash');
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= TX_VERIFY_MAX_ATTEMPTS; attempt++) {
+    try {
+      const txResponse = await client.request({
+        command: 'tx',
+        transaction: txHash,
+      });
+      const tx = txResponse.result;
+
+      // Validated yet?
+      if (!tx.validated) {
+        lastError = new Error('Transaction not yet validated');
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+
+      // Check result
+      const txResult = tx.meta?.TransactionResult;
+      if (txResult !== 'tesSUCCESS') {
+        throw new Error(`Transaction failed on-chain: ${txResult}`);
+      }
+
+      // Verify signer if requested
+      if (expectedAccount) {
+        const actualSigner = tx.Account || tx.tx_json?.Account;
+        if (actualSigner !== expectedAccount) {
+          throw new Error(
+            `Transaction signer mismatch — expected ${expectedAccount} but tx was signed by ${actualSigner}. ` +
+            `This usually means the wrong wallet was selected in Xaman.`
+          );
+        }
+      }
+
+      // Verify it's actually an NFTokenAcceptOffer
+      const txType = tx.TransactionType || tx.tx_json?.TransactionType;
+      if (txType !== 'NFTokenAcceptOffer') {
+        throw new Error(`Expected NFTokenAcceptOffer but got ${txType}`);
+      }
+
+      console.log(`✅ Tx verified: ${txHash.substring(0, 16)}... result=${txResult} signer=${tx.Account || tx.tx_json?.Account}`);
+      return tx;
+
+    } catch (e) {
+      lastError = e;
+      // 'txnNotFound' = ledger doesn't see it yet; retry
+      if (e.message?.includes('txnNotFound') || e.data?.error === 'txnNotFound') {
+        console.log(`⏳ Tx not yet on ledger (attempt ${attempt}/${TX_VERIFY_MAX_ATTEMPTS}), waiting...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      // Any other error is final
+      throw e;
+    }
+  }
+
+  throw lastError || new Error('Could not verify transaction within timeout');
 }
 
 // ─── Route Handler ───────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
-  
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
+
   const { action } = req.body;
-  
+
   if (action === 'check') return handleAvailabilityCheck(req, res, sql);
   if (action === 'prepare') return handlePrepare(req, res, sql);
   if (action === 'confirm') return handleConfirmSale(req, res, sql);
   if (action === 'refund-discount') return handleRefundDiscount(req, res, sql);
-  
-  // Legacy fallback: old 2-signature flow (still works if needed)
+
   return handleLegacyPurchase(req, res, sql);
 }
 
-// ─── PRE-CHECK: Verify availability BEFORE purchase ──────────────────
+// ─── PRE-CHECK ───────────────────────────────────────────────────────
 
 async function handleAvailabilityCheck(req, res, sql) {
   try {
     const { releaseId, trackId } = req.body;
     if (!releaseId) return res.status(400).json({ error: 'Release ID required' });
-    
+
     const release = await getReleaseWithTracks(sql, releaseId);
     if (!release) return res.status(404).json({ available: false, error: 'Release not found' });
     if (!isReleaseAvailable(release)) return res.status(400).json({ available: false, error: 'Release not yet available for purchase' });
-    
+
     const resolved = resolveTargetTrack(release, trackId);
     if (!resolved) return res.status(400).json({ available: false, error: 'No tracks found for this release' });
-    
+
     const { targetTrack } = resolved;
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
-    
+
     if (isLazyMintRelease(release)) {
       const soldCount = targetTrack.sold_count || 0;
       const totalEditions = release.total_editions || 0;
       const availableCount = totalEditions - soldCount;
-      
+
       if (availableCount <= 0) {
         return res.json({ available: false, error: `"${targetTrack.title}" is sold out`, soldOut: true });
       }
       return res.json({ available: true, availableCount, trackTitle: targetTrack.title, price, releaseType: 'lazy_mint' });
     }
-    
-    // Legacy: check nfts table then on-chain
+
     const availableNfts = await sql`
-      SELECT COUNT(*) as count FROM nfts 
+      SELECT COUNT(*) as count FROM nfts
       WHERE track_id = ${resolved.targetTrackId} AND status = 'available'
     `;
     const availableCount = parseInt(availableNfts[0]?.count) || 0;
-    
+
     if (availableCount > 0) {
       return res.json({ available: true, availableCount, trackTitle: targetTrack.title, price, releaseType: 'legacy_db' });
     }
-    
-    // Check on-chain
+
     if (targetTrack.metadata_cid) {
       try {
         const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
@@ -421,10 +472,10 @@ async function handleAvailabilityCheck(req, res, sql) {
         await client.connect();
         const nftsResponse = await client.request({ command: 'account_nfts', account: platformAddress, limit: 400 });
         await client.disconnect();
-        
+
         const expectedUri = xrpl.convertStringToHex(`ipfs://${targetTrack.metadata_cid}`);
         const matchingNfts = (nftsResponse.result.account_nfts || []).filter(n => n.URI === expectedUri);
-        
+
         if (matchingNfts.length > 0) {
           return res.json({ available: true, availableCount: matchingNfts.length, trackTitle: targetTrack.title, price, releaseType: 'legacy_onchain' });
         }
@@ -432,7 +483,7 @@ async function handleAvailabilityCheck(req, res, sql) {
         console.error('On-chain check failed:', e.message);
       }
     }
-    
+
     return res.json({ available: false, error: `"${targetTrack.title}" is sold out`, soldOut: true });
   } catch (error) {
     console.error('Availability check error:', error);
@@ -440,43 +491,50 @@ async function handleAvailabilityCheck(req, res, sql) {
   }
 }
 
-// ─── Prepare purchase (mint + create priced sell offer) ──────────────
+// ─── Prepare purchase ────────────────────────────────────────────────
 
 async function handlePrepare(req, res, sql) {
   try {
     const { releaseId, trackId, buyerAddress, overridePrice } = req.body;
-    
+
     if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    
-    // Validate buyer address format
+
     const cleanBuyerAddress = String(buyerAddress).trim();
     if (!cleanBuyerAddress.startsWith('r') || cleanBuyerAddress.length < 25 || cleanBuyerAddress.length > 35) {
       console.error('❌ Invalid buyer address:', cleanBuyerAddress, 'length:', cleanBuyerAddress.length);
       return res.status(400).json({ error: 'Invalid buyer address format' });
     }
-    
+
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
     const platformSeed = process.env.PLATFORM_WALLET_SEED;
     if (!platformAddress || !platformSeed) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
-    
+
     const release = await getReleaseWithTracks(sql, releaseId);
     if (!release) return res.status(404).json({ error: 'Release not found' });
     if (!isReleaseAvailable(release)) return res.status(400).json({ error: 'Release not available for purchase' });
-    
+
     const resolved = resolveTargetTrack(release, trackId);
     if (!resolved) return res.status(400).json({ error: 'No track found' });
-    
+
     const { targetTrack, targetTrackId } = resolved;
     const price = overridePrice ? parseFloat(overridePrice) : (parseFloat(release.song_price) || parseFloat(release.album_price) || 0);
     console.log('💰 Price debug:', { overridePrice, songPrice: release.song_price, albumPrice: release.album_price, finalPrice: price });
     const artistAddress = release.artist_address;
     const useLazyMint = isLazyMintRelease(release);
-    
-    // Check sold out for lazy mint
+
+    // ⚡ NEW (v2): Prevent self-purchase. The platform creates a sell offer with
+    // Destination: buyerAddress, and the buyer must sign NFTokenAcceptOffer.
+    // If buyer === artist (seller), XRPL rejects with tecNO_PERMISSION.
+    if (cleanBuyerAddress === artistAddress) {
+      return res.status(400).json({
+        error: 'You cannot buy your own NFT. Try purchasing from a different wallet.',
+      });
+    }
+
     if (useLazyMint) {
       const soldCount = targetTrack.sold_count || 0;
       const totalEditions = release.total_editions || 0;
@@ -484,29 +542,24 @@ async function handlePrepare(req, res, sql) {
         return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
       }
     }
-    
-    // Connect to XRPL
+
     const client = new xrpl.Client('wss://s1.ripple.com');
     await client.connect();
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-    
+
     let nftTokenId = null;
     let editionNumber = null;
     let nftRecordId = null;
     let didLazyMint = false;
     let usedDbRecord = false;
-    
+
     try {
-      // STEP 1: Get or mint NFT
-      // Trust the DB records — do NOT try to verify via account_nfts because
-      // the platform holds 6000+ NFTs and account_nfts only returns 400 per page.
-      // Paginating would be too slow for a purchase flow.
       const availableNfts = await sql`
-        SELECT * FROM nfts 
+        SELECT * FROM nfts
         WHERE track_id = ${targetTrackId} AND status = 'available'
         ORDER BY edition_number ASC LIMIT 1
       `;
-      
+
       if (availableNfts.length > 0) {
         const nftRecord = availableNfts[0];
         nftTokenId = nftRecord.nft_token_id;
@@ -515,37 +568,31 @@ async function handlePrepare(req, res, sql) {
         usedDbRecord = true;
         console.log('📦 Using NFT from database:', nftTokenId);
         await sql`UPDATE nfts SET status = 'pending' WHERE id = ${nftRecord.id}`;
-        
+
       } else if (!useLazyMint) {
-        // Legacy without DB records: this shouldn't happen for batch-minted releases
-        // but handle gracefully
         if (!targetTrack.metadata_cid) {
           await client.disconnect();
           return res.status(400).json({ error: 'Track missing metadata' });
         }
         await client.disconnect();
         return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
-        
+
       } else {
-        // Lazy mint a fresh NFT
         const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
         nftTokenId = mintResult.nftTokenId;
         editionNumber = mintResult.editionNumber;
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
         console.log('✅ Lazy minted NFT:', nftTokenId);
-        
-        // Wait for ledger to fully propagate the new NFT before creating sell offer
+
         console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation...`);
         await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
       }
-      
-      // STEP 2: Cancel any existing sell offers for this NFT
+
       await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
-      
-      // STEP 3: Create sell offer with retry
+
       const priceInDrops = xrpl.xrpToDrops(price.toFixed(6));
-      
+
       let sellOfferIndex;
       try {
         const result = await createSellOfferWithRetry(
@@ -554,29 +601,22 @@ async function handlePrepare(req, res, sql) {
         );
         sellOfferIndex = result.sellOfferIndex;
       } catch (sellOfferError) {
-        // ─── tecNO_ENTRY RECOVERY ─────────────────────────────────────
-        // If the NFT came from the DB (not freshly minted) and doesn't exist
-        // on-chain, the DB record is stale. Mark it dead and lazy mint a new one.
         if (sellOfferError.message?.includes('tecNO_ENTRY') && usedDbRecord && useLazyMint) {
           console.warn(`⚠️ tecNO_ENTRY: DB NFT ${nftTokenId} not on-chain. Marking dead and lazy minting fresh...`);
           await sql`UPDATE nfts SET status = 'dead' WHERE id = ${nftRecordId}`;
-          
-          // Mint a fresh NFT
+
           const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
           nftTokenId = mintResult.nftTokenId;
           editionNumber = mintResult.editionNumber;
           nftRecordId = mintResult.nftRecordId;
           didLazyMint = true;
           usedDbRecord = false;
-          
-          // Wait for ledger propagation
+
           console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation after recovery mint...`);
           await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
-          
-          // Cancel any offers (shouldn't exist for fresh mint, but be safe)
+
           await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
-          
-          // Retry sell offer creation
+
           const retryResult = await createSellOfferWithRetry(
             client, platformWallet, platformAddress,
             nftTokenId, priceInDrops, cleanBuyerAddress
@@ -584,17 +624,16 @@ async function handlePrepare(req, res, sql) {
           sellOfferIndex = retryResult.sellOfferIndex;
           console.log('✅ Recovery successful! Sell offer created after fresh mint:', sellOfferIndex);
         } else {
-          // Not recoverable — rethrow
           throw sellOfferError;
         }
       }
-      
+
       const platformFee = price * (PLATFORM_FEE_PERCENT / 100);
-      
+
       await client.disconnect();
-      
+
       console.log('✅ Prepared purchase: NFT', nftTokenId, 'offer', sellOfferIndex, 'price', price, 'XRP');
-      
+
       return res.json({
         success: true,
         sellOfferIndex,
@@ -613,39 +652,77 @@ async function handlePrepare(req, res, sql) {
           nftRecordId,
         },
       });
-      
+
     } catch (innerError) {
       console.error('Prepare error:', innerError);
-      
-      // Reset NFT status if we marked one as pending
+
       if (nftRecordId) {
         const resetStatus = usedDbRecord ? 'available' : 'dead';
         await sql`UPDATE nfts SET status = ${resetStatus} WHERE id = ${nftRecordId}`;
       }
-      
+
       try { await client.disconnect(); } catch (e) {}
       const errorMsg = innerError.message || 'Failed to prepare purchase';
       return res.status(400).json({ error: errorMsg });
     }
-    
+
   } catch (error) {
     console.error('Prepare error:', error);
     return res.status(500).json({ error: error.message || 'Failed to prepare purchase' });
   }
 }
 
-// ─── Confirm sale after buyer accepts the sell offer ─────────────────
-
+// ─── Confirm sale ────────────────────────────────────────────────────
+//
+// ⚡ v2: Verifies the buyer's NFTokenAcceptOffer on-chain BEFORE writing
+// any sale data. If the tx failed (e.g. wrong wallet signed → tecNO_PERMISSION),
+// we return an error and DB stays clean.
+//
 async function handleConfirmSale(req, res, sql) {
+  let client = null;
   try {
     const { pendingSale, acceptTxHash } = req.body;
-    
+
     if (!pendingSale || !acceptTxHash) {
       return res.status(400).json({ error: 'Missing pending sale data or transaction hash' });
     }
-    
+
     const { releaseId, trackId, buyerAddress, artistAddress, nftTokenId, price, platformFee, nftRecordId } = pendingSale;
-    
+
+    // ⚡ STEP 0 (v2): Verify the tx actually succeeded on-chain.
+    // Without this, a failed tx (like tecNO_PERMISSION when the wrong wallet signs)
+    // would still get recorded as a successful sale.
+    console.log('🔍 Verifying acceptTxHash on-chain:', acceptTxHash);
+    client = new xrpl.Client('wss://s1.ripple.com');
+    await client.connect();
+
+    let verifiedTx;
+    try {
+      verifiedTx = await verifyTransactionSuccess(client, acceptTxHash, buyerAddress);
+    } catch (verifyError) {
+      console.error('❌ Tx verification failed:', verifyError.message);
+
+      // Roll back NFT status so it can be retried
+      if (nftRecordId) {
+        try {
+          await sql`UPDATE nfts SET status = 'available' WHERE id = ${nftRecordId}`;
+          console.log('🔄 NFT status rolled back to available:', nftRecordId);
+        } catch (e) {
+          console.error('Failed to rollback NFT status:', e);
+        }
+      }
+
+      try { await client.disconnect(); } catch (e) {}
+      return res.status(400).json({
+        error: verifyError.message || 'Transaction did not succeed on-chain',
+        verificationFailed: true,
+      });
+    }
+
+    console.log('✅ Tx verified on-chain. Proceeding to record sale.');
+
+    // From here on, proceed with original logic (writes happen only after verify passes)
+
     // Get release details
     const releases = await sql`
       SELECT r.*, t.title as track_title
@@ -653,14 +730,14 @@ async function handleConfirmSale(req, res, sql) {
       WHERE r.id = ${releaseId}
     `;
     const release = releases[0];
-    
+
     // Calculate edition number
     let editionNumber = 1;
     if (trackId) {
       const salesCount = await sql`SELECT COUNT(*) as count FROM sales WHERE track_id = ${trackId}`;
       editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
     }
-    
+
     // Update NFT status
     if (nftTokenId) {
       await sql`
@@ -668,12 +745,12 @@ async function handleConfirmSale(req, res, sql) {
         WHERE nft_token_id = ${nftTokenId}
       `;
     }
-    
+
     // Update track sold_count
     if (trackId) {
       await sql`UPDATE tracks SET sold_count = COALESCE(sold_count, 0) + 1 WHERE id = ${trackId}`;
     }
-    
+
     // Update release sold_editions
     if (releaseId) {
       await sql`
@@ -682,27 +759,25 @@ async function handleConfirmSale(req, res, sql) {
         ) WHERE r.id = ${releaseId}
       `;
     }
-    
+
     // Record the sale
     const saleId = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await sql`
       INSERT INTO sales (id, release_id, track_id, buyer_address, seller_address, nft_token_id, edition_number, price, platform_fee, tx_hash, created_at)
       VALUES (${saleId}, ${releaseId}, ${trackId}, ${buyerAddress}, ${artistAddress}, ${nftTokenId}, ${editionNumber}, ${price}, ${platformFee}, ${acceptTxHash}, NOW())
     `;
-    
+
     console.log('✅ Sale confirmed:', saleId, 'Edition #', editionNumber);
-    
-    // PAY ARTIST (98%)
+
+    // PAY ARTIST (98%) — reuse the same client connection
     const artistPayment = price - platformFee;
-    
+
     if (artistPayment > 0 && artistAddress) {
       try {
         const platformSeed = process.env.PLATFORM_WALLET_SEED;
         const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
-        const client = new xrpl.Client('wss://s1.ripple.com');
-        await client.connect();
         const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-        
+
         const paymentTx = await client.autofill({
           TransactionType: 'Payment',
           Account: platformAddress,
@@ -715,31 +790,33 @@ async function handleConfirmSale(req, res, sql) {
             }
           }],
         });
-        
+
         const signedPayment = platformWallet.sign(paymentTx);
         await client.submitAndWait(signedPayment.tx_blob);
-        await client.disconnect();
         console.log('💰 Paid artist:', artistPayment, 'XRP');
       } catch (payErr) {
         console.error('❌ Artist payment failed:', payErr.message);
+        // Don't roll back the sale — the on-chain NFT already transferred,
+        // we'll just need to manually settle with the artist
       }
     }
-    
-    // Notifications
+
+    try { await client.disconnect(); } catch (e) {}
+
+    // Notifications (outside of XRPL client)
     if (release) {
       await createArtistSaleNotification(sql, {
         artistAddress, trackTitle: release.track_title, releaseTitle: release.title,
         price, editionNumber, totalEditions: release.total_editions, releaseId, trackId,
       });
-      
+
       await sendDiscordBuyAlert({
         trackTitle: release.track_title || release.title, releaseTitle: release.title,
         artistName: release.artist_name, buyerAddress, price, editionNumber,
         totalEditions: release.total_editions, coverUrl: release.cover_url,
         releaseType: release.type, txHash: acceptTxHash, releaseId,
       });
-      
-      // Milestones
+
       if (editionNumber === 1) {
         await sendDiscordMilestoneAlert({ type: 'first_sale', releaseTitle: release.title, artistName: release.artist_name, coverUrl: release.cover_url });
       } else if (editionNumber === release.total_editions) {
@@ -748,11 +825,12 @@ async function handleConfirmSale(req, res, sql) {
         await sendDiscordMilestoneAlert({ type: `milestone_${editionNumber}`, releaseTitle: release.title, artistName: release.artist_name, coverUrl: release.cover_url });
       }
     }
-    
+
     return res.json({ success: true, saleId, editionNumber });
-    
+
   } catch (error) {
     console.error('Confirm sale error:', error);
+    if (client) { try { await client.disconnect(); } catch (e) {} }
     return res.status(500).json({ error: error.message || 'Failed to confirm sale' });
   }
 }
@@ -761,15 +839,14 @@ async function handleConfirmSale(req, res, sql) {
 
 async function mintSingleNFT(client, platformWallet, platformAddress, track, release, sql) {
   console.log('🎵 Lazy minting NFT for track:', track.id, track.title);
-  
+
   const metadataUri = track.metadata_cid ? `ipfs://${track.metadata_cid}` : null;
   if (!metadataUri) throw new Error('Track missing metadata CID');
-  
+
   const uriHex = Buffer.from(metadataUri).toString('hex').toUpperCase();
   const royaltyPercent = release.royalty_percent || 5;
   const transferFee = Math.round(royaltyPercent * 1000);
-  
-  // Check if artist has authorized platform as NFTokenMinter
+
   let useIssuer = false;
   try {
     const acctInfo = await client.request({ command: 'account_info', account: release.artist_address });
@@ -794,51 +871,51 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
   if (mintResult.result.meta.TransactionResult !== 'tesSUCCESS') {
     throw new Error(`Mint failed: ${mintResult.result.meta.TransactionResult}`);
   }
-  
+
   const nftTokenId = extractNFTokenID(mintResult.result.meta);
   if (!nftTokenId) throw new Error('Could not extract NFT Token ID');
-  
+
   console.log('✅ Minted NFT:', nftTokenId);
-  
+
   const salesCount = await sql`SELECT COUNT(*) as count FROM sales WHERE track_id = ${track.id}`;
   const editionNumber = (parseInt(salesCount[0]?.count) || 0) + 1;
-  
+
   const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   await sql`
     INSERT INTO nfts (id, nft_token_id, release_id, track_id, edition_number, owner_address, status, created_at)
     VALUES (${nftId}, ${nftTokenId}, ${release.id}, ${track.id}, ${editionNumber}, ${platformAddress}, 'pending', NOW())
     ON CONFLICT (nft_token_id) DO UPDATE SET status = 'pending', owner_address = ${platformAddress}, edition_number = ${editionNumber}
   `;
-  
+
   await sql`UPDATE tracks SET minted_editions = COALESCE(minted_editions, 0) + 1 WHERE id = ${track.id}`;
   await sql`UPDATE releases SET minted_editions = COALESCE(minted_editions, 0) + 1 WHERE id = ${release.id}`;
-  
+
   return { nftTokenId, editionNumber, nftRecordId: nftId };
 }
 
-// ─── Refund album discount to buyer ──────────────────────────────────
+// ─── Refund album discount ───────────────────────────────────────────
 
 async function handleRefundDiscount(req, res, sql) {
   try {
     const { buyerAddress, refundAmount, releaseId } = req.body;
-    
+
     if (!buyerAddress || !refundAmount || parseFloat(refundAmount) <= 0) {
       return res.status(400).json({ error: 'Invalid refund request' });
     }
-    
+
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
     const platformSeed = process.env.PLATFORM_WALLET_SEED;
     if (!platformAddress || !platformSeed) {
       return res.status(500).json({ error: 'Platform not configured' });
     }
-    
+
     const amount = parseFloat(refundAmount);
     console.log(`💸 Album discount refund: ${amount} XRP to ${buyerAddress} for release ${releaseId}`);
-    
+
     const client = new xrpl.Client('wss://s1.ripple.com');
     await client.connect();
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-    
+
     const paymentTx = await client.autofill({
       TransactionType: 'Payment',
       Account: platformAddress,
@@ -851,18 +928,18 @@ async function handleRefundDiscount(req, res, sql) {
         }
       }],
     });
-    
+
     const signed = platformWallet.sign(paymentTx);
     const result = await client.submitAndWait(signed.tx_blob);
     await client.disconnect();
-    
+
     if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
       console.error('❌ Refund tx failed:', result.result.meta.TransactionResult);
       return res.status(500).json({ error: 'Refund transaction failed on-chain' });
     }
-    
+
     console.log(`✅ Album discount refund sent: ${amount} XRP, tx: ${result.result.hash}`);
-    
+
     return res.json({ success: true, txHash: result.result.hash, refundAmount: amount });
   } catch (error) {
     console.error('❌ Discount refund failed:', error);
@@ -870,54 +947,59 @@ async function handleRefundDiscount(req, res, sql) {
   }
 }
 
-// ─── Legacy 2-signature flow (fallback) ──────────────────────────────
+// ─── Legacy 2-signature flow ─────────────────────────────────────────
 
 async function handleLegacyPurchase(req, res, sql) {
   try {
     const { releaseId, trackId, buyerAddress, paymentTxHash } = req.body;
-    
+
     if (!releaseId || !buyerAddress) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    
+
     const cleanBuyerAddress = String(buyerAddress).trim();
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
     const platformSeed = process.env.PLATFORM_WALLET_SEED;
     if (!platformAddress || !platformSeed) return res.status(500).json({ error: 'Platform not configured' });
-    
+
     const release = await getReleaseWithTracks(sql, releaseId);
     if (!release) return res.status(404).json({ error: 'Release not found' });
     if (!isReleaseAvailable(release)) return res.status(400).json({ error: 'Release not available' });
-    
+
     const resolved = resolveTargetTrack(release, trackId);
     if (!resolved) return res.status(400).json({ error: 'No track found' });
-    
+
     const { targetTrack, targetTrackId } = resolved;
     const price = parseFloat(release.song_price) || parseFloat(release.album_price) || 0;
     const artistAddress = release.artist_address;
     const useLazyMint = isLazyMintRelease(release);
-    
+
+    // ⚡ NEW (v2): same self-purchase block
+    if (cleanBuyerAddress === artistAddress) {
+      return res.status(400).json({
+        error: 'You cannot buy your own NFT. Try purchasing from a different wallet.',
+      });
+    }
+
     if (useLazyMint) {
       const soldCount = targetTrack.sold_count || 0;
       if (soldCount >= (release.total_editions || 0)) {
         return res.status(400).json({ error: `"${targetTrack.title}" is sold out`, soldOut: true });
       }
     }
-    
+
     const client = new xrpl.Client('wss://s1.ripple.com');
     await client.connect();
     const platformWallet = xrpl.Wallet.fromSeed(platformSeed);
-    
+
     let nftTokenId = null, editionNumber = null, nftRecordId = null, didLazyMint = false;
     let usedDbRecord = false;
-    
+
     try {
-      // Trust DB records — no on-chain verification (platform has 6000+ NFTs, 
-      // account_nfts limit:400 gives false negatives)
       const availableNfts = await sql`
         SELECT * FROM nfts WHERE track_id = ${targetTrackId} AND status = 'available' ORDER BY edition_number ASC LIMIT 1
       `;
-      
+
       if (availableNfts.length > 0) {
         const nftRecord = availableNfts[0];
         nftTokenId = nftRecord.nft_token_id;
@@ -938,16 +1020,13 @@ async function handleLegacyPurchase(req, res, sql) {
         editionNumber = mintResult.editionNumber;
         nftRecordId = mintResult.nftRecordId;
         didLazyMint = true;
-        
-        // Wait for ledger propagation
+
         console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation...`);
         await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
       }
-      
-      // Cancel existing offers
+
       await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
-      
-      // Create 0-amount sell offer (old flow) with retry + tecNO_ENTRY recovery
+
       let sellOfferIndex;
       try {
         const result = await createSellOfferWithRetry(
@@ -956,23 +1035,22 @@ async function handleLegacyPurchase(req, res, sql) {
         );
         sellOfferIndex = result.sellOfferIndex;
       } catch (sellOfferError) {
-        // tecNO_ENTRY recovery for legacy flow too
         if (sellOfferError.message?.includes('tecNO_ENTRY') && usedDbRecord && useLazyMint) {
           console.warn(`⚠️ tecNO_ENTRY (legacy): DB NFT ${nftTokenId} not on-chain. Marking dead and lazy minting fresh...`);
           await sql`UPDATE nfts SET status = 'dead' WHERE id = ${nftRecordId}`;
-          
+
           const mintResult = await mintSingleNFT(client, platformWallet, platformAddress, targetTrack, release, sql);
           nftTokenId = mintResult.nftTokenId;
           editionNumber = mintResult.editionNumber;
           nftRecordId = mintResult.nftRecordId;
           didLazyMint = true;
           usedDbRecord = false;
-          
+
           console.log(`⏳ Waiting ${POST_MINT_DELAY_MS}ms for ledger propagation after recovery mint...`);
           await new Promise(r => setTimeout(r, POST_MINT_DELAY_MS));
-          
+
           await cancelExistingOffers(client, platformWallet, platformAddress, nftTokenId);
-          
+
           const retryResult = await createSellOfferWithRetry(
             client, platformWallet, platformAddress,
             nftTokenId, '1', cleanBuyerAddress
@@ -983,8 +1061,7 @@ async function handleLegacyPurchase(req, res, sql) {
           throw sellOfferError;
         }
       }
-      
-      // Pay artist
+
       const platformFee = price * (PLATFORM_FEE_PERCENT / 100);
       const artistPayment = price - platformFee;
       if (artistPayment > 0) {
@@ -997,14 +1074,14 @@ async function handleLegacyPurchase(req, res, sql) {
         await client.submitAndWait(signedPayment.tx_blob);
         console.log('💰 Paid artist:', artistPayment, 'XRP');
       }
-      
+
       await client.disconnect();
-      
+
       return res.json({
         success: true, sellOfferIndex, nftTokenId, lazyMinted: didLazyMint,
         pendingSale: { releaseId, trackId: targetTrackId, buyerAddress: cleanBuyerAddress, artistAddress, nftTokenId, editionNumber, price, platformFee },
       });
-      
+
     } catch (innerError) {
       console.error('Purchase error:', innerError);
       if (nftRecordId) {
