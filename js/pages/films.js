@@ -852,7 +852,7 @@ const FilmsPage = {
         console.log('🎬 Starting Filecoin upload with access type:', accessType);
 
         document.getElementById('upload-thumb-progress')?.classList.remove('hidden');
-        const thumbResult = await FilmsPage.uploadToFilecoin(thumbFile, (pct) => {
+       const thumbResult = await FilmsPage.uploadToLighthouse(thumbFile, false, (pct) => {
           const bar = document.getElementById('thumb-bar');
           const txt = document.getElementById('thumb-pct');
           if (bar) bar.style.width = pct + '%';
