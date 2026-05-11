@@ -1,11 +1,15 @@
 /**
- * Video Player Modal — v8.1
+ * Video Player Modal — v8.2
  *
- * v8.1 FIXES:
+ * v8.2 FIX:
+ *   - Buy button now calls Modals.showPurchase(release) — the EXACT pattern
+ *     marketplace uses. No router, no pushState, no URL changes. Just opens
+ *     the purchase modal directly.
+ *
+ * v8.1 (preserved):
  *   - Mobile: explicit pixel heights so buy bar is ALWAYS visible (no scroll)
- *   - Buy button: separate icon + text spans with !important so theme can't hide
- *   - Body scroll locked while modal open (no auto-scroll bounce)
- *   - Buy button now uses /purchase + history.pushState (matches marketplace pattern)
+ *   - Buy button: separate icon + text spans with !important styles
+ *   - Body scroll locked while modal open
  *
  * v6 (preserved):
  *   - Presigned URL support for fil.one
@@ -299,51 +303,39 @@ const VideoPlayerModal = {
   },
 
   /**
-   * v8.1: Navigate to /purchase using the same pattern marketplace uses.
+   * v8.2: Open purchase modal using the same pattern marketplace uses.
+   * Just calls Modals.showPurchase(release) — no URL changes.
    */
   _navigateToPurchase(release) {
-    const releaseId = release.id;
-    if (!releaseId) {
-      alert('Cannot start purchase — release ID missing.');
+    if (!release) {
+      alert('Cannot start purchase — release missing.');
       return;
     }
 
-    const track = release.tracks?.[0];
-    const trackId = track?.id;
+    this._log('🛒 Calling Modals.showPurchase');
 
-    const params = new URLSearchParams();
-    params.set('release', releaseId);
-    if (trackId) params.set('track', trackId);
-    const queryString = params.toString();
-
-    const targetUrl = `/purchase?${queryString}`;
-    this._log('🛒 Navigating to:', targetUrl);
-
+    // Close the video modal first
     this.close();
 
-    try {
-      window.history.pushState({}, '', targetUrl);
-    } catch (e) {
-      this._log('⚠️ pushState failed:', e.message);
-    }
-
-    if (typeof Router !== 'undefined' && typeof Router.navigate === 'function') {
-      try {
-        Router.navigate('purchase');
+    // Auth check (same as marketplace)
+    if (typeof AppState !== 'undefined' && !AppState.user?.address) {
+      this._log('⚠️ Not signed in');
+      if (typeof Modals !== 'undefined' && typeof Modals.showAuth === 'function') {
+        Modals.showAuth();
         return;
-      } catch (e) {
-        this._log('⚠️ Router.navigate failed:', e.message);
       }
-    }
-
-    try {
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      alert('Please sign in to purchase.');
       return;
-    } catch (e) {
-      this._log('⚠️ popstate dispatch failed:', e.message);
     }
 
-    window.location.href = targetUrl;
+    // Open purchase modal — same call marketplace makes
+    if (typeof Modals !== 'undefined' && typeof Modals.showPurchase === 'function') {
+      Modals.showPurchase(release);
+      return;
+    }
+
+    this._log('❌ Modals.showPurchase not available');
+    alert('Purchase system not available. Please refresh the page.');
   },
 
   bindModalEvents(videoUrl, release) {
