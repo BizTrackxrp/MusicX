@@ -1,35 +1,45 @@
 /**
  * XRP Music - Profile Page
- * User profile with releases, collection, genres, and settings
- * 
- * UPDATED: Uses IpfsHelper for proxied IPFS images
- * UPDATED: Recognizes lazy mint releases (mintFeePaid/status='live') as "for sale"
- * UPDATED: Added share profile button
- * UPDATED: Fixed banner image scaling on desktop vs mobile
- * UPDATED: Fixed bio text overflow for long bios
- * UPDATED: Fixed mobile player positioning
- * UPDATED: Collection overhaul — dedup, filters, multi-copy popups, send NFT
- * UPDATED: 🔑 Unlockable Content tab — NFT-gated private page + rewards
- * UPDATED: 📝 Draft/Staging system — save drafts, preview, finalize & mint
+ *
+ * v2 (May 2026):
+ * ✅ "My Releases" tab split into per-content-type tabs:
+ *    🎵 Music · 🎬 Videos · 📚 Audiobooks · 🎙 Podcasts · 🎮 Games
+ *    Only tabs with content are shown.
+ *    Music is the default active tab if present.
+ * ✅ Film cards use 16:9 aspect + open VideoPlayerModal on click
+ * ✅ Music cards use 1:1 aspect + open Modals.showRelease on click
+ * ✅ List-for-sale UX kept on Music (films don't need it for now)
+ *
+ * Everything else preserved: Drafts, Collected, For Sale, Unlockable,
+ * banner, avatar, social links modal, send NFT, edit price, etc.
  */
 
 const ProfilePage = {
   releases: [],
-  activeTab: 'posted',
-  
-  // Collection state (for filter switching)
+  activeTab: 'music',
+
+  // Content type definitions (drives tab rendering)
+  // Order = display order in tab bar
+  CONTENT_TYPES: [
+    { key: 'music',       label: 'Music',      icon: '🎵', types: ['music', 'song'] },
+    { key: 'films',       label: 'Videos',     icon: '🎬', types: ['film', 'video'] },
+    { key: 'audiobooks',  label: 'Audiobooks', icon: '📚', types: ['audiobook'] },
+    { key: 'podcasts',    label: 'Podcasts',   icon: '🎙', types: ['podcast'] },
+    { key: 'games',       label: 'Games',      icon: '🎮', types: ['game'] },
+  ],
+
+  // Collection state
   _collectionGrouped: [],
   _collectionArtists: [],
   _collectionRawNfts: [],
   _activeCollectionFilter: 'all',
   _needsRefresh: false,
-  
+
   // Unlockable tab state
   _unlockableConfig: null,
   _showUnlockableTab: false,
   _unlockableBadge: false,
-  
-  // Genre definitions (must match modals.js)
+
   genres: [
     { id: 'hiphop', name: 'Hip Hop', color: '#f97316' },
     { id: 'rap', name: 'Rap', color: '#ef4444' },
@@ -42,7 +52,7 @@ const ProfilePage = {
     { id: 'lofi', name: 'Lo-Fi', color: '#8b5cf6' },
     { id: 'other', name: 'Other', color: '#6b7280' },
   ],
-  
+
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
     if (typeof IpfsHelper !== 'undefined') {
@@ -50,64 +60,128 @@ const ProfilePage = {
     }
     return url;
   },
-  
+
   isForSale(release) {
     return release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
   },
-  
+
+  /**
+   * NEW: Classify a release into one of our content type buckets.
+   * Returns 'music' by default if contentType is missing/unknown.
+   */
+  _getContentTypeKey(release) {
+    const ct = (release.contentType || release.content_type || 'music').toLowerCase();
+    for (const def of this.CONTENT_TYPES) {
+      if (def.types.includes(ct)) return def.key;
+    }
+    return 'music';
+  },
+
+  /**
+   * NEW: Group live (non-draft) releases by content type.
+   * Returns { music: [...], films: [...], audiobooks: [...], ... }
+   */
+  _groupReleasesByType(releases) {
+    const groups = {};
+    for (const def of this.CONTENT_TYPES) groups[def.key] = [];
+    for (const r of releases) {
+      if (r.status === 'draft') continue;
+      const key = this._getContentTypeKey(r);
+      groups[key].push(r);
+    }
+    return groups;
+  },
+
+  /**
+   * NEW: Returns true if the active tab key is a content-type tab.
+   */
+  _isContentTab(tabKey) {
+    return this.CONTENT_TYPES.some(def => def.key === tabKey);
+  },
+
   async render() {
     if (!AppState.user?.address) {
       this.renderNotLoggedIn();
       return;
     }
-    
+
     UI.showLoading();
-    
+
     try {
-      const timeout = new Promise((_, reject) => 
+      const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
-      
+
       const [releases, profile, unlockableData] = await Promise.race([
         Promise.all([
-         API.getReleasesByArtist(AppState.user.address, true),
+          API.getReleasesByArtist(AppState.user.address, true),
           API.getProfile(AppState.user.address),
           this.fetchUnlockableConfig(AppState.user.address),
         ]),
         timeout
       ]);
-      
+
       this.releases = releases;
-      if (profile) {
-        setProfile(profile);
-      }
-      
-      // Process unlockable tab visibility
+      if (profile) setProfile(profile);
+
       const isOwner = true;
       this._unlockableConfig = unlockableData?.config || null;
       this._showUnlockableTab = isOwner || (this._unlockableConfig?.tab_setup_complete === true);
       this._unlockableBadge = isOwner && (!this._unlockableConfig || !this._unlockableConfig.tab_setup_complete);
-      
+
       if (this._needsRefresh) {
         this.activeTab = 'collected';
         this._needsRefresh = false;
       }
-      
-      // Check URL for tab parameter (PATCH 6: added drafts)
+
       const urlTab = Router?.params?.tab;
       if (urlTab === 'unlockable' && this._showUnlockableTab) {
         this.activeTab = 'unlockable';
       } else if (urlTab === 'drafts') {
         this.activeTab = 'drafts';
+      } else if (urlTab && this._isContentTab(urlTab)) {
+        this.activeTab = urlTab;
       }
-      
+
+      // Pick a sensible default if current activeTab has no content
+      this._pickDefaultTab(profile);
+
       this.renderContent();
     } catch (error) {
       console.error('Failed to load profile:', error);
       this.renderError();
     }
   },
-  
+
+  /**
+   * NEW: Ensure activeTab is something that actually has content,
+   * preferring Music. Falls back through content types, then drafts/collected.
+   */
+  _pickDefaultTab(profile) {
+    const isArtist = (profile?.isArtist) || this.releases.length > 0;
+    const groups = this._groupReleasesByType(this.releases);
+
+    // If current active tab is a content tab and has content, keep it
+    if (this._isContentTab(this.activeTab) && groups[this.activeTab]?.length > 0) return;
+
+    // If current active tab is non-content (drafts/collected/forsale/unlockable),
+    // keep it — user explicitly chose it
+    if (['drafts', 'collected', 'forsale', 'unlockable'].includes(this.activeTab)) return;
+
+    if (isArtist) {
+      // Try content tabs in order
+      for (const def of this.CONTENT_TYPES) {
+        if (groups[def.key].length > 0) {
+          this.activeTab = def.key;
+          return;
+        }
+      }
+    }
+
+    // No artist content — fall back to Collected
+    this.activeTab = 'collected';
+  },
+
   async fetchUnlockableConfig(artistAddress) {
     try {
       const resp = await fetch(`/api/unlockables?artist=${artistAddress}`);
@@ -118,7 +192,7 @@ const ProfilePage = {
       return null;
     }
   },
-  
+
   renderNotLoggedIn() {
     const html = `
       <div class="empty-state" style="min-height: 60vh;">
@@ -133,32 +207,24 @@ const ProfilePage = {
     `;
     UI.renderPage(html);
   },
-  
+
   getGenreInfo(id) {
     return this.genres.find(g => g.id === id) || null;
   },
-  
+
   renderGenreBadges(profile) {
     if (!profile.isArtist) return '';
-    
     const badges = [];
-    
+
     if (profile.genrePrimary) {
       const genre = this.getGenreInfo(profile.genrePrimary);
-      if (genre) {
-        badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
-      }
+      if (genre) badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
     }
-    
     if (profile.genreSecondary) {
       const genre = this.getGenreInfo(profile.genreSecondary);
-      if (genre) {
-        badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
-      }
+      if (genre) badges.push(`<span class="profile-genre-badge" style="--genre-color: ${genre.color}">${genre.name}</span>`);
     }
-    
     if (badges.length === 0) return '';
-    
     return `<div class="profile-genres">${badges.join('')}</div>`;
   },
 
@@ -166,40 +232,41 @@ const ProfilePage = {
     const profile = AppState.profile || {};
     const displayName = getDisplayName();
     const address = AppState.user.address;
-    
+
     const isArtist = profile.isArtist || this.releases.length > 0;
-    if (!isArtist && this.activeTab === 'posted') {
-      this.activeTab = 'collected';
+    const groups = this._groupReleasesByType(this.releases);
+    const draftCount = this.releases.filter(r => r.status === 'draft').length;
+
+    // Re-pick default if current tab has no content (rare, after deletes)
+    if (this._isContentTab(this.activeTab) && groups[this.activeTab]?.length === 0) {
+      this._pickDefaultTab(profile);
     }
-    
+
     const bannerUrl = this.getImageUrl(profile.bannerUrl);
     const avatarUrl = this.getImageUrl(profile.avatarUrl);
-    
+
     const html = `
       <div class="profile-page animate-fade-in">
-        <!-- Banner -->
         <div class="profile-banner">
           ${profile.bannerUrl ? `<img src="${bannerUrl}" alt="Banner" onerror="this.style.display='none'">` : ''}
         </div>
-        
-        <!-- Profile Card -->
+
         <div class="profile-card">
           <div class="profile-avatar">
-            ${profile.avatarUrl 
+            ${profile.avatarUrl
               ? `<img src="${avatarUrl}" alt="Avatar" onerror="this.style.display='none'">`
               : `<span>${getUserInitial()}</span>`
             }
           </div>
-          
+
           <div class="profile-info">
             <h1 class="profile-name">${displayName}</h1>
             ${this.renderGenreBadges(profile)}
             <p class="profile-address">${Helpers.truncateAddress(address, 8, 6)}</p>
-           ${profile.bio ? `<div class="profile-bio-container"><p class="profile-bio">${profile.bio}</p></div>` : ''}
-            
-            <!-- Social Links Button (NEW) -->
+            ${profile.bio ? `<div class="profile-bio-container"><p class="profile-bio">${profile.bio}</p></div>` : ''}
+
             ${profile.socialLinks && profile.socialLinks.length > 0 ? `
-              <button 
+              <button
                 id="view-social-links-btn"
                 style="
                   margin-top: 12px;
@@ -222,7 +289,7 @@ const ProfilePage = {
                 🔗 View All Links (${profile.socialLinks.length})
               </button>
             ` : ''}
-            
+
             <div class="profile-links">
               ${profile.website ? `
                 <a href="${profile.website}" target="_blank" class="profile-website">${profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
@@ -237,7 +304,7 @@ const ProfilePage = {
               ` : ''}
             </div>
           </div>
-          
+
           <div class="profile-actions">
             <button class="btn btn-secondary" id="share-profile-btn" title="Share Profile">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -258,29 +325,35 @@ const ProfilePage = {
             </button>
           </div>
         </div>
-        
-        <!-- Tabs (PATCH 1: Drafts tab added) -->
+
+        <!-- Tabs: content-type tabs first (only if they have content), then drafts/collected/etc -->
         <div class="profile-tabs">
-          ${profile.isArtist || this.releases.length > 0 ? `
-            <button class="tab-btn ${this.activeTab === 'posted' ? 'active' : ''}" data-tab="posted">
-              My Releases
-              <span class="tab-count">${this.releases.filter(r => r.status !== 'draft').length}</span>
-            </button>
-          ` : ''}
-          ${(profile.isArtist || this.releases.length > 0) && this.releases.some(r => r.status === 'draft') ? `
+          ${isArtist ? this.CONTENT_TYPES
+            .filter(def => groups[def.key].length > 0)
+            .map(def => `
+              <button class="tab-btn ${this.activeTab === def.key ? 'active' : ''}" data-tab="${def.key}">
+                ${def.icon} ${def.label}
+                <span class="tab-count">${groups[def.key].length}</span>
+              </button>
+            `).join('') : ''}
+
+          ${isArtist && draftCount > 0 ? `
             <button class="tab-btn ${this.activeTab === 'drafts' ? 'active' : ''}" data-tab="drafts">
               Drafts
-              <span class="tab-count">${this.releases.filter(r => r.status === 'draft').length}</span>
+              <span class="tab-count">${draftCount}</span>
             </button>
           ` : ''}
+
           <button class="tab-btn ${this.activeTab === 'collected' ? 'active' : ''}" data-tab="collected">
-            ${profile.isArtist || this.releases.length > 0 ? 'Collected' : 'My Collection'}
+            ${isArtist ? 'Collected' : 'My Collection'}
             <span class="tab-count" id="collected-count">...</span>
           </button>
+
           <button class="tab-btn ${this.activeTab === 'forsale' ? 'active' : ''}" data-tab="forsale">
             For Sale
             <span class="tab-count" id="forsale-count">0</span>
           </button>
+
           ${this._showUnlockableTab ? `
             <button class="tab-btn ${this.activeTab === 'unlockable' ? 'active' : ''}" data-tab="unlockable">
               🔑 Unlockable
@@ -288,26 +361,148 @@ const ProfilePage = {
             </button>
           ` : ''}
         </div>
-        
-        <!-- Tab Content (PATCH 2: Drafts tab routing added) -->
+
         <div class="profile-tab-content" id="profile-tab-content">
-          ${this.activeTab === 'posted' ? this.renderPostedTab() : 
-            this.activeTab === 'drafts' ? this.renderDraftsTab() :
-            this.activeTab === 'forsale' ? this.renderForSaleTab() :
-            this.activeTab === 'unlockable' ? this.renderUnlockableTab() :
-            this.renderCollectedTab()}
+          ${this._renderActiveTab(groups)}
         </div>
       </div>
-      
+
       ${this.getStyles()}
     `;
-    
+
     UI.renderPage(html);
     this.bindEvents();
   },
 
+  /**
+   * NEW: Route active tab to the right renderer.
+   */
+  _renderActiveTab(groups) {
+    if (this.activeTab === 'drafts')     return this.renderDraftsTab();
+    if (this.activeTab === 'forsale')    return this.renderForSaleTab();
+    if (this.activeTab === 'unlockable') return this.renderUnlockableTab();
+    if (this.activeTab === 'collected')  return this.renderCollectedTab();
+    if (this._isContentTab(this.activeTab)) {
+      return this.renderContentTab(this.activeTab, groups[this.activeTab] || []);
+    }
+    return this.renderCollectedTab();
+  },
+
   // ============================================
-  // STYLES (extracted for readability)
+  // CONTENT TAB (Music / Videos / Audiobooks / etc.)
+  // ============================================
+
+  /**
+   * NEW: Renders a content-type tab (Music or Videos etc.)
+   * Films get film cards. Everything else uses the existing music release card.
+   */
+  renderContentTab(tabKey, items) {
+    const def = this.CONTENT_TYPES.find(d => d.key === tabKey);
+    const label = def?.label || 'Releases';
+
+    if (items.length === 0) {
+      return `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18V5l12-2v13"></path>
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+          </svg>
+          <h3>No ${label} Yet</h3>
+          <p>Releases of this type will appear here.</p>
+          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">Create Release</button>
+        </div>
+      `;
+    }
+
+    // Film tab: use film cards (16:9 thumbs, opens VideoPlayerModal)
+    if (tabKey === 'films') {
+      return `
+        <div class="film-grid">
+          ${items.map(r => this.renderFilmCard(r)).join('')}
+        </div>
+      `;
+    }
+
+    // Music & other audio types: keep existing release card UX (list-for-sale etc.)
+    const unlistedCount = items.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
+
+    return `
+      ${unlistedCount > 0 ? `
+        <div class="list-all-banner">
+          <div class="list-all-info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span><strong>${unlistedCount}</strong> release${unlistedCount > 1 ? 's' : ''} not listed for sale</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="list-all-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            List All for Sale
+          </button>
+        </div>
+        <style>
+          .list-all-banner {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); margin-bottom: 24px;
+          }
+          .list-all-info { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; }
+          .list-all-info svg { color: var(--error); flex-shrink: 0; }
+          @media (max-width: 500px) { .list-all-banner { flex-direction: column; text-align: center; } }
+        </style>
+      ` : ''}
+      <div class="release-grid">
+        ${items.map(release => this.renderReleaseCard(release)).join('')}
+      </div>
+    `;
+  },
+
+  /**
+   * NEW: Film card — 16:9 thumb, "X left" / "Sold Out" badge, click opens VideoPlayerModal.
+   */
+  renderFilmCard(release) {
+    const thumb = this.getImageUrl(release.coverUrl);
+    const sold = release.soldEditions || 0;
+    const total = release.totalEditions || 0;
+    const available = total - sold;
+    const price = release.albumPrice || release.songPrice || 0;
+    const isOwner = AppState.user?.address === release.artistAddress;
+    const accessType = release.accessType || release.access_type || 'public';
+
+    return `
+      <div class="film-card" data-film-id="${release.id}" data-release='${JSON.stringify(release).replace(/'/g, "&apos;")}'>
+        <div class="film-card-thumb">
+          <img src="${thumb}" alt="${release.title}" onerror="this.src='/placeholder.png'">
+          <div class="film-card-overlay">
+            <div class="film-card-play">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </div>
+          </div>
+          <div class="film-card-badge">${available > 0 ? `${available} left` : 'Sold Out'}</div>
+          ${accessType === 'nft_holders' ? `<div class="film-card-gated">🔒 NFT Holders</div>` : ''}
+        </div>
+        <div class="film-card-info">
+          <div class="film-card-title">${release.title}</div>
+          <div class="film-card-meta">
+            <span class="film-card-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
+          </div>
+          <div class="film-card-price">${price === 0 ? 'FREE' : price + ' XRP'}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  // ============================================
+  // STYLES
   // ============================================
   getStyles() {
     return `
@@ -473,6 +668,86 @@ const ProfilePage = {
         .profile-tab-content { padding: 0 24px; padding-bottom: 120px; }
         @media (max-width: 1024px) { .profile-tab-content { padding: 0 16px; padding-bottom: 140px; } }
 
+        /* ============================================ */
+        /* FILM CARD (16:9, opens VideoPlayerModal)     */
+        /* ============================================ */
+        .film-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 24px;
+        }
+        @media (max-width: 640px) { .film-grid { grid-template-columns: 1fr; } }
+        .film-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 150ms;
+        }
+        .film-card:hover {
+          border-color: var(--accent);
+          transform: translateY(-4px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .film-card-thumb {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          background: var(--bg-hover);
+          overflow: hidden;
+        }
+        .film-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .film-card-overlay {
+          position: absolute; inset: 0;
+          background: rgba(0, 0, 0, 0.4);
+          display: flex; align-items: center; justify-content: center;
+          opacity: 0;
+          transition: opacity 150ms;
+        }
+        .film-card:hover .film-card-overlay { opacity: 1; }
+        .film-card-play {
+          width: 64px; height: 64px;
+          border-radius: 50%;
+          background: rgba(239, 68, 68, 0.9);
+          display: flex; align-items: center; justify-content: center;
+          transform: scale(0.9);
+          transition: transform 150ms;
+        }
+        .film-card:hover .film-card-play { transform: scale(1); }
+        .film-card-badge {
+          position: absolute; top: 8px; right: 8px;
+          padding: 4px 10px;
+          background: rgba(0, 0, 0, 0.8);
+          border-radius: 6px;
+          font-size: 11px; font-weight: 600; color: white;
+        }
+        .film-card-gated {
+          position: absolute; top: 8px; left: 8px;
+          padding: 4px 10px;
+          background: rgba(168, 85, 247, 0.9);
+          border-radius: 6px;
+          font-size: 11px; font-weight: 600; color: white;
+        }
+        .film-card-info { padding: 16px; }
+        .film-card-title {
+          font-size: 15px; font-weight: 600; margin-bottom: 6px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          color: var(--text-primary);
+        }
+        .film-card-meta {
+          font-size: 13px; color: var(--text-muted);
+          margin-bottom: 8px;
+        }
+        .film-card-artist {
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .film-card-price {
+          font-size: 14px; font-weight: 700; color: #f87171;
+        }
+
+        /* ============================================ */
+        /* MUSIC RELEASE CARD (existing styles)         */
+        /* ============================================ */
         .listing-status-badge {
           position: absolute;
           bottom: 8px;
@@ -678,11 +953,10 @@ const ProfilePage = {
   // ============================================
   // UNLOCKABLE TAB
   // ============================================
-  
   renderUnlockableTab() {
     const artistAddress = AppState.user.address;
     const viewerAddress = AppState.user.address;
-    
+
     setTimeout(() => {
       const container = document.getElementById('profile-tab-content');
       if (container && typeof UnlockableTab !== 'undefined') {
@@ -696,84 +970,20 @@ const ProfilePage = {
         `;
       }
     }, 0);
-    
-    return `
-      <div class="loading-spinner">
-        <div class="spinner"></div>
-      </div>
-    `;
+
+    return `<div class="loading-spinner"><div class="spinner"></div></div>`;
   },
-  
-  // ============================================
-  // POSTED TAB (PATCH 3: filters out drafts)
-  // ============================================
-  
-  renderPostedTab() {
-    const liveReleases = this.releases.filter(r => r.status !== 'draft');
-    if (liveReleases.length === 0) {
-      return `
-        <div class="empty-state">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 18V5l12-2v13"></path>
-            <circle cx="6" cy="18" r="3"></circle>
-            <circle cx="18" cy="16" r="3"></circle>
-          </svg>
-          <h3>No Releases Yet</h3>
-          <p>Create your first release and start selling your music as NFTs!</p>
-          <button class="btn btn-primary" style="margin-top: 16px;" onclick="Modals.showCreate()">Create Release</button>
-        </div>
-      `;
-    }
-    const unlistedCount = liveReleases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0).length;
-    
-    return `
-      ${unlistedCount > 0 ? `
-        <div class="list-all-banner">
-          <div class="list-all-info">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span><strong>${unlistedCount}</strong> release${unlistedCount > 1 ? 's' : ''} not listed for sale</span>
-          </div>
-          <button class="btn btn-primary btn-sm" id="list-all-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
-            List All for Sale
-          </button>
-        </div>
-        <style>
-          .list-all-banner {
-            display: flex; align-items: center; justify-content: space-between; gap: 16px;
-            padding: 16px 20px;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
-            border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); margin-bottom: 24px;
-          }
-          .list-all-info { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; }
-          .list-all-info svg { color: var(--error); flex-shrink: 0; }
-          @media (max-width: 500px) { .list-all-banner { flex-direction: column; text-align: center; } }
-        </style>
-      ` : ''}
-      <div class="release-grid">
-        ${liveReleases.map(release => this.renderReleaseCard(release)).join('')}
-      </div>
-    `;
-  },
-  
+
   markNeedsRefresh() {
     this._needsRefresh = true;
   },
 
   // ============================================
-  // DRAFTS TAB (PATCH 4: new)
+  // DRAFTS TAB
   // ============================================
-  
   renderDraftsTab() {
     const drafts = this.releases.filter(r => r.status === 'draft');
-    
+
     if (drafts.length === 0) {
       return `
         <div class="empty-state">
@@ -788,7 +998,7 @@ const ProfilePage = {
         </div>
       `;
     }
-    
+
     return `
       <div class="drafts-intro">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
@@ -797,11 +1007,11 @@ const ProfilePage = {
         </svg>
         <span>Preview your releases before going live. Click a draft to see how it looks, then finalize when ready!</span>
       </div>
-      
+
       <div class="release-grid">
         ${drafts.map(draft => this.renderDraftCard(draft)).join('')}
       </div>
-      
+
       <style>
         .drafts-intro {
           display: flex; align-items: center; gap: 12px;
@@ -817,80 +1027,39 @@ const ProfilePage = {
           padding: 4px 10px; border-radius: 12px;
           font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
         }
-        .draft-badge.private-badge {
-          background: rgba(107, 114, 128, 0.9); color: white;
-        }
-        .draft-badge.public-badge {
-          background: rgba(59, 130, 246, 0.9); color: white;
-        }
-        .draft-card { position: relative; }
+        .draft-badge.private-badge { background: rgba(107, 114, 128, 0.9); color: white; }
+        .draft-badge.public-badge { background: rgba(59, 130, 246, 0.9); color: white; }
         .draft-play-overlay {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          position: absolute; inset: 0;
+          display: flex; align-items: center; justify-content: center;
           background: rgba(0, 0, 0, 0.5);
           border-radius: inherit;
-          opacity: 0;
-          transition: opacity 200ms;
-          cursor: pointer;
+          opacity: 0; transition: opacity 200ms; cursor: pointer;
         }
         .release-card-cover:hover .draft-play-overlay { opacity: 1; }
         .draft-play-btn {
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.15);
-          backdrop-filter: blur(8px);
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          color: white;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          width: 56px; height: 56px; border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px);
+          border: 2px solid rgba(255, 255, 255, 0.3); color: white; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
           transition: transform 150ms, background 150ms;
         }
-        .draft-play-btn:hover {
-          transform: scale(1.1);
-          background: rgba(255, 255, 255, 0.25);
-        }
+        .draft-play-btn:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.25); }
         .draft-play-btn svg { margin-left: 3px; }
-        .draft-card-actions {
-          display: flex; gap: 8px; margin-top: 10px;
-        }
+        .draft-card-actions { display: flex; gap: 8px; margin-top: 10px; }
         .draft-card-actions .btn-finalize { flex: 1; }
-        .draft-more-btn {
-          min-width: 40px !important;
-          flex: 0 !important;
-          font-size: 14px !important;
-          letter-spacing: 1px;
-          padding: 8px 12px !important;
-        }
+        .draft-more-btn { min-width: 40px !important; flex: 0 !important; font-size: 14px !important; letter-spacing: 1px; padding: 8px 12px !important; }
         .draft-dropdown {
-          position: absolute;
-          bottom: 52px;
-          right: 8px;
-          min-width: 180px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-          overflow: hidden;
-          z-index: 20;
+          position: absolute; bottom: 52px; right: 8px; min-width: 180px;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+          overflow: hidden; z-index: 20;
         }
         .draft-dropdown.hidden { display: none; }
         .draft-dropdown-item {
-          display: block;
-          width: 100%;
-          padding: 10px 16px;
-          background: none;
-          border: none;
-          color: var(--text-secondary);
-          font-size: 13px;
-          text-align: left;
-          cursor: pointer;
-          transition: background 150ms;
+          display: block; width: 100%; padding: 10px 16px;
+          background: none; border: none; color: var(--text-secondary);
+          font-size: 13px; text-align: left; cursor: pointer; transition: background 150ms;
         }
         .draft-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
         .draft-dropdown-danger { color: var(--error); }
@@ -900,9 +1069,7 @@ const ProfilePage = {
           border: none !important; color: white !important;
         }
         .btn-finalize:hover { opacity: 0.9; }
-        .draft-genre-chips {
-          display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
-        }
+        .draft-genre-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
         .draft-genre-chip {
           display: inline-flex; align-items: center; gap: 3px;
           padding: 2px 8px; border-radius: 10px;
@@ -912,19 +1079,19 @@ const ProfilePage = {
       </style>
     `;
   },
-  
-renderDraftCard(draft) {
+
+  renderDraftCard(draft) {
     const coverUrl = this.getImageUrl(draft.coverUrl);
     const trackCount = draft.tracks?.length || 1;
     const price = draft.albumPrice || draft.songPrice;
     const isPublic = draft.visibility === 'public';
     const genres = draft.draftGenres || [];
     const genreNames = { hiphop: 'Hip Hop', rap: 'Rap', electronic: 'Electronic', rnb: 'R&B', pop: 'Pop', rock: 'Rock', country: 'Country', jazz: 'Jazz', lofi: 'Lo-Fi', other: 'Other' };
-    
+
     return `
       <div class="release-card draft-card" data-draft-id="${draft.id}">
         <div class="release-card-cover">
-          ${draft.coverUrl 
+          ${draft.coverUrl
             ? `<img src="${coverUrl}" alt="${draft.title}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
@@ -975,21 +1142,19 @@ renderDraftCard(draft) {
       </div>
     `;
   },
+
   // ============================================
-  // COLLECTED TAB (OVERHAULED)
+  // COLLECTED TAB (unchanged)
   // ============================================
-  
   renderCollectedTab() {
     setTimeout(() => this.loadCollectedNFTs(), 0);
     return `
       <div id="collected-content">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-        </div>
+        <div class="loading-spinner"><div class="spinner"></div></div>
       </div>
     `;
   },
-  
+
   async fetchCollectedCount() {
     const countEl = document.getElementById('collected-count');
     if (!countEl || !AppState.user?.address) return;
@@ -1003,7 +1168,7 @@ renderDraftCard(draft) {
       countEl.textContent = '?';
     }
   },
-  
+
   async fetchForSaleCount() {
     const countEl = document.getElementById('forsale-count');
     if (!countEl || !AppState.user?.address) return;
@@ -1020,11 +1185,11 @@ renderDraftCard(draft) {
     const container = document.getElementById('collected-content');
     const countEl = document.getElementById('collected-count');
     if (!container) return;
-    
+
     try {
       const response = await fetch(`/api/user-nfts?address=${AppState.user.address}`);
       const data = await response.json();
-      
+
       const externalNfts = (AppState.externalNfts || []).map(ext => ({
         nftTokenId: ext.nftTokenId,
         trackId: ext.id,
@@ -1048,7 +1213,7 @@ renderDraftCard(draft) {
 
       const allNfts = [...(data.nfts || []), ...externalNfts];
       if (countEl) countEl.textContent = allNfts.length;
-      
+
       if (allNfts.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
@@ -1062,15 +1227,15 @@ renderDraftCard(draft) {
         `;
         return;
       }
-      
+
       const grouped = this.processCollectionData(allNfts);
       const artists = this.getUniqueArtists(grouped);
-      
+
       this._collectionGrouped = grouped;
       this._collectionArtists = artists;
       this._collectionRawNfts = allNfts;
       this._activeCollectionFilter = 'all';
-      
+
       container.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
           <div class="collection-filter-bar" style="margin-bottom:0;">
@@ -1085,7 +1250,7 @@ renderDraftCard(draft) {
         </div>
         <div class="collected-grid" id="collectionGrid"></div>
       `;
-      
+
       container.querySelectorAll('.collection-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           container.querySelectorAll('.collection-filter-btn').forEach(b => b.classList.remove('active'));
@@ -1100,7 +1265,7 @@ renderDraftCard(draft) {
           }
         });
       });
-      
+
       document.getElementById('play-collection-btn')?.addEventListener('click', () => {
         const seen = new Set();
         const queue = [];
@@ -1139,9 +1304,9 @@ renderDraftCard(draft) {
         }
         if (queue.length > 0) Player.playTrack(queue[0], queue, 0);
       });
-      
+
       this.renderAllCards(grouped, document.getElementById('collectionGrid'));
-      
+
     } catch (error) {
       console.error('Failed to load NFTs:', error);
       container.innerHTML = `
@@ -1159,17 +1324,13 @@ renderDraftCard(draft) {
     }
   },
 
-  // ============================================
-  // COLLECTION DATA PROCESSING
-  // ============================================
-  
   processCollectionData(nfts) {
     const releaseGroups = {};
-    
+
     nfts.forEach(nft => {
       const releaseId = nft.releaseId || nft.trackId || nft.nftTokenId;
       const isAlbumOrEP = (nft.totalTracks || 0) > 1;
-      
+
       if (!releaseGroups[releaseId]) {
         releaseGroups[releaseId] = {
           releaseId: nft.releaseId,
@@ -1187,9 +1348,9 @@ renderDraftCard(draft) {
           copies: [],
         };
       }
-      
+
       const group = releaseGroups[releaseId];
-      
+
       if (group.isAlbum && nft.trackId) {
         if (!group.tracks[nft.trackId]) {
           group.tracks[nft.trackId] = {
@@ -1223,7 +1384,7 @@ renderDraftCard(draft) {
         }
       }
     });
-    
+
     return Object.values(releaseGroups).map(group => {
       if (group.isAlbum) {
         group.tracksArray = Object.values(group.tracks).sort((a, b) => {
@@ -1236,7 +1397,7 @@ renderDraftCard(draft) {
       return group;
     });
   },
-  
+
   getUniqueArtists(grouped) {
     const artistMap = {};
     grouped.forEach(item => {
@@ -1250,23 +1411,19 @@ renderDraftCard(draft) {
     return Object.values(artistMap);
   },
 
-  // ============================================
-  // COLLECTION CARD RENDERERS
-  // ============================================
-  
   renderAllCards(grouped, grid) {
     if (!grid) return;
-    
+
     grid.innerHTML = grouped.map((item, idx) => {
       const coverUrl = this.getImageUrl(item.coverUrl);
       const isExternal = item.copies[0]?._raw?.isExternal || false;
-      
+
       if (item.isAlbum) {
         const owned = item.ownedTrackCount;
         const total = item.totalTracks;
         const isComplete = owned >= total;
         const typeLabel = item.releaseType === 'ep' ? 'EP' : 'Album';
-        
+
         return `
           <div class="collected-nft-card collection-album-card" data-group-idx="${idx}" style="cursor:pointer;">
             <div class="collected-nft-cover">
@@ -1291,7 +1448,7 @@ renderDraftCard(draft) {
       } else {
         const hasMultiple = item.copies.length > 1;
         const isOneOfOne = item.totalEditions === 1;
-        
+
         let editionText = '';
         let editionClass = '';
         let editionIcon = '';
@@ -1302,7 +1459,7 @@ renderDraftCard(draft) {
           else if (copy.editionNumber && copy.editionNumber <= 10) { editionText = `#${copy.editionNumber} of ${item.totalEditions}`; editionClass = 'edition-early'; editionIcon = '⭐'; }
           else if (copy.editionNumber) { editionText = `#${copy.editionNumber} of ${item.totalEditions}`; }
         }
-        
+
         return `
           <div class="collected-nft-card" data-group-idx="${idx}">
             <div class="collected-nft-cover">
@@ -1339,18 +1496,18 @@ renderDraftCard(draft) {
         `;
       }
     }).join('');
-    
+
     this.bindCollectionCardEvents(grouped, grid);
   },
-  
+
   renderSongCards(grouped, grid) {
     const sorted = [...grouped].sort((a, b) => (a.releaseTitle || '').localeCompare(b.releaseTitle || ''));
     this.renderAllCards(sorted, grid);
   },
-  
+
   renderArtistCards(artists, grid) {
     if (!grid) return;
-    
+
     grid.innerHTML = artists.map((artist, idx) => {
       const coverUrl = this.getImageUrl(artist.coverUrl);
       return `
@@ -1370,7 +1527,7 @@ renderDraftCard(draft) {
         </div>
       `;
     }).join('');
-    
+
     grid.querySelectorAll('.collection-artist-card').forEach(card => {
       card.addEventListener('click', () => {
         const idx = parseInt(card.dataset.artistIdx);
@@ -1389,7 +1546,7 @@ renderDraftCard(draft) {
         if (item) this.showAlbumPopup(item);
       });
     });
-    
+
     grid.querySelectorAll('.nft-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1407,7 +1564,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     grid.querySelectorAll('.collection-multi-badge').forEach(badge => {
       badge.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1416,7 +1573,7 @@ renderDraftCard(draft) {
         if (item) this.showCopiesPopup(item);
       });
     });
-    
+
     grid.querySelectorAll('.collection-multi-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1425,7 +1582,7 @@ renderDraftCard(draft) {
         if (item) this.showCopiesPopup(item);
       });
     });
-    
+
     grid.querySelectorAll('.nft-actions-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1438,15 +1595,15 @@ renderDraftCard(draft) {
       });
     });
   },
-  
+
   showAlbumPopup(item) {
     document.querySelector('.copies-popup-overlay')?.remove();
-    
+
     const coverUrl = this.getImageUrl(item.coverUrl);
     const owned = item.ownedTrackCount;
     const total = item.totalTracks;
     const typeLabel = item.releaseType === 'ep' ? 'EP' : 'Album';
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'copies-popup-overlay';
     overlay.innerHTML = `
@@ -1464,14 +1621,14 @@ renderDraftCard(draft) {
             const copyCount = track.copies.length;
             const firstCopy = track.copies[0];
             const edNum = firstCopy?.editionNumber;
-            
+
             let metaHtml = '';
             if (copyCount > 1) {
               metaHtml = `<span style="color:#f59e0b;font-weight:600;cursor:pointer;" class="multi-click" data-track-idx="${i}">${copyCount} copies — tap to see editions</span>`;
             } else if (edNum) {
               metaHtml = `<span style="color:#00ff88;font-weight:600;">Edition #${edNum}</span>${item.totalEditions ? ` of ${item.totalEditions}` : ''}`;
             }
-            
+
             return `
               <div class="album-track-row" data-track-idx="${i}" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;">
                 <div style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.08);color:var(--text-muted);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</div>
@@ -1491,12 +1648,12 @@ renderDraftCard(draft) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
-    
+
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-    
+
     overlay.querySelectorAll('.album-track-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('.multi-click')) return;
@@ -1514,7 +1671,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     overlay.querySelectorAll('.multi-click').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1526,7 +1683,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     overlay.querySelectorAll('.album-sell-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1540,7 +1697,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     overlay.querySelectorAll('.album-send-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1556,13 +1713,9 @@ renderDraftCard(draft) {
     });
   },
 
-  // ============================================
-  // COLLECTION POPUPS
-  // ============================================
-  
   showCopiesPopup(item) {
     document.querySelector('.copies-popup-overlay')?.remove();
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'copies-popup-overlay';
     overlay.innerHTML = `
@@ -1588,11 +1741,11 @@ renderDraftCard(draft) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-    
+
     overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1601,10 +1754,10 @@ renderDraftCard(draft) {
       });
     });
   },
-  
+
   showArtistSongsPopup(artist) {
     document.querySelector('.copies-popup-overlay')?.remove();
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'copies-popup-overlay';
     overlay.innerHTML = `
@@ -1644,11 +1797,11 @@ renderDraftCard(draft) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-    
+
     overlay.querySelectorAll('.artist-song-row-expand').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1661,7 +1814,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     overlay.querySelectorAll('.copies-popup-row-actions').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1673,7 +1826,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
+
     overlay.querySelectorAll('.artist-song-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
@@ -1693,13 +1846,9 @@ renderDraftCard(draft) {
     });
   },
 
-  // ============================================
-  // ACTIONS DROPDOWN & SEND NFT
-  // ============================================
-  
   showNftActionsDropdown(anchorEl, item, copy) {
     document.querySelector('.collection-actions-dropdown')?.remove();
-    
+
     const dropdown = document.createElement('div');
     dropdown.className = 'collection-actions-dropdown';
     const isExternal = copy._raw?.isExternal;
@@ -1719,27 +1868,27 @@ renderDraftCard(draft) {
         Send NFT to someone
       </button>
     `;
-    
+
     const rect = anchorEl.getBoundingClientRect();
     dropdown.style.position = 'fixed';
     dropdown.style.top = `${rect.bottom + 4}px`;
     dropdown.style.right = `${window.innerWidth - rect.right}px`;
-    
+
     document.body.appendChild(dropdown);
-    
+
     const sellBtn = dropdown.querySelector('[data-action="sell"]');
     if (sellBtn) sellBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       dropdown.remove();
       Modals.showListNFTForSale(copy._raw);
     });
-    
+
     dropdown.querySelector('[data-action="send"]').addEventListener('click', (e) => {
       e.stopPropagation();
       dropdown.remove();
       this.handleSendNft(item, copy);
     });
-    
+
     setTimeout(() => {
       const closeHandler = (e) => {
         if (!dropdown.contains(e.target)) {
@@ -1750,10 +1899,10 @@ renderDraftCard(draft) {
       document.addEventListener('click', closeHandler);
     }, 10);
   },
-  
+
   handleSendNft(item, copy) {
     document.querySelector('.copies-popup-overlay.send-overlay')?.remove();
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'copies-popup-overlay send-overlay';
     overlay.innerHTML = `
@@ -1773,15 +1922,15 @@ renderDraftCard(draft) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
     overlay.querySelector('.copies-popup-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     document.getElementById('sendAddressInput')?.focus();
-    
+
     document.getElementById('sendSubmitBtn').addEventListener('click', async () => {
       const recipient = document.getElementById('sendAddressInput').value.trim();
-      
+
       if (!recipient || !recipient.startsWith('r') || recipient.length < 25) {
         alert('Please enter a valid XRP address');
         return;
@@ -1790,11 +1939,11 @@ renderDraftCard(draft) {
         alert('You cannot send an NFT to yourself');
         return;
       }
-      
+
       const btn = document.getElementById('sendSubmitBtn');
       btn.textContent = 'Creating transfer...';
       btn.disabled = true;
-      
+
       try {
         const result = await XamanWallet.createSellOffer(copy.nftTokenId, 0, recipient);
         if (result.success) {
@@ -1814,9 +1963,8 @@ renderDraftCard(draft) {
   },
 
   // ============================================
-  // FOR SALE TAB
+  // FOR SALE TAB (unchanged)
   // ============================================
-  
   renderForSaleTab() {
     setTimeout(() => this.loadForSaleNFTs(), 0);
     return `
@@ -1825,17 +1973,17 @@ renderDraftCard(draft) {
       </div>
     `;
   },
-  
+
   async loadForSaleNFTs() {
     const container = document.getElementById('forsale-content');
     const countEl = document.getElementById('forsale-count');
     if (!container) return;
-    
+
     try {
       const response = await fetch(`/api/listings?seller=${AppState.user.address}`);
       const data = await response.json();
       if (countEl) countEl.textContent = data.listings?.length || 0;
-      
+
       if (!data.listings || data.listings.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
@@ -1849,13 +1997,13 @@ renderDraftCard(draft) {
         `;
         return;
       }
-      
+
       container.innerHTML = `
         <div class="collected-grid">
           ${data.listings.map(listing => this.renderListingCard(listing)).join('')}
         </div>
       `;
-      
+
       container.querySelectorAll('.cancel-listing-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -1863,7 +2011,7 @@ renderDraftCard(draft) {
           await this.cancelListing(listingData);
         });
       });
-      
+
       container.querySelectorAll('.edit-price-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -1871,7 +2019,7 @@ renderDraftCard(draft) {
           await this.showEditPriceModal(listingData);
         });
       });
-      
+
     } catch (error) {
       console.error('Failed to load listings:', error);
       container.innerHTML = `
@@ -1888,7 +2036,7 @@ renderDraftCard(draft) {
       `;
     }
   },
-  
+
   renderListingCard(listing) {
     const coverUrl = this.getImageUrl(listing.cover_url);
     const listingData = JSON.stringify({
@@ -1901,11 +2049,11 @@ renderDraftCard(draft) {
       artistName: listing.artist_name,
       coverUrl: listing.cover_url
     }).replace(/'/g, "\\'");
-    
+
     return `
       <div class="collected-nft-card listing-card">
         <div class="collected-nft-cover">
-          ${listing.cover_url 
+          ${listing.cover_url
             ? `<img src="${coverUrl}" alt="${listing.track_title || listing.release_title}" onerror="this.src='/placeholder.png'">`
             : `<div class="cover-placeholder">🎵</div>`
           }
@@ -1934,7 +2082,7 @@ renderDraftCard(draft) {
       </div>
     `;
   },
-  
+
   async cancelListing(listing) {
     if (!listing.offerIndex) {
       alert('Cannot cancel: No offer index found. The listing may already be cancelled on XRPL.');
@@ -1946,13 +2094,13 @@ renderDraftCard(draft) {
       }
       return;
     }
-    
+
     if (!confirm(`Cancel listing for "${listing.trackTitle || listing.releaseTitle}"?\n\nThis will require signing a transaction in Xaman.`)) return;
-    
+
     try {
       const btn = document.querySelector(`.cancel-listing-btn[data-listing*="${listing.id}"]`);
       if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;"></div> Cancelling...'; }
-      
+
       const result = await XamanWallet.cancelSellOffer(listing.offerIndex);
       if (result.success) {
         await fetch(`/api/listings?listingId=${listing.id}`, { method: 'DELETE' });
@@ -1971,11 +2119,11 @@ renderDraftCard(draft) {
       }
     }
   },
-  
+
   async showEditPriceModal(listing) {
     const currentPrice = parseFloat(listing.price);
     const coverUrl = this.getImageUrl(listing.coverUrl);
-    
+
     const modalHtml = `
       <div class="modal-overlay" id="edit-price-modal" style="display:flex;">
         <div class="modal-container" style="max-width: 400px;">
@@ -2004,32 +2152,32 @@ renderDraftCard(draft) {
         </div>
       </div>
     `;
-    
+
     document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
+
     const modal = document.getElementById('edit-price-modal');
     const closeBtn = document.getElementById('close-edit-price');
     const cancelBtn = document.getElementById('cancel-edit-price');
     const confirmBtn = document.getElementById('confirm-edit-price');
     const priceInput = document.getElementById('new-price-input');
-    
+
     priceInput.focus();
     priceInput.select();
-    
+
     const closeModal = () => modal.remove();
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    
+
     confirmBtn.addEventListener('click', async () => {
       const newPrice = parseFloat(priceInput.value);
       if (isNaN(newPrice) || newPrice <= 0) { alert('Please enter a valid price'); return; }
       if (newPrice === currentPrice) { alert('New price is the same as current price'); return; }
-      
+
       try {
         confirmBtn.disabled = true;
         confirmBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;display:inline-block;"></div> Updating...';
-        
+
         const result = await XamanWallet.editListingPrice(listing.nftTokenId, listing.offerIndex, newPrice);
         if (result.success) {
           await fetch('/api/listings', {
@@ -2059,21 +2207,19 @@ renderDraftCard(draft) {
   },
 
   // ============================================
-  // RELEASE CARD (PATCH 8: draft handling added)
+  // RELEASE CARD (music + drafts handled here)
   // ============================================
-  
   renderReleaseCard(release) {
     const available = release.totalEditions - release.soldEditions;
     const price = release.albumPrice || release.songPrice;
     const isOwner = AppState.user?.address === release.artistAddress;
     const coverUrl = this.getImageUrl(release.coverUrl);
-    
-    // PATCH 8: Draft handling for public profile view
+
     if (release.status === 'draft') {
       return `
         <div class="release-card draft-card" data-release-id="${release.id}">
           <div class="release-card-cover">
-            ${release.coverUrl 
+            ${release.coverUrl
               ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
               : `<div class="placeholder">🎵</div>`
             }
@@ -2091,13 +2237,11 @@ renderDraftCard(draft) {
         </div>
       `;
     }
-    
-    const mintBadge = '';
-    
+
     let statusClass = '';
     let statusBadge = '';
     let statusOverlay = '';
-    
+
     if (isOwner) {
       if (available === 0) {
         statusClass = 'sold-out';
@@ -2127,18 +2271,17 @@ renderDraftCard(draft) {
         `;
       }
     }
-    
+
     return `
       <div class="release-card ${statusClass}" data-release-id="${release.id}">
         <div class="release-card-cover">
-          ${release.coverUrl 
+          ${release.coverUrl
             ? `<img src="${coverUrl}" alt="${release.title}" onerror="this.src='/placeholder.png'">`
             : `<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`
           }
           <span class="release-type-badge ${release.type}">${release.type}</span>
           <span class="release-availability">${available} left</span>
           ${statusBadge}
-          ${mintBadge}
           ${statusOverlay}
         </div>
         <div class="release-card-info">
@@ -2152,11 +2295,10 @@ renderDraftCard(draft) {
       </div>
     `;
   },
-  
+
   // ============================================
-  // ERROR & EVENTS (PATCH 5: draft event bindings added)
+  // ERROR & EVENTS
   // ============================================
-  
   renderError() {
     const html = `
       <div class="empty-state" style="min-height: 60vh;">
@@ -2172,7 +2314,7 @@ renderDraftCard(draft) {
     `;
     UI.renderPage(html);
   },
-  
+
   bindEvents() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2180,11 +2322,11 @@ renderDraftCard(draft) {
         this.renderContent();
       });
     });
-    
+
     document.getElementById('edit-profile-btn')?.addEventListener('click', () => {
       Modals.showEditProfile();
     });
-    
+
     document.getElementById('share-profile-btn')?.addEventListener('click', () => {
       const profile = AppState.profile || {};
       ShareUtils.shareArtistProfile({
@@ -2198,24 +2340,41 @@ renderDraftCard(draft) {
     document.getElementById('view-social-links-btn')?.addEventListener('click', () => {
       this.showSocialLinksModal(AppState.profile);
     });
-    
+
     this.fetchCollectedCount();
     this.fetchForSaleCount();
-    
+
     document.getElementById('list-all-btn')?.addEventListener('click', () => {
       const unlistedReleases = this.releases.filter(r => !this.isForSale(r) && (r.totalEditions - r.soldEditions) > 0);
       Modals.showListAllForSale(unlistedReleases);
     });
-    
+
+    // Music/audio release cards
     document.querySelectorAll('.release-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.list-now-btn') || e.target.closest('.listing-overlay')) return;
         const releaseId = card.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
-        if (release) Modals.showRelease(release);
+        if (!release) return;
+        Modals.showRelease(release);
       });
     });
-    
+
+    // ⚡ NEW: Film cards open VideoPlayerModal
+    document.querySelectorAll('.film-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const filmId = card.dataset.filmId;
+        const release = this.releases.find(r => r.id === filmId);
+        if (!release) return;
+        if (typeof VideoPlayerModal !== 'undefined' && typeof VideoPlayerModal.show === 'function') {
+          VideoPlayerModal.show(release);
+        } else {
+          console.error('VideoPlayerModal not loaded');
+          Modals.showRelease(release);
+        }
+      });
+    });
+
     document.querySelectorAll('.list-now-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -2223,16 +2382,12 @@ renderDraftCard(draft) {
         Modals.showListForSale(release);
       });
     });
-    
-    // ============================================
-    // DRAFT EVENT BINDINGS (PATCH 5)
-    // ============================================
-    // Draft ••• dropdown toggle
+
+    // Draft event bindings
     document.querySelectorAll('.draft-more-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const draftId = btn.dataset.draftId;
-        // Close any other open dropdowns
         document.querySelectorAll('.draft-dropdown').forEach(d => {
           if (d.id !== `draft-dropdown-${draftId}`) d.classList.add('hidden');
         });
@@ -2241,12 +2396,10 @@ renderDraftCard(draft) {
       });
     });
 
-    // Close dropdown when clicking outside
     document.addEventListener('click', () => {
       document.querySelectorAll('.draft-dropdown').forEach(d => d.classList.add('hidden'));
     });
 
-    // Draft play button
     document.querySelectorAll('.draft-play-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2266,7 +2419,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    // Draft card click — preview
+
     document.querySelectorAll('.draft-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
@@ -2275,8 +2428,7 @@ renderDraftCard(draft) {
         if (draft) Modals.showRelease(draft);
       });
     });
-    
-    // Finalize & Mint
+
     document.querySelectorAll('.finalize-draft-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2285,21 +2437,20 @@ renderDraftCard(draft) {
         if (draft) Modals.showFinalizeMint(draft);
       });
     });
-    
-    // Toggle visibility
+
     document.querySelectorAll('.toggle-visibility-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const draftId = btn.dataset.draftId;
         const current = btn.dataset.current;
         const newVisibility = current === 'public' ? 'private' : 'public';
-        
+
         try {
           btn.disabled = true;
           btn.textContent = 'Updating...';
           await API.updateRelease(draftId, { visibility: newVisibility });
           Modals.showToast(newVisibility === 'public' ? 'Draft is now public on your profile!' : 'Draft is now private');
-          this.render(); // Refresh
+          this.render();
         } catch (err) {
           console.error('Toggle visibility failed:', err);
           Modals.showToast('Failed to update visibility');
@@ -2307,8 +2458,7 @@ renderDraftCard(draft) {
         }
       });
     });
-    
-    // Share draft link
+
     document.querySelectorAll('.share-draft-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2321,22 +2471,21 @@ renderDraftCard(draft) {
         });
       });
     });
-    
-    // Delete draft
+
     document.querySelectorAll('.delete-draft-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const draftId = btn.dataset.draftId;
         const draft = this.releases.find(r => r.id === draftId);
-        
+
         if (!confirm(`Delete draft "${draft?.title || 'this release'}"?\n\nThis cannot be undone. Audio files on IPFS will remain but the draft record will be deleted.`)) return;
-        
+
         try {
           btn.disabled = true;
           btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;"></div>';
           await fetch(`/api/releases?id=${draftId}`, { method: 'DELETE' });
           Modals.showToast('Draft deleted');
-          this.render(); // Refresh
+          this.render();
         } catch (err) {
           console.error('Delete draft failed:', err);
           Modals.showToast('Failed to delete draft');
@@ -2344,11 +2493,11 @@ renderDraftCard(draft) {
         }
       });
     });
-},
-  
+  },
+
   showSocialLinksModal(profile) {
     const socialLinks = profile.socialLinks || [];
-    
+
     const platformDisplay = {
       spotify: { label: 'Spotify', icon: '🎵', color: '#1DB954' },
       youtube: { label: 'YouTube', icon: '▶️', color: '#FF0000' },
@@ -2364,33 +2513,24 @@ renderDraftCard(draft) {
     };
 
     const modalHTML = `
-      <div 
-        id="social-links-modal" 
+      <div
+        id="social-links-modal"
         style="
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0, 0, 0, 0.7);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10000;
-          padding: 20px;
+          display: flex; align-items: center; justify-content: center;
+          z-index: 10000; padding: 20px;
         "
         onclick="if(event.target.id === 'social-links-modal') this.remove()"
       >
-        <div 
+        <div
           style="
             background: var(--bg-primary);
             border-radius: 16px;
-            max-width: 500px;
-            width: 100%;
-            max-height: 80vh;
-            overflow-y: auto;
-            padding: 24px;
-            position: relative;
+            max-width: 500px; width: 100%;
+            max-height: 80vh; overflow-y: auto;
+            padding: 24px; position: relative;
           "
           onclick="event.stopPropagation()"
         >
@@ -2398,20 +2538,14 @@ renderDraftCard(draft) {
             <h2 style="margin: 0; font-size: 20px; font-weight: 700;">
               ${profile.name || 'Artist'}'s Links
             </h2>
-            <button 
+            <button
               onclick="document.getElementById('social-links-modal').remove()"
               style="
-                background: none;
-                border: none;
-                font-size: 24px;
-                cursor: pointer;
-                color: #666;
-                padding: 0;
-                width: 32px;
-                height: 32px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                background: none; border: none;
+                font-size: 24px; cursor: pointer;
+                color: #666; padding: 0;
+                width: 32px; height: 32px;
+                display: flex; align-items: center; justify-content: center;
                 border-radius: 6px;
               "
               onmouseover="this.style.background='#f5f5f5'"
@@ -2425,22 +2559,17 @@ renderDraftCard(draft) {
             ${socialLinks.map(link => {
               const platform = platformDisplay[link.platform] || platformDisplay.custom;
               const displayName = link.platform === 'custom' ? link.customName : platform.label;
-              
+
               return `
-                <a 
+                <a
                   href="${link.url}"
                   target="_blank"
                   rel="noopener noreferrer"
                   style="
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    padding: 14px;
-                    background: #f8f9fa;
-                    border-radius: 10px;
-                    text-decoration: none;
-                    color: #1a1a1a;
-                    transition: all 0.2s;
+                    display: flex; align-items: center; gap: 12px;
+                    padding: 14px; background: #f8f9fa;
+                    border-radius: 10px; text-decoration: none;
+                    color: #1a1a1a; transition: all 0.2s;
                     border: 2px solid transparent;
                   "
                   onmouseover="
@@ -2455,14 +2584,9 @@ renderDraftCard(draft) {
                   "
                 >
                   <div style="
-                    font-size: 24px;
-                    width: 40px;
-                    height: 40px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: white;
-                    border-radius: 8px;
+                    font-size: 24px; width: 40px; height: 40px;
+                    display: flex; align-items: center; justify-content: center;
+                    background: white; border-radius: 8px;
                   ">
                     ${platform.icon}
                   </div>
@@ -2474,9 +2598,7 @@ renderDraftCard(draft) {
                       ${link.url}
                     </div>
                   </div>
-                  <div style="font-size: 18px; color: #999;">
-                    →
-                  </div>
+                  <div style="font-size: 18px; color: #999;">→</div>
                 </a>
               `;
             }).join('')}
