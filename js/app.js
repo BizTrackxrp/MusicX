@@ -6,6 +6,8 @@
  * UPDATED: Added 📚 Audiobooks and 🎙️ Podcasts page routes
  * UPDATED: Added 🎬 Films and 🎮 Games page routes
  * UPDATED: Added 🔒 Private Feed page route
+ * UPDATED: 👤 Artist route now uses ArtistPage (with content-type tabs).
+ *          Inline renderArtistPage kept as fallback for safety.
  */
 const Router = {
   params: {},
@@ -127,8 +129,15 @@ const Router = {
       case 'release':
         this.openReleaseFromUrl(this.params.id, this.params.track);
         break;
+      // ========== ARTIST (public profile viewer) ==========
       case 'artist':
-        this.renderArtistPage(this.params.address);
+        if (typeof ArtistPage !== 'undefined') {
+          ArtistPage.render(this.params.address);
+        } else {
+          // Fallback to inline renderer if ArtistPage hasn't loaded yet
+          console.warn('ArtistPage not loaded, using fallback');
+          this.renderArtistPage(this.params.address);
+        }
         break;
       case 'sales':
         if (typeof ArtistSalesPage !== 'undefined') {
@@ -461,6 +470,11 @@ const Router = {
     document.addEventListener('keydown', escHandler);
   },
   
+  /**
+   * LEGACY FALLBACK: Inline artist page renderer.
+   * Used only if ArtistPage (/js/pages/artist.js) hasn't loaded.
+   * Once ArtistPage is confirmed working, this can be deleted entirely.
+   */
   async renderArtistPage(address) {
     UI.showLoading();
     try {
