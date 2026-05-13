@@ -1,42 +1,34 @@
 /**
  * XRP Music - Music Page (formerly "Stream")
- * Unified discovery + marketplace for music
+ * Unified music discovery + primary marketplace
  *
- * v3 (May 2026):
- * ✅ Merged with Marketplace sections — one place for all music
+ * v4 (May 2026):
+ * ✅ Market toggle removed — Music page is JUST music (primary market)
+ * ✅ Resale Market moved to its own sidebar entry (hidden when empty)
  * ✅ Music-only filter (films/audiobooks/podcasts/games have dedicated pages)
  *
  * SECTION ORDER:
- *   1. Market Type Toggle  [From Artists | Resale Market]
- *   2. Top Played          (plays — discovery)
- *   3. Top Selling         (sales — marketplace)
- *   4. Newest Drops        (recent — marketplace)
- *   5. Top Artists         (volume — marketplace)
- *   6. Emerging Artists    (20+ XRP, low sales — marketplace)
- *   7. Get Them Before They're Gone  (scarcity — marketplace)
- *   8. All Tracks / All Artists  (full catalog — discovery)
- *   9. Stats
+ *   1. Top Played          (plays — discovery)
+ *   2. Top Selling         (sales — marketplace)
+ *   3. Newest Drops        (recent — marketplace)
+ *   4. Top Artists         (volume — marketplace)
+ *   5. Emerging Artists    (20+ XRP, low sales — marketplace)
+ *   6. Get Them Before They're Gone  (scarcity — marketplace)
+ *   7. All Tracks / All Artists  (full catalog — discovery)
+ *   8. Stats
  */
 
 const StreamPage = {
   releases: [],
   artists: [],
   topTracks: [],
-  secondaryListings: [],
   currentTab: 'artists',
   currentTopPeriod: '7d',
-  marketType: 'primary',
   
-  // Content types EXCLUDED from this page (have dedicated pages elsewhere)
   _NON_MUSIC_TYPES: ['film', 'video', 'audiobook', 'podcast', 'game'],
   
   isMusicRelease(release) {
     const ct = (release?.contentType || release?.content_type || '').toLowerCase();
-    return !this._NON_MUSIC_TYPES.includes(ct);
-  },
-  
-  isMusicListing(listing) {
-    const ct = (listing?.content_type || listing?.contentType || '').toLowerCase();
     return !this._NON_MUSIC_TYPES.includes(ct);
   },
   
@@ -57,22 +49,13 @@ const StreamPage = {
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
-      const [releases, listingsResponse] = await Promise.all([
-        Promise.race([API.getReleases(), timeout]),
-        fetch('/api/listings').then(r => r.json()).catch(() => ({ listings: [] })),
-      ]);
+      const releases = await Promise.race([API.getReleases(), timeout]);
       
       // ⚡ MUSIC-ONLY FILTER
       const allReleases = releases || [];
       this.releases = allReleases.filter(r => this.isMusicRelease(r));
       
-      const allListings = listingsResponse.listings || [];
-      this.secondaryListings = allListings.filter(l => this.isMusicListing(l));
-      
-      console.log(
-        `🎵 Music: ${allReleases.length} releases → ${this.releases.length} music | ` +
-        `${allListings.length} listings → ${this.secondaryListings.length} music resale`
-      );
+      console.log(`🎵 Music: ${allReleases.length} releases → ${this.releases.length} music`);
       
       setReleases(this.releases);
       this.extractArtists();
@@ -303,38 +286,200 @@ const StreamPage = {
     const sortedTracks = this.sortTracks(allTracks);
     const sortedArtists = this.sortArtists();
     const stats = this.getStats();
-    const available = this.getAvailableReleases();
+    
+    const topSelling = this.getTopSelling(5);
+    const newestDrops = this.getNewestDrops(5);
+    const topArtists = this.getTopArtists(5);
+    const emergingArtists = this.getEmergingArtists(5);
+    const scarce = this.getScarceReleases(5);
     
     const html = `
       <div class="stream-page animate-fade-in">
         
-        <!-- ════════ MARKET TYPE TOGGLE ════════ -->
-        <div class="market-type-tabs">
-          <button class="market-type-btn ${this.marketType === 'primary' ? 'active' : ''}" data-market="primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 18V5l12-2v13"></path>
-              <circle cx="6" cy="18" r="3"></circle>
-              <circle cx="18" cy="16" r="3"></circle>
-            </svg>
-            From Artists
-            <span class="market-count">${available.length}</span>
-          </button>
-          <button class="market-type-btn ${this.marketType === 'secondary' ? 'active' : ''}" data-market="secondary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 1l4 4-4 4"></path>
-              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-              <path d="M7 23l-4-4 4-4"></path>
-              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-            </svg>
-            Resale Market
-            <span class="market-count">${this.secondaryListings.length}</span>
-          </button>
-        </div>
+        <!-- ════════ TOP PLAYED ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">▶</div>
+              <div>
+                <h3 class="section-name">Top Played</h3>
+                <p class="section-subtitle">Most streamed by collectors</p>
+              </div>
+            </div>
+            <div class="section-header-right">
+              <div class="period-tabs">
+                <button class="period-tab ${this.currentTopPeriod === '1d' ? 'active' : ''}" data-period="1d">1D</button>
+                <button class="period-tab ${this.currentTopPeriod === '7d' ? 'active' : ''}" data-period="7d">7D</button>
+                <button class="period-tab ${this.currentTopPeriod === '30d' ? 'active' : ''}" data-period="30d">30D</button>
+                <button class="period-tab ${this.currentTopPeriod === '365d' ? 'active' : ''}" data-period="365d">365D</button>
+              </div>
+              <button class="view-all-btn" id="view-all-top-tracks">
+                View All
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
+          <div class="featured-grid">
+            ${this.topTracks.length > 0 
+              ? this.topTracks.slice(0, 5).map((track, i) => this.renderTopTrackCard(track, i)).join('')
+              : '<div class="empty-section">No play data available yet. Start listening to build the charts!</div>'
+            }
+          </div>
+        </section>
         
-        ${this.marketType === 'primary'
-          ? this.renderPrimaryContent(sortedTracks, sortedArtists, allTracks, stats)
-          : this.renderSecondaryContent()
-        }
+        <!-- ════════ TOP SELLING ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon hot">🔥</div>
+              <div>
+                <h3 class="section-name">Top Selling</h3>
+                <p class="section-subtitle">Most popular releases</p>
+              </div>
+            </div>
+            <button class="view-all-btn" data-sort="top-selling">
+              View All
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+          <div class="featured-grid">
+            ${topSelling.length > 0 
+              ? topSelling.map((r, i) => this.renderFeaturedCard(r, i + 1, 'sales')).join('')
+              : '<div class="empty-section">No sales yet — be the first to buy!</div>'
+            }
+          </div>
+        </section>
+        
+        <!-- ════════ NEWEST DROPS ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon new">✨</div>
+              <div>
+                <h3 class="section-name">Newest Drops</h3>
+                <p class="section-subtitle">Fresh releases from artists</p>
+              </div>
+            </div>
+            <button class="view-all-btn" data-sort="newest">
+              View All
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+          <div class="featured-grid">
+            ${newestDrops.length > 0 
+              ? newestDrops.map((r, i) => this.renderFeaturedCard(r, i + 1, 'date')).join('')
+              : '<div class="empty-section">No releases yet</div>'
+            }
+          </div>
+        </section>
+        
+        <!-- ════════ TOP ARTISTS ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">👑</div>
+              <div>
+                <h3 class="section-name">Top Artists</h3>
+                <p class="section-subtitle">Most collected artists on the platform</p>
+              </div>
+            </div>
+          </div>
+          <div class="featured-grid">
+            ${topArtists.length > 0
+              ? topArtists.map((a, i) => this.renderArtistFeatureCard(a, i + 1, 'top')).join('')
+              : '<div class="empty-section">No artist data yet</div>'
+            }
+          </div>
+        </section>
+        
+        <!-- ════════ EMERGING ARTISTS ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">🌱</div>
+              <div>
+                <h3 class="section-name">Emerging Artists</h3>
+                <p class="section-subtitle">Rising talent with 20+ XRP in sales volume</p>
+              </div>
+            </div>
+          </div>
+          <div class="featured-grid">
+            ${emergingArtists.length > 0
+              ? emergingArtists.map((a, i) => this.renderArtistFeatureCard(a, i + 1, 'emerging')).join('')
+              : '<div class="empty-section">Artists need 20+ XRP in sales volume to appear here</div>'
+            }
+          </div>
+        </section>
+        
+        <!-- ════════ SCARCE ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="section-title-group">
+              <div class="section-icon scarce">⚡</div>
+              <div>
+                <h3 class="section-name">Get Them Before They're Gone</h3>
+                <p class="section-subtitle">Limited copies remaining · 1 per artist</p>
+              </div>
+            </div>
+          </div>
+          <div class="featured-grid">
+            ${scarce.length > 0
+              ? scarce.map((r, i) => this.renderFeaturedCard(r, i + 1, 'scarce')).join('')
+              : '<div class="empty-section">All releases have plenty of copies</div>'
+            }
+          </div>
+        </section>
+        
+        <!-- ════════ ALL TRACKS / ALL ARTISTS ════════ -->
+        <section class="stream-section">
+          <div class="section-header">
+            <div class="tab-toggle">
+              <button class="tab-btn ${this.currentTab === 'tracks' ? 'active' : ''}" data-tab="tracks">
+                All Tracks
+                <span class="tab-count">${allTracks.length}</span>
+              </button>
+              <button class="tab-btn ${this.currentTab === 'artists' ? 'active' : ''}" data-tab="artists">
+                All Artists
+                <span class="tab-count">${this.artists.length}</span>
+              </button>
+            </div>
+          </div>
+          
+          ${this.currentTab === 'tracks' ? `
+            <div class="track-list">
+              ${sortedTracks.length > 0 
+                ? sortedTracks.map((track, i) => this.renderTrackItem(track, i)).join('')
+                : '<div class="empty-message">No tracks found</div>'
+              }
+            </div>
+          ` : `
+            <div class="artists-grid">
+              ${sortedArtists.map(artist => this.renderArtistCard(artist)).join('')}
+            </div>
+          `}
+        </section>
+        
+        <!-- ════════ STATS ════════ -->
+        <section class="stream-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-value" style="color: var(--accent);">${stats.releases}</div>
+              <div class="stat-label">Releases</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color: #a855f7;">${stats.tracks}</div>
+              <div class="stat-label">Tracks</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color: var(--success);">${stats.artists}</div>
+              <div class="stat-label">Artists</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color: var(--warning);">${stats.sold}</div>
+              <div class="stat-label">Sold</div>
+            </div>
+          </div>
+        </section>
       </div>
       
       ${this.getStyles()}
@@ -342,227 +487,6 @@ const StreamPage = {
     
     UI.renderPage(html);
     this.bindEvents();
-  },
-  
-  renderPrimaryContent(sortedTracks, sortedArtists, allTracks, stats) {
-    const topSelling = this.getTopSelling(5);
-    const newestDrops = this.getNewestDrops(5);
-    const topArtists = this.getTopArtists(5);
-    const emergingArtists = this.getEmergingArtists(5);
-    const scarce = this.getScarceReleases(5);
-    
-    return `
-      <!-- ════════ TOP PLAYED ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">▶</div>
-            <div>
-              <h3 class="section-name">Top Played</h3>
-              <p class="section-subtitle">Most streamed by collectors</p>
-            </div>
-          </div>
-          <div class="section-header-right">
-            <div class="period-tabs">
-              <button class="period-tab ${this.currentTopPeriod === '1d' ? 'active' : ''}" data-period="1d">1D</button>
-              <button class="period-tab ${this.currentTopPeriod === '7d' ? 'active' : ''}" data-period="7d">7D</button>
-              <button class="period-tab ${this.currentTopPeriod === '30d' ? 'active' : ''}" data-period="30d">30D</button>
-              <button class="period-tab ${this.currentTopPeriod === '365d' ? 'active' : ''}" data-period="365d">365D</button>
-            </div>
-            <button class="view-all-btn" id="view-all-top-tracks">
-              View All
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-          </div>
-        </div>
-        <div class="featured-grid">
-          ${this.topTracks.length > 0 
-            ? this.topTracks.slice(0, 5).map((track, i) => this.renderTopTrackCard(track, i)).join('')
-            : '<div class="empty-section">No play data available yet. Start listening to build the charts!</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ TOP SELLING ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon hot">🔥</div>
-            <div>
-              <h3 class="section-name">Top Selling</h3>
-              <p class="section-subtitle">Most popular releases</p>
-            </div>
-          </div>
-          <button class="view-all-btn" data-sort="top-selling">
-            View All
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        </div>
-        <div class="featured-grid">
-          ${topSelling.length > 0 
-            ? topSelling.map((r, i) => this.renderFeaturedCard(r, i + 1, 'sales')).join('')
-            : '<div class="empty-section">No sales yet — be the first to buy!</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ NEWEST DROPS ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon new">✨</div>
-            <div>
-              <h3 class="section-name">Newest Drops</h3>
-              <p class="section-subtitle">Fresh releases from artists</p>
-            </div>
-          </div>
-          <button class="view-all-btn" data-sort="newest">
-            View All
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        </div>
-        <div class="featured-grid">
-          ${newestDrops.length > 0 
-            ? newestDrops.map((r, i) => this.renderFeaturedCard(r, i + 1, 'date')).join('')
-            : '<div class="empty-section">No releases yet</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ TOP ARTISTS ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">👑</div>
-            <div>
-              <h3 class="section-name">Top Artists</h3>
-              <p class="section-subtitle">Most collected artists on the platform</p>
-            </div>
-          </div>
-        </div>
-        <div class="featured-grid">
-          ${topArtists.length > 0
-            ? topArtists.map((a, i) => this.renderArtistFeatureCard(a, i + 1, 'top')).join('')
-            : '<div class="empty-section">No artist data yet</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ EMERGING ARTISTS ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">🌱</div>
-            <div>
-              <h3 class="section-name">Emerging Artists</h3>
-              <p class="section-subtitle">Rising talent with 20+ XRP in sales volume</p>
-            </div>
-          </div>
-        </div>
-        <div class="featured-grid">
-          ${emergingArtists.length > 0
-            ? emergingArtists.map((a, i) => this.renderArtistFeatureCard(a, i + 1, 'emerging')).join('')
-            : '<div class="empty-section">Artists need 20+ XRP in sales volume to appear here</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ SCARCE ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="section-title-group">
-            <div class="section-icon scarce">⚡</div>
-            <div>
-              <h3 class="section-name">Get Them Before They're Gone</h3>
-              <p class="section-subtitle">Limited copies remaining · 1 per artist</p>
-            </div>
-          </div>
-        </div>
-        <div class="featured-grid">
-          ${scarce.length > 0
-            ? scarce.map((r, i) => this.renderFeaturedCard(r, i + 1, 'scarce')).join('')
-            : '<div class="empty-section">All releases have plenty of copies</div>'
-          }
-        </div>
-      </section>
-      
-      <!-- ════════ ALL TRACKS / ALL ARTISTS ════════ -->
-      <section class="stream-section">
-        <div class="section-header">
-          <div class="tab-toggle">
-            <button class="tab-btn ${this.currentTab === 'tracks' ? 'active' : ''}" data-tab="tracks">
-              All Tracks
-              <span class="tab-count">${allTracks.length}</span>
-            </button>
-            <button class="tab-btn ${this.currentTab === 'artists' ? 'active' : ''}" data-tab="artists">
-              All Artists
-              <span class="tab-count">${this.artists.length}</span>
-            </button>
-          </div>
-        </div>
-        
-        ${this.currentTab === 'tracks' ? `
-          <div class="track-list">
-            ${sortedTracks.length > 0 
-              ? sortedTracks.map((track, i) => this.renderTrackItem(track, i)).join('')
-              : '<div class="empty-message">No tracks found</div>'
-            }
-          </div>
-        ` : `
-          <div class="artists-grid">
-            ${sortedArtists.map(artist => this.renderArtistCard(artist)).join('')}
-          </div>
-        `}
-      </section>
-      
-      <!-- ════════ STATS ════════ -->
-      <section class="stream-section">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-value" style="color: var(--accent);">${stats.releases}</div>
-            <div class="stat-label">Releases</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color: #a855f7;">${stats.tracks}</div>
-            <div class="stat-label">Tracks</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color: var(--success);">${stats.artists}</div>
-            <div class="stat-label">Artists</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color: var(--warning);">${stats.sold}</div>
-            <div class="stat-label">Sold</div>
-          </div>
-        </div>
-      </section>
-    `;
-  },
-  
-  renderSecondaryContent() {
-    if (this.secondaryListings.length === 0) {
-      return `
-        <div class="empty-state" style="margin-top: 40px;">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 1l4 4-4 4"></path>
-            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-            <path d="M7 23l-4-4 4-4"></path>
-            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-          </svg>
-          <h3>No Resale Listings Yet</h3>
-          <p>When collectors list their NFTs for sale, they appear here.</p>
-        </div>
-      `;
-    }
-    
-    return `
-      <div style="margin: 20px 0;">
-        <input type="text" class="form-input" id="secondary-search" placeholder="Search resale listings..." style="max-width: 400px;">
-      </div>
-      <div class="release-grid">
-        ${this.secondaryListings.map(listing => this.renderSecondaryCard(listing)).join('')}
-      </div>
-    `;
   },
   
   // ─── CARD RENDERERS ────────────────────────────────────────
@@ -742,34 +666,6 @@ const StreamPage = {
     `;
   },
   
-  renderSecondaryCard(listing) {
-    const title = listing.track_title || listing.release_title || 'NFT';
-    const artist = listing.artist_name || 'Unknown Artist';
-    const price = parseFloat(listing.price);
-    const coverUrl = this.getImageUrl(listing.cover_url);
-    
-    return `
-      <div class="secondary-listing-card" data-listing-id="${listing.id}">
-        <div class="secondary-cover">
-          ${listing.cover_url 
-            ? `<img src="${coverUrl}" alt="${title}" onerror="this.src='/placeholder.png'">`
-            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;">🎵</div>`
-          }
-          <div class="secondary-price">${price} XRP</div>
-          <div class="secondary-badge">Resale</div>
-        </div>
-        <div class="secondary-info">
-          <div class="secondary-title">${title}</div>
-          <div class="secondary-artist">${artist}</div>
-          <div class="secondary-seller">Seller: ${listing.seller_address.slice(0, 6)}...${listing.seller_address.slice(-4)}</div>
-          <button class="btn btn-primary btn-sm secondary-buy-btn" data-listing='${JSON.stringify(listing).replace(/'/g, "\\'")}'>
-            Buy Now
-          </button>
-        </div>
-      </div>
-    `;
-  },
-  
   renderEmpty() {
     UI.renderPage(`
       <div class="empty-state" style="min-height: 60vh;">
@@ -853,17 +749,6 @@ const StreamPage = {
   // ─── EVENTS ────────────────────────────────────────────────
   
   bindEvents() {
-    // Market type toggle
-    document.querySelectorAll('.market-type-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const newMarket = btn.dataset.market;
-        if (newMarket !== this.marketType) {
-          this.marketType = newMarket;
-          this.renderContent();
-        }
-      });
-    });
-    
     // Period tabs (Top Played)
     document.querySelectorAll('.period-tab').forEach(tab => {
       tab.addEventListener('click', async () => {
@@ -876,12 +761,10 @@ const StreamPage = {
       });
     });
     
-    // View All (top tracks → analytics)
     document.getElementById('view-all-top-tracks')?.addEventListener('click', () => {
       this.viewAllTopTracks();
     });
     
-    // View All (sort buttons → analytics)
     document.querySelectorAll('.view-all-btn[data-sort]').forEach(btn => {
       btn.addEventListener('click', () => {
         const sort = btn.dataset.sort;
@@ -889,7 +772,6 @@ const StreamPage = {
       });
     });
     
-    // All Tracks / All Artists tab buttons
     document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         const newTab = btn.dataset.tab;
@@ -900,7 +782,6 @@ const StreamPage = {
       });
     });
     
-    // Featured release cards → open release modal
     document.querySelectorAll('.featured-card:not(.artist-feature-card):not(.top-track-card)').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.play-btn') || e.target.closest('.mv-badge')) return;
@@ -910,7 +791,6 @@ const StreamPage = {
       });
     });
     
-    // Top track cards → open release modal
     document.querySelectorAll('.top-track-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.play-btn') || e.target.closest('.mv-badge')) return;
@@ -923,7 +803,6 @@ const StreamPage = {
       });
     });
     
-    // Play buttons on top track cards
     document.querySelectorAll('.play-top-track-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -933,7 +812,6 @@ const StreamPage = {
       });
     });
     
-    // Play buttons on featured release cards
     document.querySelectorAll('.play-release-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -943,7 +821,6 @@ const StreamPage = {
       });
     });
     
-    // Artist feature cards → artist profile
     document.querySelectorAll('.artist-feature-card').forEach(card => {
       card.addEventListener('click', () => {
         const address = card.dataset.artistAddress;
@@ -951,7 +828,6 @@ const StreamPage = {
       });
     });
     
-    // Track items (All Tracks tab)
     document.querySelectorAll('.track-item').forEach(item => {
       item.addEventListener('click', () => {
         const index = parseInt(item.dataset.trackIndex, 10);
@@ -961,7 +837,6 @@ const StreamPage = {
       });
     });
     
-    // MV badge clicks - play + open video modal
     document.querySelectorAll('.mv-play-btn').forEach(badge => {
       badge.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -996,30 +871,10 @@ const StreamPage = {
       });
     });
     
-    // Artist cards (All Artists tab)
     document.querySelectorAll('.artist-card:not(.artist-feature-card)').forEach(card => {
       card.addEventListener('click', () => {
         const address = card.dataset.artistAddress;
         if (address) Router.navigate('artist', { address });
-      });
-    });
-    
-    // Secondary market buy buttons
-    document.querySelectorAll('.secondary-buy-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const listing = JSON.parse(btn.dataset.listing);
-        Modals.showSecondaryPurchase(listing);
-      });
-    });
-    
-    // Secondary search
-    document.getElementById('secondary-search')?.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      document.querySelectorAll('.secondary-listing-card').forEach(card => {
-        const title = card.querySelector('.secondary-title')?.textContent.toLowerCase() || '';
-        const artist = card.querySelector('.secondary-artist')?.textContent.toLowerCase() || '';
-        card.style.display = (title.includes(query) || artist.includes(query)) ? '' : 'none';
       });
     });
   },
@@ -1067,52 +922,6 @@ const StreamPage = {
       <style>
         .stream-section { margin-bottom: 40px; }
         
-        /* ════════ MARKET TYPE TABS (at top of page) ════════ */
-        .market-type-tabs {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 32px;
-          padding: 4px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-          width: fit-content;
-        }
-        @media (max-width: 640px) {
-          .market-type-tabs { width: 100%; }
-        }
-        .market-type-btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 20px;
-          border: none;
-          border-radius: var(--radius-lg);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 150ms ease;
-        }
-        @media (max-width: 640px) {
-          .market-type-btn { flex: 1; justify-content: center; font-size: 13px; padding: 10px 12px; }
-        }
-        .market-type-btn:hover { color: var(--text-primary); }
-        .market-type-btn.active {
-          background: var(--accent);
-          color: white;
-        }
-        .market-count {
-          padding: 2px 8px;
-          background: rgba(255,255,255,0.15);
-          border-radius: 100px;
-          font-size: 12px;
-        }
-        .market-type-btn.active .market-count { background: rgba(255,255,255,0.25); }
-        .market-type-btn:not(.active) .market-count { background: var(--bg-hover); }
-        
-        /* ════════ SECTION HEADER ════════ */
         .section-header {
           display: flex;
           align-items: center;
@@ -1135,103 +944,42 @@ const StreamPage = {
         .section-icon.hot { background: linear-gradient(135deg, #f97316, #ef4444); }
         .section-icon.new { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
         .section-icon.scarce { background: linear-gradient(135deg, #eab308, #f59e0b); }
-        .section-name {
-          font-size: 18px;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0;
-        }
-        .section-subtitle {
-          font-size: 13px;
-          color: var(--text-muted);
-          margin: 2px 0 0 0;
-        }
-        .section-header-right {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-        }
+        .section-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
+        .section-subtitle { font-size: 13px; color: var(--text-muted); margin: 2px 0 0 0; }
+        .section-header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .view-all-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 10px 16px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-md);
-          color: var(--text-secondary);
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 150ms;
+          display: flex; align-items: center; gap: 4px; padding: 10px 16px;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-md); color: var(--text-secondary);
+          font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms;
         }
-        .view-all-btn:hover {
-          border-color: var(--accent);
-          color: var(--accent);
-        }
+        .view-all-btn:hover { border-color: var(--accent); color: var(--accent); }
         
-        /* ════════ FEATURED GRID (5 cards) ════════ */
-        .featured-grid {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 16px;
-        }
+        .featured-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
         @media (max-width: 1200px) { .featured-grid { grid-template-columns: repeat(4, 1fr); } }
         @media (max-width: 900px) { .featured-grid { grid-template-columns: repeat(3, 1fr); } }
         @media (max-width: 640px) { .featured-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
         
         .featured-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          cursor: pointer;
-          transition: all 200ms ease;
+          background: var(--bg-card); border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: all 200ms ease;
         }
-        .featured-card:hover {
-          transform: translateY(-4px);
-          border-color: var(--accent);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-        }
-        .featured-card-cover {
-          position: relative;
-          aspect-ratio: 1;
-          background: var(--bg-hover);
-        }
-        .featured-card-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
+        .featured-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+        .featured-card-cover { position: relative; aspect-ratio: 1; background: var(--bg-hover); }
+        .featured-card-cover img { width: 100%; height: 100%; object-fit: cover; }
         
-        /* ════════ RANK BADGE ════════ */
         .rank-badge {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          padding: 4px 10px;
-          font-size: 12px;
-          font-weight: 800;
-          border-radius: 6px;
-          color: white;
-          z-index: 2;
+          position: absolute; top: 8px; left: 8px; padding: 4px 10px;
+          font-size: 12px; font-weight: 800; border-radius: 6px; color: white; z-index: 2;
         }
         .rank-badge.rank-1 { background: linear-gradient(135deg, #ffd700, #ffaa00); box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4); }
         .rank-badge.rank-2 { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); box-shadow: 0 2px 8px rgba(192, 192, 192, 0.4); }
         .rank-badge.rank-3 { background: linear-gradient(135deg, #cd7f32, #b87333); box-shadow: 0 2px 8px rgba(205, 127, 50, 0.4); }
         .rank-badge.rank-4, .rank-badge.rank-5 { background: rgba(59, 130, 246, 0.9); }
         
-        /* ════════ CARD BADGES ════════ */
         .card-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 10px;
-          font-size: 11px;
-          font-weight: 600;
-          border-radius: 6px;
-          color: white;
+          position: absolute; top: 8px; right: 8px; padding: 4px 10px;
+          font-size: 11px; font-weight: 600; border-radius: 6px; color: white;
         }
         .card-badge.plays { background: linear-gradient(135deg, #3b82f6, #2563eb); }
         .card-badge.sales { background: linear-gradient(135deg, #22c55e, #16a34a); }
@@ -1244,327 +992,120 @@ const StreamPage = {
         
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         
-        /* ════════ MV BADGE ════════ */
         .mv-badge {
-          position: absolute;
-          bottom: 8px;
-          right: 8px;
-          padding: 3px 8px;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          border-radius: 4px;
-          background: linear-gradient(135deg, #8b5cf6, #ec4899);
-          color: white;
-          z-index: 3;
-          box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
-          cursor: pointer;
-          transition: transform 150ms, box-shadow 150ms;
+          position: absolute; bottom: 8px; right: 8px; padding: 3px 8px;
+          font-size: 10px; font-weight: 700; letter-spacing: 0.5px; border-radius: 4px;
+          background: linear-gradient(135deg, #8b5cf6, #ec4899); color: white;
+          z-index: 3; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+          cursor: pointer; transition: transform 150ms, box-shadow 150ms;
         }
         .mv-badge:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.6); }
-        
         .mv-badge-inline {
-          display: inline-block;
-          padding: 1px 5px;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          border-radius: 3px;
-          background: linear-gradient(135deg, #8b5cf6, #ec4899);
-          color: white;
-          margin-left: 6px;
-          vertical-align: middle;
-          cursor: pointer;
+          display: inline-block; padding: 1px 5px; font-size: 9px; font-weight: 700;
+          letter-spacing: 0.5px; border-radius: 3px;
+          background: linear-gradient(135deg, #8b5cf6, #ec4899); color: white;
+          margin-left: 6px; vertical-align: middle; cursor: pointer;
         }
         .mv-badge-inline:hover { opacity: 0.8; }
         
-        /* ════════ CARD OVERLAY + PLAY ════════ */
         .card-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          opacity: 0;
-          transition: opacity 200ms;
+          position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+          display: flex; align-items: center; justify-content: center;
+          opacity: 0; transition: opacity 200ms;
         }
         .featured-card:hover .card-overlay { opacity: 1; }
         .play-btn {
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--accent);
-          border: none;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: transform 150ms;
+          width: 56px; height: 56px; border-radius: 50%; background: var(--accent);
+          border: none; color: white; display: flex; align-items: center;
+          justify-content: center; cursor: pointer; transition: transform 150ms;
         }
         .play-btn:hover { transform: scale(1.1); }
         
-        /* ════════ CARD INFO ════════ */
         .featured-card-info { padding: 12px; }
         .card-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .card-artist {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 12px; color: var(--text-muted); margin-bottom: 8px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .card-footer {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-        }
-        .card-price {
-          font-size: 14px;
-          font-weight: 700;
-          color: var(--success);
-        }
-        .card-availability {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
+        .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .card-price { font-size: 14px; font-weight: 700; color: var(--success); }
+        .card-availability { font-size: 12px; color: var(--text-muted); }
         .card-availability.sold-out { color: var(--error); font-weight: 600; }
-        .card-volume-label {
-          font-size: 11px;
-          color: var(--text-muted);
-        }
-        .card-progress {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex: 1;
-          max-width: 80px;
-        }
-        .progress-bar {
-          flex: 1;
-          height: 4px;
-          background: var(--bg-hover);
-          border-radius: 2px;
-          overflow: hidden;
-        }
-        .progress-fill {
-          height: 100%;
-          background: var(--accent);
-          border-radius: 2px;
-        }
-        .progress-text {
-          font-size: 10px;
-          color: var(--text-muted);
-        }
+        .card-volume-label { font-size: 11px; color: var(--text-muted); }
+        .card-progress { display: flex; align-items: center; gap: 6px; flex: 1; max-width: 80px; }
+        .progress-bar { flex: 1; height: 4px; background: var(--bg-hover); border-radius: 2px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+        .progress-text { font-size: 10px; color: var(--text-muted); }
         
         .empty-section {
-          grid-column: 1 / -1;
-          padding: 40px;
-          text-align: center;
-          color: var(--text-muted);
-          background: var(--bg-card);
-          border: 1px dashed var(--border-color);
-          border-radius: var(--radius-lg);
+          grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);
+          background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-lg);
         }
         
-        /* ════════ PERIOD TABS ════════ */
         .period-tabs {
-          display: flex;
-          gap: 4px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: 4px;
+          display: flex; gap: 4px; background: var(--bg-card);
+          border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 4px;
         }
         .period-tab {
-          padding: 6px 12px;
-          border: none;
-          border-radius: var(--radius-md);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 150ms;
+          padding: 6px 12px; border: none; border-radius: var(--radius-md);
+          background: transparent; color: var(--text-secondary);
+          font-size: 12px; font-weight: 600; cursor: pointer; transition: all 150ms;
         }
         .period-tab:hover { color: var(--text-primary); }
         .period-tab.active { background: var(--accent); color: white; }
         
-        /* ════════ ALL TRACKS / ALL ARTISTS TOGGLE ════════ */
         .tab-toggle {
-          display: flex;
-          gap: 4px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: 4px;
+          display: flex; gap: 4px; background: var(--bg-card);
+          border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 4px;
         }
         .tab-btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 20px;
-          border: none;
-          border-radius: var(--radius-md);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 150ms;
+          display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+          border: none; border-radius: var(--radius-md); background: transparent;
+          color: var(--text-secondary); font-size: 14px; font-weight: 600;
+          cursor: pointer; transition: all 150ms;
         }
         .tab-btn:hover { color: var(--text-primary); }
         .tab-btn.active { background: var(--accent); color: white; }
         .tab-count {
-          padding: 2px 8px;
-          background: rgba(255,255,255,0.2);
-          border-radius: 10px;
-          font-size: 12px;
-          font-weight: 500;
+          padding: 2px 8px; background: rgba(255,255,255,0.2);
+          border-radius: 10px; font-size: 12px; font-weight: 500;
         }
         .tab-btn:not(.active) .tab-count { background: var(--bg-hover); color: var(--text-muted); }
         
-        /* ════════ ARTISTS GRID ════════ */
         .artists-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-          gap: 16px;
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px;
         }
         @media (min-width: 640px) {
           .artists-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; }
         }
         .artist-card {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 20px 16px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-          cursor: pointer;
-          transition: all 150ms;
+          display: flex; flex-direction: column; align-items: center;
+          padding: 20px 16px; background: var(--bg-card);
+          border: 1px solid var(--border-color); border-radius: var(--radius-xl);
+          cursor: pointer; transition: all 150ms;
         }
         .artist-card:hover {
-          transform: translateY(-4px);
-          border-color: var(--border-light);
-          box-shadow: var(--shadow-lg);
+          transform: translateY(-4px); border-color: var(--border-light); box-shadow: var(--shadow-lg);
         }
         .artist-avatar {
-          width: 72px;
-          height: 72px;
-          border-radius: 50%;
-          background: var(--accent-gradient);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          font-weight: 700;
-          color: white;
-          margin-bottom: 12px;
-          overflow: hidden;
+          width: 72px; height: 72px; border-radius: 50%;
+          background: var(--accent-gradient); display: flex;
+          align-items: center; justify-content: center;
+          font-size: 24px; font-weight: 700; color: white;
+          margin-bottom: 12px; overflow: hidden;
         }
         .artist-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .artist-name {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          text-align: center;
-          margin-bottom: 4px;
-          max-width: 100%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          font-size: 14px; font-weight: 600; color: var(--text-primary);
+          text-align: center; margin-bottom: 4px;
+          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .artist-stats {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
+        .artist-stats { font-size: 12px; color: var(--text-muted); }
+        .empty-message { padding: 32px; text-align: center; color: var(--text-muted); }
         
-        /* ════════ EMPTY MESSAGE ════════ */
-        .empty-message {
-          padding: 32px;
-          text-align: center;
-          color: var(--text-muted);
-        }
-        
-        /* ════════ SECONDARY MARKET ════════ */
-        .secondary-listing-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          cursor: pointer;
-          transition: all 150ms ease;
-        }
-        .secondary-listing-card:hover {
-          border-color: var(--accent);
-          transform: translateY(-4px);
-        }
-        .secondary-cover {
-          position: relative;
-          aspect-ratio: 1;
-          background: var(--bg-hover);
-        }
-        .secondary-cover img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .secondary-price {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          padding: 6px 12px;
-          background: linear-gradient(135deg, #22c55e, #16a34a);
-          border-radius: 100px;
-          font-size: 13px;
-          font-weight: 700;
-          color: white;
-        }
-        .secondary-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px 8px;
-          background: rgba(139, 92, 246, 0.9);
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: 600;
-          color: white;
-        }
-        .secondary-info { padding: 12px; }
-        .secondary-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-        }
-        .secondary-artist {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-        }
-        .secondary-seller {
-          font-size: 11px;
-          color: var(--text-muted);
-        }
-        .secondary-buy-btn {
-          width: 100%;
-          margin-top: 8px;
-        }
-        
-        /* ════════ RESPONSIVE ════════ */
         @media (max-width: 640px) {
           .section-header { flex-direction: column; align-items: stretch; }
           .section-header-right { width: 100%; justify-content: space-between; }
