@@ -29,26 +29,29 @@
     </div>
 
     <nav class="sidebar-nav">
-      <!-- Stream -->
+      <!-- Music (formerly Stream) -->
       <button class="nav-item active" data-page="stream">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          <path d="M9 18V5l12-2v13"></path>
+          <circle cx="6" cy="18" r="3"></circle>
+          <circle cx="18" cy="16" r="3"></circle>
         </svg>
-        <span>Stream</span>
+        <span>Music</span>
       </button>
 
-      <!-- Marketplace -->
-      <button class="nav-item" data-page="marketplace">
+      <!-- Resale Market (hidden by default, shown by JS when listings exist) -->
+      <button class="nav-item hidden" data-page="resale" id="resale-nav-item">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <path d="M16 10a4 4 0 0 1-8 0"></path>
+          <path d="M17 1l4 4-4 4"></path>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+          <path d="M7 23l-4-4 4-4"></path>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
         </svg>
-        <span>Marketplace</span>
+        <span>Resale Market</span>
+        <span class="resale-count-badge" id="resale-count-badge" style="margin-left: auto; background: var(--accent); color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px;"></span>
       </button>
 
-      <!-- Audiobooks (MOVED UP) -->
+      <!-- Audiobooks -->
       <button class="nav-item" data-page="audiobooks">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
@@ -57,7 +60,7 @@
         <span>Audiobooks</span>
       </button>
 
-      <!-- Podcasts (MOVED UP) -->
+      <!-- Podcasts -->
       <button class="nav-item" data-page="podcasts">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -68,7 +71,7 @@
         <span>Podcasts</span>
       </button>
 
-      <!-- Films (MOVED UP) -->
+      <!-- Films -->
       <button class="nav-item" data-page="films">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
@@ -83,7 +86,7 @@
         <span>Films</span>
       </button>
 
-      <!-- Games (MOVED UP) -->
+      <!-- Games -->
       <button class="nav-item" data-page="games">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="6" width="20" height="12" rx="2"></rect>
@@ -380,7 +383,7 @@
           <img id="player-cover" class="player-cover" src="" alt="">
           <div class="player-track-details">
             <span class="player-title" id="player-title">Select a track to play</span>
-            <span class="player-artist" id="player-artist">Browse the marketplace</span>
+            <span class="player-artist" id="player-artist">Browse music</span>
           </div>
           <button class="player-expand-btn" id="player-expand-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -609,6 +612,7 @@
   <script src="/js/ui.js"></script>
   <script src="/js/pages/mint-badges.js"></script>
   <script src="/js/pages/stream.js"></script>
+  <script src="/js/pages/resale.js"></script>
   <script src="/js/pages/marketplace.js"></script>
   <script src="/js/pages/audiobooks.js"></script>
   <script src="/js/pages/podcasts.js"></script>
