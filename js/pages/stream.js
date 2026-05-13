@@ -9,6 +9,11 @@
  * - MV badges on cards with music videos
  * - Mint provenance badges (OG MINT / LEGACY / VERIFIED)
  * - Video data passed through to player queue
+ *
+ * v2 (May 2026):
+ * ✅ Music-only filter: films, audiobooks, podcasts, games are hidden here
+ *    (they live on dedicated pages: /films, /audiobooks, /podcasts, /games)
+ *    Legacy releases without contentType are treated as music for safety.
  */
 
 const StreamPage = {
@@ -17,6 +22,19 @@ const StreamPage = {
   topTracks: [],
   currentTab: 'artists',
   currentTopPeriod: '7d',
+  
+  // Content types that this page should EXCLUDE.
+  // Anything not in this list (including null/undefined/'music'/'song') is shown.
+  _NON_MUSIC_TYPES: ['film', 'video', 'audiobook', 'podcast', 'game'],
+  
+  /**
+   * Returns true if a release is music (or legacy with no contentType).
+   * Used to filter out films/audiobooks/podcasts/games from this page.
+   */
+  isMusicRelease(release) {
+    const ct = (release?.contentType || release?.content_type || '').toLowerCase();
+    return !this._NON_MUSIC_TYPES.includes(ct);
+  },
   
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
@@ -31,7 +49,13 @@ const StreamPage = {
         setTimeout(() => reject(new Error('Request timeout')), 15000)
       );
       
-    this.releases = await Promise.race([API.getReleases(), timeout]);
+      const allReleases = await Promise.race([API.getReleases(), timeout]);
+      
+      // ⚡ MUSIC-ONLY FILTER: hide films/audiobooks/podcasts/games
+      this.releases = (allReleases || []).filter(r => this.isMusicRelease(r));
+      
+      console.log(`📀 Stream: ${allReleases?.length || 0} total releases, ${this.releases.length} music after filter`);
+      
       setReleases(this.releases);
       this.extractArtists();
       await this.loadTopTracks();
@@ -54,7 +78,10 @@ const StreamPage = {
         const topTracks = await API.getTopTracks(this.currentTopPeriod, 10);
         
         if (topTracks && topTracks.length > 0) {
-          this.topTracks = topTracks.map(item => ({
+          // ⚡ MUSIC-ONLY FILTER for top tracks too
+          const musicTopTracks = topTracks.filter(item => this.isMusicRelease(item.release));
+          
+          this.topTracks = musicTopTracks.map(item => ({
             id: item.trackId,
             trackId: item.trackId,
             displayTitle: item.track?.title || item.release?.title || 'Unknown',
@@ -74,6 +101,7 @@ const StreamPage = {
               soldEditions: item.release?.soldEditions || 0,
               type: item.release?.type || 'single',
               tracks: item.release?.tracks || [],
+              contentType: item.release?.contentType || item.release?.content_type,
               // Mint provenance fields
               mintFeePaid: item.release?.mintFeePaid,
               mint_fee_paid: item.release?.mint_fee_paid,
@@ -85,7 +113,7 @@ const StreamPage = {
             }
           }));
           
-          console.log(`📊 Loaded ${this.topTracks.length} top tracks for ${this.currentTopPeriod}`);
+          console.log(`📊 Loaded ${this.topTracks.length} top music tracks for ${this.currentTopPeriod}`);
           return;
         }
       }
@@ -98,7 +126,9 @@ const StreamPage = {
     
     try {
       const feedReleases = await API.getReleasesFeed();
-      const feedTracks = feedReleases.flatMap(release =>
+      // ⚡ MUSIC-ONLY FILTER
+      const musicFeed = (feedReleases || []).filter(r => this.isMusicRelease(r));
+      const feedTracks = musicFeed.flatMap(release =>
         (release.tracks || []).map((track, idx) => ({
           ...track,
           release,
@@ -112,6 +142,7 @@ const StreamPage = {
         .sort((a, b) => b.plays - a.plays)
         .slice(0, 10);
     } catch (e) {
+      // Final fallback — uses this.releases which is already music-only
       const allTracks = this.getAllTracks();
       this.topTracks = allTracks
         .map(track => ({ ...track, plays: track.release.soldEditions || 0 }))
