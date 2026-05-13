@@ -539,7 +539,7 @@ const UI = {
     
     if (connectBtn) connectBtn.classList.toggle('hidden', isLoggedIn);
     if (userCard) userCard.classList.toggle('hidden', !isLoggedIn);
-    if (createBtn) createBtn.classList.toggle('hidden', !isLoggedIn);
+    if (createBtn) createBtn.classList.toggle('disabled', !isLoggedIn);
     if (librarySection) librarySection.classList.toggle('hidden', !isLoggedIn);
     if (mobileConnectBtn) mobileConnectBtn.classList.toggle('hidden', isLoggedIn);
     
