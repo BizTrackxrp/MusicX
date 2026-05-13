@@ -306,7 +306,7 @@ const ProfilePage = {
           </div>
 
           <div class="profile-actions">
-            <button class="btn btn-secondary" id="view-sales-btn" title="View Sales Analytics" style="display: none;">
+            <button class="btn btn-secondary" id="view-sales-btn" title="View Sales Analytics">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="20" x2="18" y2="10"></line>
                 <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -2345,23 +2345,10 @@ const ProfilePage = {
       });
     });
 
-    // ⚡ View Sales button — click handler + visibility check
+    // ⚡ View Sales button — always visible, sales page handles empty state
     document.getElementById('view-sales-btn')?.addEventListener('click', () => {
       Router.navigate('sales');
     });
-
-    // Check if user has sales — unhide the button if they do
-    (async () => {
-      try {
-        const result = await API.checkArtistHasSales(AppState.user.address);
-        if (result?.hasSales) {
-          const btn = document.getElementById('view-sales-btn');
-          if (btn) btn.style.display = 'inline-flex';
-        }
-      } catch (err) {
-        console.warn('View Sales check failed (silently hiding button):', err);
-      }
-    })();
     document.getElementById('view-social-links-btn')?.addEventListener('click', () => {
       this.showSocialLinksModal(AppState.profile);
     });
