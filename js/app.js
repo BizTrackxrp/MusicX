@@ -1,13 +1,23 @@
 /**
  * XRP Music - Main App
  * Initialization and routing
- * 
- * UPDATED: Added 🎁 Rewards page route for NFT-gated rewards system
- * UPDATED: Added 📚 Audiobooks and 🎙️ Podcasts page routes
- * UPDATED: Added 🎬 Films and 🎮 Games page routes
- * UPDATED: Added 🔒 Private Feed page route
- * UPDATED: 👤 Artist route now uses ArtistPage (with content-type tabs).
- *          Inline renderArtistPage kept as fallback for safety.
+ *
+ * v2 (May 2026):
+ * ✅ Resale route added — /resale → ResalePage
+ * ✅ Marketplace route now redirects to Music (merged)
+ * ✅ Legacy inline renderArtistPage PRESERVED as fallback for safety
+ *
+ * Routes:
+ * /                → Music (StreamPage — formerly Stream, includes marketplace sections)
+ * /resale          → Resale Market (secondary listings)
+ * /marketplace     → redirects to / (merged into Music)
+ * /audiobooks      → Audiobooks
+ * /podcasts        → Podcasts
+ * /films           → Films
+ * /games           → Games
+ * /genres, /genre/:id, /playlists, /playlist/:id, /artist/:address,
+ * /release/:id, /purchase, /analytics, /liked, /sales, /private-feed,
+ * /experiences, /transparency, /profile
  */
 const Router = {
   params: {},
@@ -49,6 +59,7 @@ const Router = {
     if (page === 'podcasts') return '/podcasts';
     if (page === 'films') return '/films';
     if (page === 'games') return '/games';
+    if (page === 'resale') return '/resale';
     return `/${page === 'stream' ? '' : page}`;
   },
   
@@ -87,6 +98,9 @@ const Router = {
     if (path === '/podcasts') return { page: 'podcasts', params: {} };
     if (path === '/films') return { page: 'films', params: {} };
     if (path === '/games') return { page: 'games', params: {} };
+    if (path === '/resale') return { page: 'resale', params: {} };
+    // Legacy /marketplace URL → redirect to Music
+    if (path === '/marketplace') return { page: 'stream', params: {} };
     
     const pageName = path.replace('/', '') || 'stream';
     return { page: pageName, params: {} };
@@ -97,8 +111,19 @@ const Router = {
       case 'stream':
         StreamPage.render();
         break;
+      // Legacy marketplace route → redirect to Music (merged)
       case 'marketplace':
-        MarketplacePage.render();
+        console.log('Marketplace merged into Music — redirecting');
+        this.navigate('stream');
+        break;
+      // Resale market (secondary listings)
+      case 'resale':
+        if (typeof ResalePage !== 'undefined') {
+          ResalePage.render();
+        } else {
+          console.error('ResalePage not loaded');
+          StreamPage.render();
+        }
         break;
       case 'analytics':
         AnalyticsPage.render(this.params);
@@ -473,7 +498,7 @@ const Router = {
   /**
    * LEGACY FALLBACK: Inline artist page renderer.
    * Used only if ArtistPage (/js/pages/artist.js) hasn't loaded.
-   * Once ArtistPage is confirmed working, this can be deleted entirely.
+   * ArtistPage is confirmed working — keep this around as safety net only.
    */
   async renderArtistPage(address) {
     UI.showLoading();
