@@ -302,10 +302,18 @@ const ProfilePage = {
                   @${profile.twitter}
                 </a>
               ` : ''}
-            </div>
+           </div>
           </div>
 
           <div class="profile-actions">
+            <button class="btn btn-secondary" id="view-sales-btn" title="View Sales Analytics" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+              <span class="btn-text-desktop">View Sales</span>
+            </button>
             <button class="btn btn-secondary" id="share-profile-btn" title="Share Profile">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="18" cy="5" r="3"></circle>
@@ -2327,7 +2335,7 @@ const ProfilePage = {
       Modals.showEditProfile();
     });
 
-    document.getElementById('share-profile-btn')?.addEventListener('click', () => {
+  document.getElementById('share-profile-btn')?.addEventListener('click', () => {
       const profile = AppState.profile || {};
       ShareUtils.shareArtistProfile({
         address: AppState.user.address,
@@ -2337,6 +2345,23 @@ const ProfilePage = {
       });
     });
 
+    // ⚡ View Sales button — click handler + visibility check
+    document.getElementById('view-sales-btn')?.addEventListener('click', () => {
+      Router.navigate('sales');
+    });
+
+    // Check if user has sales — unhide the button if they do
+    (async () => {
+      try {
+        const result = await API.checkArtistHasSales(AppState.user.address);
+        if (result?.hasSales) {
+          const btn = document.getElementById('view-sales-btn');
+          if (btn) btn.style.display = 'inline-flex';
+        }
+      } catch (err) {
+        console.warn('View Sales check failed (silently hiding button):', err);
+      }
+    })();
     document.getElementById('view-social-links-btn')?.addEventListener('click', () => {
       this.showSocialLinksModal(AppState.profile);
     });
