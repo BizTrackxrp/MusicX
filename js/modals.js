@@ -2314,7 +2314,7 @@ showAuth() {
   },
 _featLabel(track) {
     if (!track?.featuredArtists) return '';
-    return ` <span style="color:var(--text-muted);font-weight:400;">(feat. ${track.featuredArtists})</span>`;
+    return ` <span style="color:rgba(255,255,255,0.7);font-weight:500;">(feat. ${track.featuredArtists})</span>`;
   },
 
   showRelease(release) {
