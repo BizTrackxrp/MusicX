@@ -2312,7 +2312,12 @@ showAuth() {
       });
     });
   },
- showRelease(release) {
+_featLabel(track) {
+    if (!track?.featuredArtists) return '';
+    return ` <span style="color:var(--text-muted);font-weight:400;">(feat. ${track.featuredArtists})</span>`;
+  },
+
+  showRelease(release) {
     this.activeModal = 'release';
     const available = release.totalEditions - release.soldEditions;
     const defaultTrackPrice = parseFloat(release.songPrice) || 0;
@@ -2363,7 +2368,7 @@ showAuth() {
                   ${mintBadge}
                   ${draftBadge}
                 </div>
-                <h1 class="release-title-large">${release.title}</h1>
+                <h1 class="release-title-large">${release.title}${release.type === 'single' ? this._featLabel(release.tracks?.[0]) : ''}</h1>
                 <div class="release-meta">
                  <button class="artist-chip" data-artist="${release.artistAddress}">
                     ${(release.artistAvatarUrl || release.artistAvatar || release.avatar_url)
@@ -2478,7 +2483,7 @@ showAuth() {
                     </button>
                   </span>
                   <div class="track-col-title">
-                    <span class="track-name">${release.type === 'single' ? release.title : track.title}</span>
+                    <span class="track-name">${release.type === 'single' ? release.title : track.title}${this._featLabel(track)}</span>
                     <span class="track-artist">${release.artistName || Helpers.truncateAddress(release.artistAddress)}</span>
                   </div>
                  <span class="track-col-actions">
@@ -3063,7 +3068,6 @@ showAuth() {
     min-width: 180px;
   }
 }
-
 /* === Comments Section === */
 .release-comments-section { padding: 20px 24px 24px; border-top: 1px solid var(--border-color); }
 .comments-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
@@ -4429,6 +4433,16 @@ showCreate(existingDraft) {
         .track-video-btn:hover { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); }
         .track-video-btn.has-video { color: #8b5cf6; background: rgba(139, 92, 246, 0.15); }
         .track-video-btn.uploading { color: var(--warning); animation: pulse 1.5s infinite; position: relative; }
+        /* ⚡ Featured artists button + panel */
+        .track-feat-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; flex-shrink: 0; border-radius: 4px; transition: all 150ms; position: relative; }
+        .track-feat-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .track-feat-btn.has-feat { color: var(--accent); background: rgba(99,102,241,0.1); }
+        .feat-check { position: absolute; top: -4px; right: -4px; font-size: 8px; background: var(--accent); color: white; border-radius: 50%; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; line-height: 1; }
+        .track-feat-panel { padding: 12px 14px; background: var(--bg-card); border-left: 2px solid var(--accent); border-radius: 6px; margin: -4px 0 8px 36px; animation: expandIn 200ms ease; }
+        .track-feat-panel label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+        .track-feat-input { width: 100%; padding: 8px 10px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px; outline: none; box-sizing: border-box; }
+        .track-feat-input:focus { border-color: var(--accent); }
+        .feat-hint { font-size: 11px; color: var(--text-muted); margin: 6px 0 0 0; }
         .video-upload-pct { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--warning); font-weight: 700; white-space: nowrap; }
         .video-check { position: absolute; top: -4px; right: -4px; font-size: 8px; background: #22c55e; color: white; border-radius: 50%; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; line-height: 1; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -4618,7 +4632,7 @@ bindCreateEvents(existingDraft) {
         coverFile = '__existing__';
       }
       
-      if (existingDraft.tracks?.length > 0) {
+   if (existingDraft.tracks?.length > 0) {
         existingDraft.tracks.forEach((t, i) => {
           tracks.push({
             file: null,
@@ -4633,6 +4647,8 @@ bindCreateEvents(existingDraft) {
             videoUrl: t.videoUrl || null,
             metadataCid: t.metadataCid || null,
             existingTrackId: t.id,
+            featuredArtists: t.featuredArtists || null,
+            featExpanded: !!t.featuredArtists,
           });
         });
       }
@@ -4754,6 +4770,15 @@ bindCreateEvents(existingDraft) {
             <span class="track-price-label">XRP</span>
           </div>
           <div class="track-duration">${track.duration ? Helpers.formatDuration(track.duration) : '--:--'}</div>
+          <button type="button" class="track-feat-btn ${track.featuredArtists ? 'has-feat' : ''}" data-idx="${idx}" title="${track.featuredArtists ? `feat. ${track.featuredArtists}` : 'Add featured artists'}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            ${track.featuredArtists ? '<span class="feat-check">✓</span>' : ''}
+          </button>
           <button type="button" class="track-video-btn ${track.videoCid ? 'has-video' : ''} ${track.videoUploading ? 'uploading' : ''}" data-idx="${idx}" title="${track.videoCid ? 'Video attached ✓ (click to remove)' : 'Add music video'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="23 7 16 12 23 17 23 7"></polygon>
@@ -4764,6 +4789,13 @@ bindCreateEvents(existingDraft) {
           </button>
           <button type="button" class="track-remove" data-idx="${idx}">×</button>
         </div>
+        ${track.featExpanded ? `
+          <div class="track-feat-panel" data-idx="${idx}">
+            <label>Featured artists (optional)</label>
+            <input type="text" class="track-feat-input" data-idx="${idx}" value="${(track.featuredArtists || '').replace(/"/g, '&quot;')}" placeholder="e.g. Xzibit, Snoop Dogg">
+            <p class="feat-hint">Comma-separated. Shows as "(feat. X, Y)" on the track.</p>
+          </div>
+        ` : ''}
       `}).join('');
 
       let albumPriceSection = document.getElementById('album-price-section');
@@ -4864,10 +4896,49 @@ bindCreateEvents(existingDraft) {
         });
       });
 
-      document.querySelectorAll('.track-remove').forEach(btn => {
+    document.querySelectorAll('.track-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           tracks.splice(parseInt(btn.dataset.idx), 1);
           updateTrackList();
+        });
+      });
+
+      // ⚡ Featured artists: toggle expand panel
+      document.querySelectorAll('.track-feat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx);
+          tracks[idx].featExpanded = !tracks[idx].featExpanded;
+          updateTrackList();
+          // Auto-focus the input when panel opens
+          if (tracks[idx].featExpanded) {
+            setTimeout(() => {
+              document.querySelector(`.track-feat-input[data-idx="${idx}"]`)?.focus();
+            }, 50);
+          }
+        });
+      });
+
+      // ⚡ Featured artists: capture input changes
+      document.querySelectorAll('.track-feat-input').forEach(input => {
+        input.addEventListener('input', () => {
+          const idx = parseInt(input.dataset.idx);
+          const val = input.value.trim();
+          tracks[idx].featuredArtists = val || null;
+          // Update button visual state without re-rendering (would steal focus)
+          const btn = document.querySelector(`.track-feat-btn[data-idx="${idx}"]`);
+          if (btn) {
+            btn.classList.toggle('has-feat', !!val);
+            btn.title = val ? `feat. ${val}` : 'Add featured artists';
+            const existingCheck = btn.querySelector('.feat-check');
+            if (val && !existingCheck) {
+              const check = document.createElement('span');
+              check.className = 'feat-check';
+              check.textContent = '✓';
+              btn.appendChild(check);
+            } else if (!val && existingCheck) {
+              existingCheck.remove();
+            }
+          }
         });
       });
 
@@ -5004,11 +5075,13 @@ bindCreateEvents(existingDraft) {
     function handleAudioFile(file) {
       if (!file.type.startsWith('audio/')) { alert('Please upload an audio file'); return; }
       if (file.size > 500 * 1024 * 1024) { alert(`File "${file.name}" exceeds the 500MB limit.`); return; }
-      const track = {
+     const track = {
         file,
         title: file.name.replace(/\.[^/.]+$/, ''),
         duration: 0,
         status: 'pending',
+        featuredArtists: null,
+        featExpanded: false,
       };
       tracks.push(track);
       const audio = new Audio();
@@ -5079,13 +5152,14 @@ bindCreateEvents(existingDraft) {
               showStatus(2, 3, `Uploading track ${i + 1} of ${tracks.length}... ${pct}%`, `${trackSizeMB}MB — uploading to IPFS`);
             });
           }
-          uploadedTracks.push({
+         uploadedTracks.push({
             title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
             audioCid: audioResult.cid,
             audioUrl: audioResult.url,
             price: tracks[i].price || 5,
+            featuredArtists: tracks[i].featuredArtists || null,
             ...(tracks[i].videoCid ? { videoCid: tracks[i].videoCid, videoUrl: tracks[i].videoUrl } : {}),
           });
         }
@@ -5231,7 +5305,7 @@ bindCreateEvents(existingDraft) {
           tracks[i].status = 'done';
           tracks[i].audioCid = audioResult.cid;
           tracks[i].audioUrl = audioResult.url;
-          uploadedTracks.push({
+         uploadedTracks.push({
             title: tracks.length === 1 ? document.getElementById('release-title').value : tracks[i].title,
             trackNumber: i + 1,
             duration: Math.round(tracks[i].duration),
@@ -5240,6 +5314,7 @@ bindCreateEvents(existingDraft) {
             genre: selectedGenres[0] || null,
             genreSecondary: selectedGenres[1] || null,
             genreTertiary: selectedGenres[2] || null,
+            featuredArtists: tracks[i].featuredArtists || null,
           });
           updateTrackList();
         }
