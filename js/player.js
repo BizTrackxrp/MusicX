@@ -567,6 +567,33 @@ this.updateVolumeIcon();
   },
   
   /**
+   * Enrich a track with featured_artists data from AppState.releases.
+   * Same pattern as _enrichTrackVideo — bridges the gap when tracks come
+   * from sources that don't include the field (top tracks, search, queue, etc.)
+   */
+  _enrichTrackFeat(track) {
+    if (!track || track.isExternal) return track;
+    if (track.featuredArtists !== undefined && track.featuredArtists !== null) return track;
+    
+    const releaseId = track.releaseId;
+    if (!releaseId) return track;
+    
+    const release = (AppState.releases || []).find(r => r.id === releaseId);
+    if (!release?.tracks) return track;
+    
+    const matchId = track.trackId || track.id;
+    const match = release.tracks.find(t => 
+      String(t.id) === String(matchId) || String(t.trackId) === String(matchId)
+    );
+    
+    if (match && match.featuredArtists) {
+      track.featuredArtists = match.featuredArtists;
+    }
+    
+    return track;
+  },
+  
+  /**
    * Open the Spotify-style expanded Now Playing view
    * Called when user taps the up arrow on mobile player
    */
@@ -634,6 +661,7 @@ this.updateVolumeIcon();
           artistAddress: release.artistAddress,
           videoUrl: track.videoUrl || null,
           videoCid: track.videoCid || null,
+          featuredArtists: track.featuredArtists || null,
         });
       });
     });
@@ -686,12 +714,15 @@ this.updateVolumeIcon();
   async playTrack(track, queue = null, queueIndex = 0) {
     if (!track) return;
     
-    // ── ALWAYS enrich track + queue with video data from releases cache ──
+  // ── ALWAYS enrich track + queue with video data from releases cache ──
     // This is the critical fix: some entry points (top tracks from /api/plays,
     // QueueManager auto queue, search results) don't include video fields.
     // AppState.releases always has them, so we merge here.
     this._enrichTrackVideo(track);
     this._enrichQueueVideo(queue);
+    // Also enrich featured_artists from releases cache
+    this._enrichTrackFeat(track);
+    if (queue?.length) queue.forEach(t => this._enrichTrackFeat(t));
     
     console.log('🎵 Playing track:', track.title, 
       track.videoCid || track.videoUrl ? '🎬 HAS VIDEO' : '');
@@ -1864,7 +1895,7 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
     document.body.classList.add('player-active');
   },
   
-  updateTrackInfo(track) {
+ updateTrackInfo(track) {
     // Mini player
     const cover = document.getElementById('player-cover');
     const title = document.getElementById('player-title');
@@ -1873,6 +1904,16 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
     // Use proxy for cover images too
     const coverUrl = getProxiedIpfsUrl(track.cover || track.coverUrl) || '/placeholder.png';
     
+    // Build title HTML with optional (feat. X) — escape user input to prevent XSS
+    const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+    const titleText = escapeHtml(track.title || 'Unknown Track');
+    const featHtml = track.featuredArtists 
+      ? ` <span style="color:#ffffff;font-weight:500;opacity:0.85;">(feat. ${escapeHtml(track.featuredArtists)})</span>`
+      : '';
+    const titleHtml = titleText + featHtml;
+    
     if (cover) {
       cover.onerror = () => {
         cover.onerror = null; // Prevent infinite loop
@@ -1880,7 +1921,7 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
       };
       cover.src = coverUrl;
     }
-    if (title) title.textContent = track.title || 'Unknown Track';
+    if (title) title.innerHTML = titleHtml;
     if (artist) artist.textContent = track.artist || 'Unknown Artist';
     
     // Expanded player
@@ -1895,7 +1936,7 @@ this._createFullscreenViewer(track, hasVideo, videoSrc, coverUrl);
       };
       expCover.src = coverUrl;
     }
-    if (expTitle) expTitle.textContent = track.title || 'Unknown Track';
+    if (expTitle) expTitle.innerHTML = titleHtml;
     if (expArtist) expArtist.textContent = track.artist || 'Unknown Artist';
     
     // Update all like buttons
