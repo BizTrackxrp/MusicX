@@ -2,6 +2,12 @@
  * XRP Music - Releases API
  * Vercel Serverless Function
  *
+ * v3 (May 2026):
+ * ✅ featured_artists column on tracks — comma-separated string
+ *    (e.g. "Xzibit" or "Xzibit, Snoop Dogg"). Plain text v1, linking is v2.
+ *    Selected by all 5 GET queries, set on track INSERT (create+update flows),
+ *    and patched on track UPDATE (uses COALESCE to preserve existing).
+ *
  * v2 (May 2026):
  * ✅ createRelease now honors mintFeePaid, mintFeeTxHash, paymentAmount,
  *    status, and accessType passed from the upload flow.
@@ -71,6 +77,7 @@ async function getReleases(req, res, sql) {
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
               'price', t.price,
+              'featuredArtists', t.featured_artists,
               'videoCid', t.video_cid,
               'videoUrl', t.video_url,
               'genre', t.genre,
@@ -112,6 +119,7 @@ async function getReleases(req, res, sql) {
                 'soldCount', COALESCE(t.sold_count, 0),
                 'mintedEditions', COALESCE(t.minted_editions, 0),
                 'price', t.price,
+                'featuredArtists', t.featured_artists,
                 'videoCid', t.video_cid,
                 'videoUrl', t.video_url,
                 'genre', t.genre,
@@ -145,6 +153,7 @@ async function getReleases(req, res, sql) {
                 'soldCount', COALESCE(t.sold_count, 0),
                 'mintedEditions', COALESCE(t.minted_editions, 0),
                 'price', t.price,
+                'featuredArtists', t.featured_artists,
                 'videoCid', t.video_cid,
                 'videoUrl', t.video_url,
                 'genre', t.genre,
@@ -183,6 +192,7 @@ async function getReleases(req, res, sql) {
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
               'price', t.price,
+              'featuredArtists', t.featured_artists,
               'videoCid', t.video_cid,
               'videoUrl', t.video_url
             ) ORDER BY t.track_order
@@ -220,6 +230,7 @@ async function getReleases(req, res, sql) {
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
               'price', t.price,
+              'featuredArtists', t.featured_artists,
               'videoCid', t.video_cid,
               'videoUrl', t.video_url
             ) ORDER BY t.track_order
@@ -252,6 +263,7 @@ async function getReleases(req, res, sql) {
               'soldCount', COALESCE(t.sold_count, 0),
               'mintedEditions', COALESCE(t.minted_editions, 0),
               'price', t.price,
+              'featuredArtists', t.featured_artists,
               'videoCid', t.video_cid,
               'videoUrl', t.video_url
             ) ORDER BY t.track_order
@@ -273,6 +285,7 @@ async function getReleases(req, res, sql) {
 
 // ============================================================
 // v2: createRelease — now honors payment & status fields
+// v3: tracks INSERT now includes featured_artists
 // ============================================================
 async function createRelease(req, res, sql) {
   const {
@@ -295,7 +308,7 @@ async function createRelease(req, res, sql) {
     visibility,
     draftGenres,
     contentType = 'music',
-    // ⚡ NEW: payment + status fields (films.js sends all of these)
+    // payment + status fields (films.js sends all of these)
     mintFeePaid,
     mintFeeTxHash,
     mintFeeAmount,
@@ -310,16 +323,9 @@ async function createRelease(req, res, sql) {
 
   const releaseId = `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  // ⚡ Status logic:
-  //   - If client explicitly sends a status, use it
-  //   - Otherwise: paid = live, unpaid = draft
   const paidFlag = mintFeePaid === true;
   const resolvedStatus = status || (paidFlag ? 'live' : 'draft');
-
-  // Accept either mintFeeAmount or paymentAmount as the fee amount
   const resolvedMintFeeAmount = mintFeeAmount ?? paymentAmount ?? null;
-
-  // accessType — only set if provided, defaults to 'public' for films later
   const resolvedAccessType = accessType || 'public';
 
   console.log('📝 createRelease:', {
@@ -396,7 +402,6 @@ async function createRelease(req, res, sql) {
       const trackId = `trk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // ⚡ If track doesn't have its own metadataCid, fall back to release-level metadataCid.
-      // broker-sale reads tracks.metadata_cid — without this, films couldn't be sold.
       const trackMetadataCid = track.metadataCid || metadataCid || null;
 
       await sql`
@@ -417,7 +422,8 @@ async function createRelease(req, res, sql) {
           video_url,
           genre,
           genre_secondary,
-          genre_tertiary
+          genre_tertiary,
+          featured_artists
         ) VALUES (
           ${trackId},
           ${release.id},
@@ -435,7 +441,8 @@ async function createRelease(req, res, sql) {
           ${track.videoUrl || null},
           ${track.genre || null},
           ${track.genreSecondary || null},
-          ${track.genreTertiary || null}
+          ${track.genreTertiary || null},
+          ${track.featuredArtists || null}
         )
       `;
       trackIds.push(trackId);
@@ -453,6 +460,10 @@ async function createRelease(req, res, sql) {
   });
 }
 
+// ============================================================
+// updateRelease — UPDATE existing tracks now patches featured_artists
+//                INSERT new tracks now includes featured_artists
+// ============================================================
 async function updateRelease(req, res, sql) {
   const { id } = req.query;
   const updates = req.body;
@@ -539,7 +550,8 @@ async function updateRelease(req, res, sql) {
             video_url = ${track.videoUrl || null},
             genre = COALESCE(${track.genre || null}, genre),
             genre_secondary = COALESCE(${track.genreSecondary || null}, genre_secondary),
-            genre_tertiary = COALESCE(${track.genreTertiary || null}, genre_tertiary)
+            genre_tertiary = COALESCE(${track.genreTertiary || null}, genre_tertiary),
+            featured_artists = COALESCE(${track.featuredArtists || null}, featured_artists)
           WHERE id = ${existingTracks[i].id}
         `;
       } else {
@@ -549,14 +561,15 @@ async function updateRelease(req, res, sql) {
             id, release_id, title, track_order, duration,
             audio_cid, audio_url, metadata_cid, sold_count, minted_editions,
             track_number, price, video_cid, video_url,
-            genre, genre_secondary, genre_tertiary
+            genre, genre_secondary, genre_tertiary, featured_artists
           ) VALUES (
             ${trackId}, ${id}, ${track.title || 'Untitled'}, ${track.trackNumber || i + 1},
             ${track.duration || null}, ${track.audioCid || null}, ${track.audioUrl || null},
             ${track.metadataCid || null}, 0, 0, ${i + 1},
             ${track.price !== undefined && track.price !== null ? track.price : null},
             ${track.videoCid || null}, ${track.videoUrl || null},
-            ${track.genre || null}, ${track.genreSecondary || null}, ${track.genreTertiary || null}
+            ${track.genre || null}, ${track.genreSecondary || null}, ${track.genreTertiary || null},
+            ${track.featuredArtists || null}
           )
         `;
       }
