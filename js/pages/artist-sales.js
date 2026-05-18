@@ -2,6 +2,10 @@
  * XRP Music - Artist Sales Page
  * Shows artists their sold tracks, buyer details, and earnings analytics
  * 
+ * UPDATED MAY 2026:
+ * - Earnings Overview moved to TOP of page (headline-first)
+ * - Gross Revenue + Net Earned now display USD equivalent (CoinGecko, cached)
+ * 
  * UPDATED FEB 2026:
  * - Mint provenance badges on all track cards (OG MINT / LEGACY / VERIFIED)
  * - Royalty Audit section below Earnings Overview (admin visibility)
@@ -9,6 +13,41 @@
  */
 
 const ArtistSalesPage = {
+  /**
+   * Fetch XRP/USD price from CoinGecko, cached per session
+   * Returns price as number or null on failure
+   */
+  async fetchXrpUsdPrice() {
+    // Return cached price if we already fetched it this session
+    if (typeof window.__xrpUsdPrice === 'number') {
+      return window.__xrpUsdPrice;
+    }
+    try {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
+      if (!res.ok) throw new Error('CoinGecko request failed');
+      const data = await res.json();
+      const price = data?.ripple?.usd;
+      if (typeof price === 'number') {
+        window.__xrpUsdPrice = price;
+        return price;
+      }
+      return null;
+    } catch (err) {
+      console.warn('Failed to fetch XRP/USD price:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Format an XRP amount as USD ("$24.10") given the live rate
+   * Returns empty string if rate is null (so callers can render conditionally)
+   */
+  formatUsd(xrpAmount, rate) {
+    if (!rate || typeof rate !== 'number') return '';
+    const usd = parseFloat(xrpAmount) * rate;
+    return `$${usd.toFixed(2)}`;
+  },
+
   /**
    * Render the sales page
    */
@@ -32,14 +71,15 @@ const ArtistSalesPage = {
     UI.showLoading();
 
     try {
-      // Fetch tracks, analytics, and royalty audit in parallel
-      const [trackData, analyticsData, auditData] = await Promise.all([
+      // Fetch tracks, analytics, royalty audit, AND XRP/USD price in parallel
+      const [trackData, analyticsData, auditData, xrpUsdRate] = await Promise.all([
         API.getArtistSoldTracks(AppState.user.address),
         API.getArtistAnalytics(AppState.user.address),
         this.fetchRoyaltyAudit().catch(err => {
           console.warn('Royalty audit fetch failed (endpoint may not be deployed yet):', err.message);
           return null;
-        })
+        }),
+        this.fetchXrpUsdPrice(),
       ]);
       
       const tracks = trackData.tracks || [];
@@ -64,9 +104,14 @@ const ArtistSalesPage = {
       // Calculate total sales
       const totalCopies = tracks.reduce((sum, t) => sum + parseInt(t.copies_sold || 0), 0);
 
+      // ⚡ REORDERED: Earnings Overview → Royalty Audit → Sales header → Track grid
       UI.renderPage(`
         <div class="animate-fade-in">
-          <div class="sales-header">
+          ${analytics.totals ? this.renderAnalytics(analytics, xrpUsdRate) : ''}
+
+          ${auditData ? this.renderRoyaltyAudit(auditData) : ''}
+
+          <div class="sales-header sales-header-secondary">
             <h2 class="section-title">Sales</h2>
             <div class="sales-summary">
               <span class="sales-stat">${tracks.length} track${tracks.length !== 1 ? 's' : ''} sold</span>
@@ -79,10 +124,6 @@ const ArtistSalesPage = {
           <div class="release-grid">
             ${tracks.map(track => this.renderTrackCard(track)).join('')}
           </div>
-
-          ${analytics.totals ? this.renderAnalytics(analytics) : ''}
-
-          ${auditData ? this.renderRoyaltyAudit(auditData) : ''}
         </div>
         
         ${this.getStyles()}
@@ -131,8 +172,9 @@ const ArtistSalesPage = {
 
   /**
    * Render analytics dashboard
+   * ⚡ Now takes xrpUsdRate for USD display on Gross + Net
    */
-  renderAnalytics(data) {
+  renderAnalytics(data, xrpUsdRate) {
     const t = data.totals;
     const grossXrp = parseFloat(t.gross_xrp || 0);
     const totalFees = parseFloat(t.total_fees || 0);
@@ -140,8 +182,11 @@ const ArtistSalesPage = {
     const totalNfts = parseInt(t.total_nfts_sold || 0);
     const uniqueBuyers = parseInt(t.unique_buyers || 0);
 
+    const grossUsd = this.formatUsd(grossXrp, xrpUsdRate);
+    const netUsd = this.formatUsd(netXrp, xrpUsdRate);
+
     return `
-      <div class="analytics-section">
+      <div class="analytics-section analytics-section-top">
         <div class="analytics-title">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
@@ -159,6 +204,7 @@ const ArtistSalesPage = {
           <div class="analytics-card card-gross">
             <div class="analytics-card-label">Gross Revenue</div>
             <div class="analytics-card-value xrp">${grossXrp.toFixed(2)}</div>
+            ${grossUsd ? `<div class="analytics-card-usd">≈ ${grossUsd} USD</div>` : ''}
           </div>
           <div class="analytics-card card-fees">
             <div class="analytics-card-label">Platform Fees (2%)</div>
@@ -167,6 +213,7 @@ const ArtistSalesPage = {
           <div class="analytics-card card-net">
             <div class="analytics-card-label">Net Earned</div>
             <div class="analytics-card-value xrp">${netXrp.toFixed(2)}</div>
+            ${netUsd ? `<div class="analytics-card-usd">≈ ${netUsd} USD</div>` : ''}
           </div>
           <div class="analytics-card card-buyers">
             <div class="analytics-card-label">Unique Collectors</div>
@@ -599,6 +646,13 @@ const ArtistSalesPage = {
           margin-bottom: 8px;
         }
         
+        /* ⚡ When Sales header sits below analytics, add spacing above */
+        .sales-header-secondary {
+          margin-top: 48px;
+          padding-top: 32px;
+          border-top: 1px solid var(--border-color);
+        }
+        
         .sales-summary {
           display: flex;
           gap: 16px;
@@ -651,6 +705,13 @@ const ArtistSalesPage = {
           margin-top: 48px;
           padding-top: 32px;
           border-top: 1px solid var(--border-color);
+        }
+        
+        /* ⚡ Top section is the headline — no border, no offset */
+        .analytics-section.analytics-section-top {
+          margin-top: 0;
+          padding-top: 0;
+          border-top: none;
         }
 
         .analytics-title {
@@ -718,6 +779,14 @@ const ArtistSalesPage = {
           font-size: 14px;
           font-weight: 500;
           color: var(--text-muted);
+        }
+        
+        /* ⚡ USD equivalent under XRP value */
+        .analytics-card-usd {
+          font-size: 13px;
+          color: var(--text-muted);
+          margin-top: 6px;
+          font-variant-numeric: tabular-nums;
         }
 
         .analytics-breakdown {
