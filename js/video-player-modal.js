@@ -1,10 +1,16 @@
 /**
- * Video Player Modal — v8.2
+ * Video Player Modal — v8.3
  *
- * v8.2 FIX:
- *   - Buy button now calls Modals.showPurchase(release) — the EXACT pattern
- *     marketplace uses. No router, no pushState, no URL changes. Just opens
- *     the purchase modal directly.
+ * v8.3 FIX:
+ *   - fil.one videos now stream through /api/stream-video instead of being
+ *     loaded directly by the browser. Browsers fail to TLS-connect to
+ *     eu-west-1.s3.fil.one (net::ERR_SSL_PROTOCOL_ERROR); our server can
+ *     reach fil.one fine, so we proxy the bytes through our own domain
+ *     with a correct video/mp4 Content-Type + range support.
+ *   - Requires: api/stream-video.js endpoint deployed.
+ *
+ * v8.2 (preserved):
+ *   - Buy button calls Modals.showPurchase(release) — same pattern as marketplace.
  *
  * v8.1 (preserved):
  *   - Mobile: explicit pixel heights so buy bar is ALWAYS visible (no scroll)
@@ -244,7 +250,12 @@ const VideoPlayerModal = {
       throw new Error(`get-video-url bad response: ${JSON.stringify(data)}`);
     }
 
-    return data.url;
+    // v8.3: Browsers can't TLS-connect to fil.one directly
+    // (net::ERR_SSL_PROTOCOL_ERROR). Route the presigned URL through our
+    // own streaming proxy so the bytes come from our domain with a correct
+    // video/mp4 Content-Type and range support.
+    this._log('🔁 Routing fil.one URL through /api/stream-video');
+    return `/api/stream-video?u=${encodeURIComponent(data.url)}`;
   },
 
   _injectVideoElement(url) {
