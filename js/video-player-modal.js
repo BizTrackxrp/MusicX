@@ -227,37 +227,18 @@ const VideoPlayerModal = {
     }
   },
 
-  async _resolveUrl(url) {
+async _resolveUrl(url) {
     if (!url) return url;
     const isFilOne = url.includes('.fil.one') || url.includes('filecoin');
     if (!isFilOne) return url;
 
-    this._log('🔐 fil.one URL detected, fetching presigned URL');
-
-    const res = await fetch('/api/get-video-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`get-video-url failed: ${res.status} ${text}`);
-    }
-
-    const data = await res.json();
-    if (!data.success || !data.url) {
-      throw new Error(`get-video-url bad response: ${JSON.stringify(data)}`);
-    }
-
-    // v8.3: Browsers can't TLS-connect to fil.one directly
-    // (net::ERR_SSL_PROTOCOL_ERROR). Route the presigned URL through our
-    // own streaming proxy so the bytes come from our domain with a correct
-    // video/mp4 Content-Type and range support.
+    // v8.4: Pass the ORIGINAL fil.one URL (no signature) to our proxy.
+    // The proxy extracts the S3 key and signs server-side, so the signature
+    // never round-trips through a browser query string (which truncated it
+    // at the first '&' and caused 403/502). No call to get-video-url here.
     this._log('🔁 Routing fil.one URL through /api/stream-video');
-    return `/api/stream-video?u=${encodeURIComponent(data.url)}`;
+    return `/api/stream-video?u=${encodeURIComponent(url)}`;
   },
-
   _injectVideoElement(url) {
     const slot = document.getElementById('vpm-video-slot');
     if (!slot) return;
