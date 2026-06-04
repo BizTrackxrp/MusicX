@@ -9,6 +9,13 @@
  * ✅ Also verifies the tx's signer matches the buyerAddress we expected,
  *    so a wrong wallet signing can never produce a fake sale row.
  *
+ * JUNE 2026 UPDATE:
+ * ✅ Mint flags changed from 8 (tfTransferable only) to 24 (tfTransferable + tfMutable).
+ *    Every NFT minted on-demand by this purchase flow is now a DYNAMIC NFT (dNFT)
+ *    per XLS-46. Their URI can be updated later via NFTokenModify by the issuer
+ *    (the artist) or the authorized minter (platform).
+ *    Existing NFTs minted before this change remain immutable forever.
+ *
  * NEW FLOW (1 buyer signature):
  * 1. Frontend calls 'prepare' → API mints NFT + creates sell offer for full price
  * 2. Frontend has buyer sign NFTokenAcceptOffer (ONLY signature)
@@ -25,6 +32,14 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
 const POST_MINT_DELAY_MS = 2500; // Wait for ledger propagation after minting
 const TX_VERIFY_MAX_ATTEMPTS = 6; // ~12 seconds total — gives ledger time to validate
+
+// NFTokenMint flags (bitwise)
+//   tfBurnable     = 1
+//   tfOnlyXRP      = 2
+//   tfTrustLine    = 4
+//   tfTransferable = 8
+//   tfMutable      = 16  (XLS-46 DynamicNFT)
+const NFT_FLAGS = 8 | 16; // = 24, transferable + mutable
 
 // ─── Notification Helpers ────────────────────────────────────────────
 
@@ -839,6 +854,7 @@ async function handleConfirmSale(req, res, sql) {
 
 async function mintSingleNFT(client, platformWallet, platformAddress, track, release, sql) {
   console.log('🎵 Lazy minting NFT for track:', track.id, track.title);
+  console.log(`🏷️  Mint flags: ${NFT_FLAGS} (tfTransferable + tfMutable — dNFT, URI-updatable)`);
 
   const metadataUri = track.metadata_cid ? `ipfs://${track.metadata_cid}` : null;
   if (!metadataUri) throw new Error('Track missing metadata CID');
@@ -860,7 +876,7 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
     Account: platformAddress,
     ...(useIssuer ? { Issuer: release.artist_address } : {}),
     URI: uriHex,
-    Flags: 8,
+    Flags: NFT_FLAGS, // 24 = tfTransferable (8) + tfMutable (16) — dynamic NFT
     TransferFee: transferFee,
     NFTokenTaxon: 0,
   });
