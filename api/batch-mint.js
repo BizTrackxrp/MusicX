@@ -1,11 +1,11 @@
 /**
  * XRP Music - Batch Mint API
  * Platform mints NFTs on behalf of artist (artist is Issuer, gets royalties)
- * 
+ *
  * Supports:
  * - Single tracks: mint X editions of 1 track
  * - Albums: mint X editions of EACH track
- * 
+ *
  * Flow:
  * 1. Artist authorizes platform via AccountSet (frontend)
  * 2. This endpoint mints NFTs using platform wallet
@@ -13,26 +13,41 @@
  * 4. NFTs go to platform wallet - ready to sell
  * 5. NFT token IDs stored in database for tracking
  * 6. Progress tracked in mint_jobs table for real-time updates
+ *
+ * JUNE 2026 UPDATE:
+ * - Flags changed from 8 (tfTransferable only) to 24 (tfTransferable + tfMutable).
+ *   All NFTs minted from this point forward are DYNAMIC NFTs (dNFTs) per XLS-46.
+ *   Their URI can be updated later via an NFTokenModify transaction signed by
+ *   the issuer (the artist) or an authorized minter (the platform).
+ *   Existing NFTs minted before this change remain immutable forever.
  */
 
 import { neon } from '@neondatabase/serverless';
 import * as xrpl from 'xrpl';
 
+// NFTokenMint flags (bitwise)
+//   tfBurnable     = 1
+//   tfOnlyXRP      = 2
+//   tfTrustLine    = 4
+//   tfTransferable = 8
+//   tfMutable      = 16  (XLS-46 DynamicNFT)
+const NFT_FLAGS = 8 | 16; // = 24, transferable + mutable
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  
+
   const { action } = req.body;
-  
+
   // Return platform config
   if (action === 'getConfig') {
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
@@ -41,12 +56,12 @@ export default async function handler(req, res) {
     }
     return res.json({ success: true, platformAddress });
   }
-  
+
   // Handle minting
   if (action === 'mint') {
     return handleMint(req, res);
   }
-  
+
   return res.status(400).json({ error: 'Invalid action' });
 }
 
@@ -61,7 +76,7 @@ function extractNFTokenID(meta, txHash = null) {
     if (node.ModifiedNode?.LedgerEntryType === 'NFTokenPage') {
       const finalTokens = node.ModifiedNode.FinalFields?.NFTokens || [];
       const prevTokens = node.ModifiedNode.PreviousFields?.NFTokens || [];
-      
+
       // Find the new token (in final but not in previous)
       const prevIds = new Set(prevTokens.map(t => t.NFToken?.NFTokenID));
       for (const token of finalTokens) {
@@ -69,7 +84,7 @@ function extractNFTokenID(meta, txHash = null) {
           return token.NFToken.NFTokenID;
         }
       }
-      
+
       // If PreviousFields is empty, this might be first token on page
       if (prevTokens.length === 0 && finalTokens.length > 0) {
         // Return the last token (most recently added)
@@ -79,7 +94,7 @@ function extractNFTokenID(meta, txHash = null) {
         }
       }
     }
-    
+
     // Check for created NFTokenPage (new page created for token)
     if (node.CreatedNode?.LedgerEntryType === 'NFTokenPage') {
       const tokens = node.CreatedNode.NewFields?.NFTokens || [];
@@ -92,27 +107,27 @@ function extractNFTokenID(meta, txHash = null) {
       }
     }
   }
-  
+
   // Method 2: Look for nftoken_id in meta directly (some XRPL versions)
   if (meta.nftoken_id) {
     return meta.nftoken_id;
   }
-  
+
   // Method 3: Check if there's an nftoken_ids array
   if (meta.nftoken_ids && meta.nftoken_ids.length > 0) {
     return meta.nftoken_ids[0];
   }
-  
+
   console.error('Could not extract NFT Token ID. Meta:', JSON.stringify(meta, null, 2));
   return null;
 }
 
 async function handleMint(req, res) {
   const sql = neon(process.env.DATABASE_URL);
-  
+
   // Generate job ID early so we can track from the start
   const jobId = `mint_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   try {
     const {
       artistAddress,
@@ -124,53 +139,54 @@ async function handleMint(req, res) {
       transferFee = 500,
       taxon = 0,
     } = req.body;
-    
+
     if (!artistAddress || !quantity) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    
+
     // Handle both single track and multiple tracks
     const trackUris = tracks || (metadataUri ? [metadataUri] : []);
     if (trackUris.length === 0) {
       return res.status(400).json({ error: 'No tracks provided' });
     }
-    
+
     const totalNFTs = trackUris.length * quantity;
-    
+
     // Allow up to 1000 NFTs per batch
     if (totalNFTs > 1000) {
       return res.status(400).json({ error: 'Maximum 1000 NFTs per batch (reduce editions or tracks)' });
     }
-    
+
     const platformAddress = process.env.PLATFORM_WALLET_ADDRESS;
     const platformSeed = process.env.PLATFORM_WALLET_SEED;
-    
+
     if (!platformAddress || !platformSeed) {
       return res.status(500).json({ error: 'Platform wallet not configured' });
     }
-    
+
     // Create mint job for progress tracking
     await sql`
       INSERT INTO mint_jobs (id, release_id, status, total_nfts, minted_count, started_at, updated_at)
       VALUES (${jobId}, ${releaseId}, 'minting', ${totalNFTs}, 0, NOW(), NOW())
     `;
     console.log(`Created mint job: ${jobId}`);
-    
+
     // Connect to XRPL
     const client = new xrpl.Client('wss://xrplcluster.com');
     await client.connect();
-    
+
     console.log(`Starting batch mint: ${trackUris.length} tracks × ${quantity} editions = ${totalNFTs} NFTs for artist ${artistAddress}`);
-    
+    console.log(`Mint flags: ${NFT_FLAGS} (tfTransferable + tfMutable — NFTs will be dynamic / URI-updatable)`);
+
     try {
       const wallet = xrpl.Wallet.fromSeed(platformSeed);
-      
+
       // Verify artist has authorized platform
       const accountInfo = await client.request({
         command: 'account_info',
         account: artistAddress,
       });
-      
+
       const authorizedMinter = accountInfo.result.account_data.NFTokenMinter;
       if (authorizedMinter !== platformAddress) {
         // Update job status to failed
@@ -181,51 +197,51 @@ async function handleMint(req, res) {
         `;
         throw new Error('Platform not authorized as minter. Artist must sign authorization first.');
       }
-      
+
       console.log('Platform authorized. Starting mint...');
-      
+
       // Results storage
       const mintedTracks = [];
       let totalMinted = 0;
       let totalStoredInDb = 0;
       const allNftTokenIds = [];
       const failedToExtract = []; // Track mints where we couldn't get the ID
-      
+
       // Loop through each track
       for (let t = 0; t < trackUris.length; t++) {
         const trackUri = trackUris[t];
         const trackId = trackIds?.[t] || null;
         const uriHex = xrpl.convertStringToHex(trackUri);
         const trackNFTs = [];
-        
+
         console.log(`Minting track ${t + 1}/${trackUris.length}: ${quantity} editions...`);
-        
+
         // Mint X editions of this track
         for (let i = 0; i < quantity; i++) {
           const editionNumber = i + 1;
           console.log(`  Edition ${editionNumber}/${quantity}...`);
-          
+
           try {
             const mintTx = await client.autofill({
               TransactionType: 'NFTokenMint',
               Account: platformAddress,
               Issuer: artistAddress,
               URI: uriHex,
-              Flags: 8, // tfTransferable
+              Flags: NFT_FLAGS, // 24 = tfTransferable (8) + tfMutable (16) — dynamic NFT
               TransferFee: transferFee,
               NFTokenTaxon: t, // Use track index as taxon to group by track
             });
-            
+
             const signed = wallet.sign(mintTx);
             const result = await client.submitAndWait(signed.tx_blob);
-            
+
             if (result.result.meta.TransactionResult === 'tesSUCCESS') {
               // Extract the actual NFT Token ID from the transaction result
               const nftTokenId = extractNFTokenID(result.result.meta, result.result.hash);
-              
+
               if (nftTokenId) {
                 console.log(`    ✓ Edition ${editionNumber} minted: ${nftTokenId}`);
-                
+
                 // Store in database
                 if (trackId || releaseId) {
                   const nftId = `nft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -247,7 +263,7 @@ async function handleMint(req, res) {
                     console.error(`    ⚠ DB insert failed (continuing):`, dbError.message);
                   }
                 }
-                
+
                 trackNFTs.push({
                   nftTokenId: nftTokenId,
                   editionNumber: editionNumber,
@@ -262,13 +278,13 @@ async function handleMint(req, res) {
                 // This is a CRITICAL issue - the NFT exists but isn't tracked!
                 console.error(`    ⚠ CRITICAL: Minted on-chain but could not extract NFT Token ID!`);
                 console.error(`    ⚠ TxHash: ${result.result.hash}`);
-                
+
                 failedToExtract.push({
                   txHash: result.result.hash,
                   trackIndex: t,
                   editionNumber: editionNumber,
                 });
-                
+
                 trackNFTs.push({
                   txHash: result.result.hash,
                   editionNumber: editionNumber,
@@ -278,14 +294,14 @@ async function handleMint(req, res) {
                 });
                 totalMinted++; // Still count it as minted
               }
-              
+
               // UPDATE PROGRESS IN DATABASE after each successful mint
               await sql`
                 UPDATE mint_jobs 
                 SET minted_count = ${totalMinted}, updated_at = NOW()
                 WHERE id = ${jobId}
               `;
-              
+
             } else {
               console.error(`    ✗ Edition ${editionNumber} failed: ${result.result.meta.TransactionResult}`);
               trackNFTs.push({
@@ -293,12 +309,12 @@ async function handleMint(req, res) {
                 success: false,
               });
             }
-            
+
             // Small delay to avoid rate limiting
             if (i < quantity - 1 || t < trackUris.length - 1) {
               await new Promise(resolve => setTimeout(resolve, 100));
             }
-            
+
           } catch (mintError) {
             console.error(`    ✗ Failed to mint edition ${editionNumber}:`, mintError.message);
             trackNFTs.push({
@@ -307,7 +323,7 @@ async function handleMint(req, res) {
             });
           }
         }
-        
+
         mintedTracks.push({
           trackIndex: t,
           trackId: trackId,
@@ -317,15 +333,15 @@ async function handleMint(req, res) {
           nfts: trackNFTs,
         });
       }
-      
+
       console.log(`Batch mint complete: ${totalMinted}/${totalNFTs} minted, ${totalStoredInDb}/${totalMinted} stored in DB`);
-      
+
       // CRITICAL WARNING if some NFTs weren't stored
       if (totalStoredInDb < totalMinted) {
         console.error(`⚠ WARNING: ${totalMinted - totalStoredInDb} NFTs minted but NOT stored in database!`);
         console.error(`⚠ Failed extractions:`, failedToExtract);
       }
-      
+
       // Update release with minted NFT token IDs
       if (releaseId && allNftTokenIds.length > 0) {
         try {
@@ -341,14 +357,14 @@ async function handleMint(req, res) {
           console.error('Failed to update release:', updateError.message);
         }
       }
-      
+
       // Mark job as complete
       await sql`
         UPDATE mint_jobs 
         SET status = 'complete', minted_count = ${totalMinted}, updated_at = NOW()
         WHERE id = ${jobId}
       `;
-      
+
       // Return response with clear indication of any issues
       const response = {
         success: true,
@@ -361,22 +377,22 @@ async function handleMint(req, res) {
         tracks: mintedTracks,
         nftTokenIds: allNftTokenIds,
       };
-      
+
       // Add warning if there's a mismatch
       if (totalStoredInDb < totalMinted) {
         response.warning = `${totalMinted - totalStoredInDb} NFTs were minted on-chain but could not be tracked in database. Check Vercel logs for transaction hashes.`;
         response.failedToExtract = failedToExtract;
       }
-      
+
       return res.json(response);
-      
+
     } finally {
       await client.disconnect();
     }
-    
+
   } catch (error) {
     console.error('Batch mint error:', error);
-    
+
     // Update job status to failed
     try {
       await sql`
@@ -387,11 +403,11 @@ async function handleMint(req, res) {
     } catch (updateError) {
       console.error('Failed to update job status:', updateError);
     }
-    
-    return res.status(500).json({ 
+
+    return res.status(500).json({
       success: false,
       jobId: jobId,
-      error: error.message || 'Batch mint failed' 
+      error: error.message || 'Batch mint failed'
     });
   }
 }
