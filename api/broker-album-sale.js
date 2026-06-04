@@ -4,7 +4,14 @@
  * XAMAN 5.0 FIX: Uses priced sell offers instead of 1-drop offers.
  * Album price is split proportionally across tracks so XRP flows
  * through the NFTokenAcceptOffer transactions. No separate payment needed.
- * 
+ *
+ * JUNE 2026 UPDATE:
+ * ✅ Mint flags changed from 8 (tfTransferable only) to 24 (tfTransferable + tfMutable).
+ *    Every NFT minted on-demand by this album purchase flow is now a DYNAMIC NFT (dNFT)
+ *    per XLS-46. Their URI can be updated later via NFTokenModify by the issuer
+ *    (the artist) or the authorized minter (platform).
+ *    Existing NFTs minted before this change remain immutable forever.
+ *
  * NEW FLOW (no separate payment):
  * 1. 'check'  - Verify all tracks available
  * 2. 'init'   - Initialize session, calculate per-track offer prices
@@ -36,6 +43,14 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // 🤖 Buy bot animated gif - host this on your server and update the URL
 const BUYBOT_GIF_URL = process.env.BUYBOT_GIF_URL || 'https://xrpmusic.io/buybot.gif';
+
+// NFTokenMint flags (bitwise)
+//   tfBurnable     = 1
+//   tfOnlyXRP      = 2
+//   tfTrustLine    = 4
+//   tfTransferable = 8
+//   tfMutable      = 16  (XLS-46 DynamicNFT)
+const NFT_FLAGS = 8 | 16; // = 24, transferable + mutable
 
 // XRPL nodes to try (fallback if primary drops)
 const XRPL_NODES = [
@@ -1237,6 +1252,8 @@ async function handleLegacyConfirm(req, res, sql) {
  * Mint a single NFT on-demand (lazy minting)
  */
 async function mintSingleNFT(client, platformWallet, platformAddress, track, release, sql) {
+  console.log(`🏷️  Mint flags: ${NFT_FLAGS} (tfTransferable + tfMutable — dNFT, URI-updatable)`);
+
   const metadataUri = track.metadata_cid 
     ? `ipfs://${track.metadata_cid}`
     : null;
@@ -1267,7 +1284,7 @@ async function mintSingleNFT(client, platformWallet, platformAddress, track, rel
     Account: platformAddress,
     ...(useIssuer ? { Issuer: release.artist_address } : {}),
     URI: uriHex,
-    Flags: 8,
+    Flags: NFT_FLAGS, // 24 = tfTransferable (8) + tfMutable (16) — dynamic NFT
     TransferFee: transferFee,
     NFTokenTaxon: 0,
   });
