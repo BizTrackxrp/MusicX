@@ -4123,11 +4123,10 @@ showCreate(existingDraft) {
                       <span class="content-type-icon">🎙️</span>
                       <span class="content-type-label">Podcast</span>
                     </button>
-                    <a href="mailto:sales@aventra.consulting?subject=XRP Music - Film/Game Submission" class="content-type-btn content-type-locked" target="_blank">
-                      <span class="content-type-icon">🎬🎮</span>
-                      <span class="content-type-label">Film / Game</span>
-                      <span class="content-type-apply">Apply →</span>
-                    </a>
+                    <button type="button" class="content-type-btn" id="film-create-btn">
+                      <span class="content-type-icon">🎬</span>
+                      <span class="content-type-label">Film</span>
+                    </button>
                   </div>
                   <input type="hidden" id="content-type-value" value="${existingContentType}">
                 </div>
@@ -4377,7 +4376,7 @@ showCreate(existingDraft) {
         .create-step.hidden { display: none; }
 
         /* ── Content Type Selector ── */
-        .content-type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 8px; }
+        .content-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
         @media (max-width: 480px) { .content-type-grid { grid-template-columns: repeat(2, 1fr); } }
         .content-type-btn {
           display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -4581,6 +4580,17 @@ bindCreateEvents(existingDraft) {
         document.getElementById('audio-upload-hint').textContent = hintMap[selectedContentType] || '';
         document.getElementById('audio-upload-cta').textContent = ctaMap[selectedContentType] || 'Click to upload audio';
       });
+    });
+
+    // ── Film upload routing (separate from content-type selection) ──
+    document.getElementById('film-create-btn')?.addEventListener('click', () => {
+      Modals.close();
+      if (typeof FilmsPage !== 'undefined' && typeof FilmsPage.showUploadModal === 'function') {
+        FilmsPage.showUploadModal();
+      } else {
+        console.error('FilmsPage.showUploadModal not available');
+        Modals.showToast?.('Film upload unavailable — please refresh and try again.');
+      }
     });
 
     // Restore selected state if editing a draft
