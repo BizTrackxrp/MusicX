@@ -1,12 +1,13 @@
 /**
  * XRP Music - Analytics Page
- * Master data view for all tracks - "The Excel Sheet"
- * 
+ * Site-wide viewership analytics, playlist-styled.
+ *
  * Features:
- * - Sortable columns (click headers)
- * - Time period filters (1D, 7D, 30D, 365D, All)
+ * - Metric toggle: Most Streamed ⇄ Most Bought
+ * - Time period filters (24H, 7D, 30D, 1Y, ALL)
  * - Search/filter bar
- * - Accessible from Stream and Marketplace "View All"
+ * - Playlist-style layout (big header + clean rows)
+ * - Accessible from Music ("View All") and Marketplace
  */
 
 const AnalyticsPage = {
@@ -15,13 +16,13 @@ const AnalyticsPage = {
   playCounts: {},
   uniqueListeners: {},
   isLoading: true,
-  
+
   // Current state
-  sortBy: 'streams', // 'streams', 'sales', 'newest', 'scarce', 'price', 'name'
+  sortBy: 'streams', // 'streams' | 'sales' (also supports 'newest','scarce','price','name','listeners' via search/sort)
   sortDir: 'desc',   // 'asc' or 'desc'
   period: '7d',      // '1d', '7d', '30d', '365d', 'all'
   searchQuery: '',
-  
+
   // Helper to get proxied image URL
   getImageUrl(url) {
     if (!url) return '/placeholder.png';
@@ -30,7 +31,7 @@ const AnalyticsPage = {
     }
     return url;
   },
-  
+
   /**
    * Initialize with optional sort preset
    * Called from Router or other pages
@@ -40,17 +41,25 @@ const AnalyticsPage = {
     if (params.sort) this.sortBy = params.sort;
     if (params.period) this.period = params.period;
     if (params.dir) this.sortDir = params.dir;
-    
+
+    // Normalize incoming sort to a supported metric for the toggle
+    if (this.sortBy !== 'streams' && this.sortBy !== 'sales') {
+      // 'top-selling','newest','scarce' etc → default the visible metric sensibly
+      if (this.sortBy === 'top-selling') this.sortBy = 'sales';
+      else if (this.sortBy === 'streams') this.sortBy = 'streams';
+      // anything else falls through to streams as the headline metric
+      else if (this.sortBy !== 'sales') this.sortBy = 'streams';
+    }
+
     UI.showLoading();
     this.isLoading = true;
-    
+
     try {
-      // Fetch releases and play data in parallel
-      const [releases, playData] = await Promise.all([
+      const [releases] = await Promise.all([
         API.getReleases(),
         this.fetchPlayData()
       ]);
-      
+
       this.releases = releases;
       this.buildTrackList();
       this.isLoading = false;
@@ -60,7 +69,7 @@ const AnalyticsPage = {
       this.renderError();
     }
   },
-  
+
   /**
    * Fetch play counts for current period
    */
@@ -68,27 +77,25 @@ const AnalyticsPage = {
     try {
       const response = await fetch(`/api/plays?action=top&period=${this.period}&limit=1000`);
       const data = await response.json();
-      
-      // Build play count map
+
       this.playCounts = {};
       this.uniqueListeners = {};
-      
+
       if (data.tracks) {
         data.tracks.forEach(t => {
           this.playCounts[t.trackId] = t.plays || 0;
         });
       }
-      
-      // Also fetch unique listener counts
+
       await this.fetchUniqueListeners();
-      
+
       return data;
     } catch (e) {
       console.error('Failed to fetch play data:', e);
       return { tracks: [] };
     }
   },
-  
+
   /**
    * Fetch unique listener counts per track
    */
@@ -100,23 +107,21 @@ const AnalyticsPage = {
         this.uniqueListeners = data.listeners;
       }
     } catch (e) {
-      // Unique listeners endpoint might not exist yet, that's ok
       console.log('Unique listeners not available');
     }
   },
-  
+
   /**
    * Build flat track list from releases
    */
   buildTrackList() {
     this.tracks = [];
-    
+
     this.releases.forEach(release => {
-      // Only include releases that are for sale
       const isForSale = release.sellOfferIndex || release.mintFeePaid || release.status === 'live';
       if (!isForSale) return;
-      
-      (release.tracks || []).forEach((track, idx) => {
+
+      (release.tracks || []).forEach((track) => {
         const trackId = track.id;
         this.tracks.push({
           trackId: trackId,
@@ -139,26 +144,24 @@ const AnalyticsPage = {
       });
     });
   },
-  
+
   /**
    * Get sorted and filtered tracks
    */
   getSortedTracks() {
     let filtered = [...this.tracks];
-    
-    // Apply search filter
+
     if (this.searchQuery.trim()) {
       const query = this.searchQuery.toLowerCase();
-      filtered = filtered.filter(t => 
+      filtered = filtered.filter(t =>
         t.title.toLowerCase().includes(query) ||
         t.artistName.toLowerCase().includes(query)
       );
     }
-    
-    // Apply sort
+
     filtered.sort((a, b) => {
       let aVal, bVal;
-      
+
       switch (this.sortBy) {
         case 'streams':
           aVal = a.streams;
@@ -175,7 +178,6 @@ const AnalyticsPage = {
         case 'scarce':
           aVal = a.remaining;
           bVal = b.remaining;
-          // For scarcity, lower is "more scarce" so we flip the comparison
           return this.sortDir === 'desc' ? aVal - bVal : bVal - aVal;
         case 'price':
           aVal = a.price;
@@ -184,8 +186,8 @@ const AnalyticsPage = {
         case 'name':
           aVal = a.title.toLowerCase();
           bVal = b.title.toLowerCase();
-          return this.sortDir === 'asc' 
-            ? aVal.localeCompare(bVal) 
+          return this.sortDir === 'asc'
+            ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
         case 'listeners':
           aVal = a.uniqueListeners;
@@ -195,13 +197,27 @@ const AnalyticsPage = {
           aVal = a.streams;
           bVal = b.streams;
       }
-      
+
       return this.sortDir === 'desc' ? bVal - aVal : aVal - bVal;
     });
-    
+
     return filtered;
   },
-  
+
+  /**
+   * Period label for the header line
+   */
+  periodLabel() {
+    switch (this.period) {
+      case '1d': return 'past 24 hours';
+      case '7d': return 'past 7 days';
+      case '30d': return 'past 30 days';
+      case '365d': return 'past year';
+      case 'all': return 'all time';
+      default: return '';
+    }
+  },
+
   /**
    * Render the page
    */
@@ -209,193 +225,151 @@ const AnalyticsPage = {
     const tracks = this.getSortedTracks();
     const totalStreams = this.tracks.reduce((sum, t) => sum + t.streams, 0);
     const totalSales = this.tracks.reduce((sum, t) => sum + t.soldEditions, 0);
-    
+
+    const metricVerb = this.sortBy === 'sales' ? 'Most Bought' : 'Most Streamed';
+    const metaLine = `${this.tracks.length} tracks · ${totalStreams.toLocaleString()} streams · ${totalSales.toLocaleString()} sales · ${this.periodLabel()}`;
+
     const html = `
       <div class="analytics-page animate-fade-in">
-        <!-- Header -->
-        <div class="analytics-header">
-          <div class="header-left">
-            <h1 class="page-title">📊 Analytics</h1>
-            <p class="page-subtitle">${this.tracks.length} tracks · ${totalStreams.toLocaleString()} streams · ${totalSales} sales</p>
-          </div>
-          
-          <!-- Period Tabs -->
-          <div class="period-tabs">
-            <button class="period-btn ${this.period === '1d' ? 'active' : ''}" data-period="1d">24H</button>
-            <button class="period-btn ${this.period === '7d' ? 'active' : ''}" data-period="7d">7D</button>
-            <button class="period-btn ${this.period === '30d' ? 'active' : ''}" data-period="30d">30D</button>
-            <button class="period-btn ${this.period === '365d' ? 'active' : ''}" data-period="365d">1Y</button>
-            <button class="period-btn ${this.period === 'all' ? 'active' : ''}" data-period="all">ALL</button>
-          </div>
-        </div>
-        
-        <!-- Search Bar -->
-        <div class="search-bar-container">
-          <div class="search-input-wrapper">
-            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
+
+        <!-- Playlist-style header -->
+        <div class="al-hero">
+          <div class="al-hero-art">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
             </svg>
-            <input 
-              type="text" 
-              id="analytics-search" 
-              class="search-input" 
-              placeholder="Search tracks or artists..."
-              value="${this.searchQuery}"
-            >
-            ${this.searchQuery ? `
-              <button class="search-clear" id="clear-search">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            ` : ''}
           </div>
-          <div class="search-results-count">
-            ${this.searchQuery ? `${tracks.length} results` : ''}
+          <div class="al-hero-info">
+            <div class="al-eyebrow">Analytics</div>
+            <h1 class="al-title">${metricVerb}</h1>
+            <p class="al-meta">${metaLine}</p>
           </div>
         </div>
-        
-        <!-- Data Table -->
-        <div class="data-table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th class="col-rank">#</th>
-                <th class="col-cover"></th>
-                <th class="col-title sortable ${this.sortBy === 'name' ? 'active' : ''}" data-sort="name">
-                  Title
-                  ${this.renderSortIcon('name')}
-                </th>
-                <th class="col-artist">Artist</th>
-                <th class="col-streams sortable ${this.sortBy === 'streams' ? 'active' : ''}" data-sort="streams">
-                  <span class="col-header-icon">▶</span> Streams
-                  ${this.renderSortIcon('streams')}
-                </th>
-                <th class="col-sales sortable ${this.sortBy === 'sales' ? 'active' : ''}" data-sort="sales">
-                  <span class="col-header-icon">💰</span> Sales
-                  ${this.renderSortIcon('sales')}
-                </th>
-                <th class="col-remaining sortable ${this.sortBy === 'scarce' ? 'active' : ''}" data-sort="scarce">
-                  <span class="col-header-icon">📦</span> Left
-                  ${this.renderSortIcon('scarce')}
-                </th>
-                <th class="col-listeners sortable ${this.sortBy === 'listeners' ? 'active' : ''}" data-sort="listeners">
-                  <span class="col-header-icon">👥</span> Listeners
-                  ${this.renderSortIcon('listeners')}
-                </th>
-                <th class="col-price sortable ${this.sortBy === 'price' ? 'active' : ''}" data-sort="price">
-                  Price
-                  ${this.renderSortIcon('price')}
-                </th>
-                <th class="col-date sortable ${this.sortBy === 'newest' ? 'active' : ''}" data-sort="newest">
-                  Dropped
-                  ${this.renderSortIcon('newest')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tracks.length > 0 
-                ? tracks.map((track, idx) => this.renderTrackRow(track, idx + 1)).join('')
-                : `<tr><td colspan="10" class="empty-message">No tracks found</td></tr>`
-              }
-            </tbody>
-          </table>
+
+        <!-- Controls: metric toggle + period -->
+        <div class="al-controls">
+          <div class="al-metric-toggle">
+            <button class="al-metric-btn ${this.sortBy === 'streams' ? 'active' : ''}" data-metric="streams">
+              <span class="al-metric-icon">▶</span> Most Streamed
+            </button>
+            <button class="al-metric-btn ${this.sortBy === 'sales' ? 'active' : ''}" data-metric="sales">
+              <span class="al-metric-icon">💰</span> Most Bought
+            </button>
+          </div>
+
+          <div class="al-period-tabs">
+            <button class="al-period-btn ${this.period === '1d' ? 'active' : ''}" data-period="1d">24H</button>
+            <button class="al-period-btn ${this.period === '7d' ? 'active' : ''}" data-period="7d">7D</button>
+            <button class="al-period-btn ${this.period === '30d' ? 'active' : ''}" data-period="30d">30D</button>
+            <button class="al-period-btn ${this.period === '365d' ? 'active' : ''}" data-period="365d">1Y</button>
+            <button class="al-period-btn ${this.period === 'all' ? 'active' : ''}" data-period="all">ALL</button>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="al-search-wrapper">
+          <svg class="al-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <input
+            type="text"
+            id="analytics-search"
+            class="al-search-input"
+            placeholder="Search tracks or artists..."
+            value="${this.searchQuery.replace(/"/g, '&quot;')}"
+          >
+          ${this.searchQuery ? `
+            <button class="al-search-clear" id="clear-search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          ` : ''}
+          ${this.searchQuery ? `<span class="al-results-count">${tracks.length} results</span>` : ''}
+        </div>
+
+        <!-- Column header row -->
+        <div class="al-list-head">
+          <span class="al-h-rank">#</span>
+          <span class="al-h-title">Title</span>
+          <span class="al-h-secondary">${this.sortBy === 'sales' ? 'Streams' : 'Sold'}</span>
+          <span class="al-h-metric">${this.sortBy === 'sales' ? 'Sold' : 'Plays'}</span>
+        </div>
+
+        <!-- Rows -->
+        <div class="al-list">
+          ${tracks.length > 0
+            ? tracks.map((track, idx) => this.renderTrackRow(track, idx + 1)).join('')
+            : `<div class="al-empty">No tracks found</div>`
+          }
         </div>
       </div>
-      
+
       ${this.getStyles()}
     `;
-    
+
     UI.renderPage(html);
     this.bindEvents();
   },
-  
+
   /**
-   * Render sort indicator icon
-   */
-  renderSortIcon(column) {
-    if (this.sortBy !== column) {
-      return `<span class="sort-icon inactive">↕</span>`;
-    }
-    return `<span class="sort-icon active">${this.sortDir === 'desc' ? '↓' : '↑'}</span>`;
-  },
-  
-  /**
-   * Render a track row
+   * Render a single playlist-style row
    */
   renderTrackRow(track, rank) {
     const coverUrl = this.getImageUrl(track.coverUrl);
-    const date = new Date(track.createdAt);
-    const isLowStock = track.remaining <= 10 && track.remaining > 0;
+    const isSales = this.sortBy === 'sales';
+
+    // Primary metric (right-most, emphasized) + secondary metric
+    const primaryVal = isSales ? track.soldEditions : track.streams;
+    const primaryLabel = isSales ? 'sold' : 'plays';
+    const secondaryVal = isSales ? track.streams : track.soldEditions;
+
     const isSoldOut = track.remaining === 0;
-    
-    // Highlight class for search matches
-    const highlightClass = this.searchQuery ? 'search-match' : '';
-    
+
     return `
-      <tr class="track-row ${highlightClass}" data-track-id="${track.trackId}" data-release-id="${track.releaseId}">
-        <td class="col-rank">
-          <span class="rank-number ${rank <= 3 ? 'top-3' : ''}">${rank}</span>
-        </td>
-        <td class="col-cover">
-          <img src="${coverUrl}" alt="${track.title}" class="cover-thumb" onerror="this.src='/placeholder.png'">
-          <button class="row-play-btn" data-track-index="${rank - 1}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <div class="al-row" data-track-id="${track.trackId}" data-release-id="${track.releaseId}" data-track-index="${rank - 1}">
+        <div class="al-rank">
+          <span class="al-rank-num ${rank <= 3 ? 'top-3' : ''}">${rank}</span>
+          <button class="al-row-play" data-track-index="${rank - 1}" title="Play">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
           </button>
-        </td>
-        <td class="col-title">
-          <div class="title-cell">
-            <span class="track-title">${track.title}</span>
-            <span class="track-type ${track.type}">${track.type}</span>
+        </div>
+        <div class="al-cell-title">
+          <img src="${coverUrl}" alt="${track.title}" class="al-cover" onerror="this.src='/placeholder.png'">
+          <div class="al-titles">
+            <div class="al-track-title">${track.title}</div>
+            <div class="al-track-artist">${track.artistName}</div>
           </div>
-        </td>
-        <td class="col-artist">${track.artistName}</td>
-        <td class="col-streams">
-          <span class="stat-value">${track.streams.toLocaleString()}</span>
-        </td>
-        <td class="col-sales">
-          <span class="stat-value">${track.soldEditions}</span>
-        </td>
-        <td class="col-remaining">
-          <span class="stat-value ${isLowStock ? 'low-stock' : ''} ${isSoldOut ? 'sold-out' : ''}">
-            ${isSoldOut ? 'SOLD OUT' : track.remaining.toLocaleString()}
-          </span>
-        </td>
-        <td class="col-listeners">
-          <span class="stat-value">${track.uniqueListeners.toLocaleString()}</span>
-        </td>
-        <td class="col-price">
-          <span class="price-value">${track.price} XRP</span>
-        </td>
-        <td class="col-date">
-          <span class="date-value">${this.formatDate(date)}</span>
-        </td>
-      </tr>
+        </div>
+        <div class="al-secondary">
+          <span class="al-secondary-val">${secondaryVal.toLocaleString()}</span>
+        </div>
+        <div class="al-metric">
+          <span class="al-metric-val">${primaryVal.toLocaleString()}</span>
+          <span class="al-metric-unit">${primaryLabel}</span>
+          ${isSales && isSoldOut ? `<span class="al-soldout">SOLD OUT</span>` : ''}
+        </div>
+      </div>
     `;
   },
-  
-  /**
-   * Format date
-   */
+
   formatDate(date) {
     const now = new Date();
     const diff = now - date;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
     if (days === 0) return 'Today';
     if (days === 1) return 'Yesterday';
     if (days < 7) return `${days}d ago`;
     if (days < 30) return `${Math.floor(days / 7)}w ago`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   },
-  
-  /**
-   * Render error state
-   */
+
   renderError() {
     const html = `
       <div class="empty-state" style="min-height: 60vh;">
@@ -411,28 +385,41 @@ const AnalyticsPage = {
     `;
     UI.renderPage(html);
   },
-  
+
   /**
    * Bind events
    */
   bindEvents() {
+    // Metric toggle (Most Streamed / Most Bought)
+    document.querySelectorAll('.al-metric-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const metric = btn.dataset.metric;
+        if (metric !== this.sortBy) {
+          this.sortBy = metric;
+          this.sortDir = 'desc';
+          this.renderContent();
+        }
+      });
+    });
+
     // Period tabs
-    document.querySelectorAll('.period-btn').forEach(btn => {
+    document.querySelectorAll('.al-period-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        this.period = btn.dataset.period;
+        const newPeriod = btn.dataset.period;
+        if (newPeriod === this.period) return;
+        this.period = newPeriod;
         await this.fetchPlayData();
         this.buildTrackList();
         this.renderContent();
       });
     });
-    
+
     // Search input
     const searchInput = document.getElementById('analytics-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         this.searchQuery = e.target.value;
         this.renderContent();
-        // Re-focus and restore cursor position
         const newInput = document.getElementById('analytics-search');
         if (newInput) {
           newInput.focus();
@@ -440,36 +427,18 @@ const AnalyticsPage = {
         }
       });
     }
-    
+
     // Clear search
     document.getElementById('clear-search')?.addEventListener('click', () => {
       this.searchQuery = '';
       this.renderContent();
       document.getElementById('analytics-search')?.focus();
     });
-    
-    // Sortable column headers
-    document.querySelectorAll('.sortable').forEach(th => {
-      th.addEventListener('click', () => {
-        const newSort = th.dataset.sort;
-        if (this.sortBy === newSort) {
-          // Toggle direction
-          this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
-        } else {
-          this.sortBy = newSort;
-          // Default directions
-          this.sortDir = (newSort === 'name' || newSort === 'scarce') ? 'asc' : 'desc';
-        }
-        this.renderContent();
-      });
-    });
-    
-    // Track rows - click to open release modal
-    document.querySelectorAll('.track-row').forEach(row => {
+
+    // Row click → open release modal
+    document.querySelectorAll('.al-row').forEach(row => {
       row.addEventListener('click', (e) => {
-        // Don't trigger if clicking play button
-        if (e.target.closest('.row-play-btn')) return;
-        
+        if (e.target.closest('.al-row-play')) return;
         const releaseId = row.dataset.releaseId;
         const release = this.releases.find(r => r.id === releaseId);
         if (release) {
@@ -477,9 +446,9 @@ const AnalyticsPage = {
         }
       });
     });
-    
+
     // Play buttons
-    document.querySelectorAll('.row-play-btn').forEach(btn => {
+    document.querySelectorAll('.al-row-play').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const index = parseInt(btn.dataset.trackIndex);
@@ -491,55 +460,72 @@ const AnalyticsPage = {
       });
     });
   },
-  
-  /**
-   * Play a track
-   */
+
   playTrack(track) {
     const release = this.releases.find(r => r.id === track.releaseId);
     if (release) {
       StreamPage.playRelease(release);
     }
   },
-  
-  /**
-   * Get styles
-   */
+
   getStyles() {
     return `
       <style>
-        .analytics-page {
-          padding-bottom: 100px;
-        }
-        
-        .analytics-header {
+        .analytics-page { padding-bottom: 120px; }
+
+        /* ── Hero ── */
+        .al-hero {
           display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 20px;
-          margin-bottom: 24px;
-          flex-wrap: wrap;
+          align-items: flex-end;
+          gap: 24px;
+          margin-bottom: 28px;
         }
-        
-        .header-left {
-          flex: 1;
+        .al-hero-art {
+          width: 180px;
+          height: 180px;
+          border-radius: var(--radius-xl);
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.35);
         }
-        
-        .page-title {
-          font-size: 28px;
+        .al-hero-info { flex: 1; min-width: 0; }
+        .al-eyebrow {
+          font-size: 12px;
           font-weight: 700;
-          color: var(--text-primary);
-          margin: 0 0 4px 0;
-        }
-        
-        .page-subtitle {
-          font-size: 14px;
+          letter-spacing: 0.8px;
+          text-transform: uppercase;
           color: var(--text-muted);
-          margin: 0;
+          margin-bottom: 10px;
         }
-        
-        /* Period Tabs */
-        .period-tabs {
+        .al-title {
+          font-size: 56px;
+          line-height: 1.02;
+          font-weight: 800;
+          color: var(--text-primary);
+          margin: 0 0 14px 0;
+          letter-spacing: -1px;
+        }
+        .al-meta { font-size: 14px; color: var(--text-secondary); margin: 0; }
+
+        @media (max-width: 640px) {
+          .al-hero { flex-direction: column; align-items: flex-start; gap: 16px; }
+          .al-hero-art { width: 140px; height: 140px; }
+          .al-title { font-size: 36px; }
+        }
+
+        /* ── Controls ── */
+        .al-controls {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
+        }
+        .al-metric-toggle {
           display: flex;
           gap: 4px;
           background: var(--bg-card);
@@ -547,49 +533,69 @@ const AnalyticsPage = {
           border-radius: var(--radius-lg);
           padding: 4px;
         }
-        
-        .period-btn {
-          padding: 8px 16px;
+        .al-metric-btn {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 10px 18px;
           border: none;
           border-radius: var(--radius-md);
           background: transparent;
           color: var(--text-secondary);
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 600;
           cursor: pointer;
           transition: all 150ms;
         }
-        
-        .period-btn:hover {
-          color: var(--text-primary);
+        .al-metric-btn:hover { color: var(--text-primary); }
+        .al-metric-btn.active { background: var(--accent); color: white; }
+        .al-metric-icon { font-size: 13px; }
+
+        .al-period-tabs {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-card);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: 4px;
         }
-        
-        .period-btn.active {
-          background: var(--accent);
-          color: white;
+        .al-period-btn {
+          padding: 8px 14px;
+          border: none;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 150ms;
         }
-        
-        /* Search Bar */
-        .search-bar-container {
-          margin-bottom: 20px;
+        .al-period-btn:hover { color: var(--text-primary); }
+        .al-period-btn.active { background: var(--accent); color: white; }
+
+        @media (max-width: 640px) {
+          .al-controls { flex-direction: column; align-items: stretch; }
+          .al-metric-toggle, .al-period-tabs { width: 100%; }
+          .al-metric-btn, .al-period-btn { flex: 1; justify-content: center; }
         }
-        
-        .search-input-wrapper {
+
+        /* ── Search ── */
+        .al-search-wrapper {
           position: relative;
-          max-width: 400px;
+          max-width: 420px;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
         }
-        
-        .search-icon {
+        .al-search-icon {
           position: absolute;
           left: 14px;
-          top: 50%;
-          transform: translateY(-50%);
           color: var(--text-muted);
+          pointer-events: none;
         }
-        
-        .search-input {
+        .al-search-input {
           width: 100%;
-          padding: 12px 40px 12px 44px;
+          padding: 11px 40px 11px 42px;
           background: var(--bg-card);
           border: 1px solid var(--border-color);
           border-radius: var(--radius-lg);
@@ -597,163 +603,72 @@ const AnalyticsPage = {
           font-size: 14px;
           transition: all 150ms;
         }
-        
-        .search-input:focus {
+        .al-search-input:focus {
           outline: none;
           border-color: var(--accent);
           box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
-        
-        .search-input::placeholder {
-          color: var(--text-muted);
-        }
-        
-        .search-clear {
+        .al-search-input::placeholder { color: var(--text-muted); }
+        .al-search-clear {
           position: absolute;
           right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
           background: none;
           border: none;
           color: var(--text-muted);
           cursor: pointer;
           padding: 4px;
           display: flex;
-          align-items: center;
-          justify-content: center;
           border-radius: 50%;
           transition: all 150ms;
         }
-        
-        .search-clear:hover {
-          color: var(--text-primary);
-          background: var(--bg-hover);
-        }
-        
-        .search-results-count {
+        .al-search-clear:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .al-results-count {
+          position: absolute;
+          right: 44px;
           font-size: 12px;
           color: var(--text-muted);
-          margin-top: 8px;
-          height: 16px;
         }
-        
-        /* Data Table */
-        .data-table-container {
-          background: var(--bg-card);
-          border: 1px solid var(--border-color);
-          border-radius: var(--radius-xl);
-          overflow: hidden;
-        }
-        
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-        
-        .data-table thead {
-          background: var(--bg-hover);
-          position: sticky;
-          top: 0;
-          z-index: 10;
-        }
-        
-        .data-table th {
-          padding: 12px 16px;
-          text-align: left;
-          font-weight: 600;
-          color: var(--text-muted);
-          text-transform: uppercase;
+
+        /* ── List header ── */
+        .al-list-head {
+          display: grid;
+          grid-template-columns: 48px 1fr 110px 130px;
+          align-items: center;
+          gap: 12px;
+          padding: 0 16px 10px;
+          border-bottom: 1px solid var(--border-color);
+          margin-bottom: 6px;
           font-size: 11px;
-          letter-spacing: 0.5px;
-          border-bottom: 1px solid var(--border-color);
-          white-space: nowrap;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.6px;
+          color: var(--text-muted);
         }
-        
-        .data-table th.sortable {
-          cursor: pointer;
-          user-select: none;
-          transition: color 150ms;
-        }
-        
-        .data-table th.sortable:hover {
-          color: var(--text-primary);
-        }
-        
-        .data-table th.sortable.active {
-          color: var(--accent);
-        }
-        
-        .sort-icon {
-          margin-left: 4px;
-          font-size: 10px;
-        }
-        
-        .sort-icon.inactive {
-          opacity: 0.3;
-        }
-        
-        .sort-icon.active {
-          color: var(--accent);
-        }
-        
-        .col-header-icon {
-          margin-right: 4px;
-        }
-        
-        .data-table td {
-          padding: 12px 16px;
-          border-bottom: 1px solid var(--border-color);
-          vertical-align: middle;
-        }
-        
-        .track-row {
+        .al-h-rank { text-align: center; }
+        .al-h-secondary, .al-h-metric { text-align: right; }
+
+        /* ── Rows ── */
+        .al-list { display: flex; flex-direction: column; }
+        .al-row {
+          display: grid;
+          grid-template-columns: 48px 1fr 110px 130px;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 16px;
+          border-radius: var(--radius-md);
           cursor: pointer;
           transition: background 150ms;
         }
-        
-        .track-row:hover {
-          background: var(--bg-hover);
-        }
-        
-        .track-row:last-child td {
-          border-bottom: none;
-        }
-        
-        /* Column styles */
-        .col-rank {
-          width: 50px;
-          text-align: center;
-        }
-        
-        .rank-number {
-          font-weight: 700;
-          color: var(--text-muted);
-        }
-        
-        .rank-number.top-3 {
-          color: var(--accent);
-        }
-        
-        .col-cover {
-          width: 56px;
-          position: relative;
-        }
-        
-        .cover-thumb {
-          width: 40px;
-          height: 40px;
-          border-radius: 6px;
-          object-fit: cover;
-        }
-        
-        .row-play-btn {
+        .al-row:hover { background: var(--bg-hover); }
+
+        .al-rank { position: relative; text-align: center; }
+        .al-rank-num { font-size: 15px; font-weight: 700; color: var(--text-muted); }
+        .al-rank-num.top-3 { color: var(--accent); }
+        .al-row-play {
           position: absolute;
-          top: 50%;
-          left: 50%;
+          top: 50%; left: 50%;
           transform: translate(-50%, -50%);
-          width: 28px;
-          height: 28px;
+          width: 30px; height: 30px;
           border-radius: 50%;
           background: var(--accent);
           border: none;
@@ -765,124 +680,53 @@ const AnalyticsPage = {
           opacity: 0;
           transition: opacity 150ms;
         }
-        
-        .track-row:hover .row-play-btn {
-          opacity: 1;
+        .al-row:hover .al-rank-num { opacity: 0; }
+        .al-row:hover .al-row-play { opacity: 1; }
+
+        .al-cell-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .al-cover {
+          width: 44px; height: 44px;
+          border-radius: 6px;
+          object-fit: cover;
+          flex-shrink: 0;
         }
-        
-        .col-title {
-          min-width: 200px;
-        }
-        
-        .title-cell {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .track-title {
+        .al-titles { min-width: 0; }
+        .al-track-title {
+          font-size: 15px;
           font-weight: 600;
           color: var(--text-primary);
-        }
-        
-        .track-type {
-          padding: 2px 6px;
-          font-size: 9px;
-          font-weight: 600;
-          border-radius: 4px;
-          text-transform: uppercase;
-        }
-        
-        .track-type.single {
-          background: rgba(34, 197, 94, 0.2);
-          color: var(--success);
-        }
-        
-        .track-type.album {
-          background: rgba(168, 85, 247, 0.2);
-          color: #a855f7;
-        }
-        
-        .col-artist {
-          color: var(--text-secondary);
-          max-width: 150px;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .al-track-artist {
+          font-size: 13px;
+          color: var(--text-muted);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-        
-        .stat-value {
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-        
-        .stat-value.low-stock {
-          color: var(--warning);
-        }
-        
-        .stat-value.sold-out {
-          color: var(--error);
-          font-size: 10px;
-        }
-        
-        .price-value {
-          font-weight: 600;
-          color: var(--success);
-        }
-        
-        .date-value {
-          color: var(--text-muted);
-        }
-        
-        .empty-message {
+
+        .al-secondary { text-align: right; }
+        .al-secondary-val { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+
+        .al-metric { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+        .al-metric-val { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .al-metric-unit { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+        .al-soldout { font-size: 10px; font-weight: 700; color: var(--error); }
+
+        .al-empty {
+          padding: 60px 20px;
           text-align: center;
-          padding: 60px 20px !important;
           color: var(--text-muted);
+          background: var(--bg-card);
+          border: 1px dashed var(--border-color);
+          border-radius: var(--radius-lg);
         }
-        
-        /* Responsive */
-        @media (max-width: 1024px) {
-          .col-listeners, .col-date {
-            display: none;
-          }
-        }
-        
-        @media (max-width: 768px) {
-          .analytics-header {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          
-          .period-tabs {
-            width: 100%;
-            justify-content: center;
-          }
-          
-          .search-input-wrapper {
-            max-width: 100%;
-          }
-          
-          .col-artist, .col-price {
-            display: none;
-          }
-          
-          .data-table th, .data-table td {
-            padding: 10px 8px;
-          }
-          
-          .col-title {
-            min-width: 120px;
-          }
-        }
-        
-        @media (max-width: 480px) {
-          .col-remaining {
-            display: none;
-          }
-          
-          .page-title {
-            font-size: 22px;
-          }
+
+        @media (max-width: 640px) {
+          .al-list-head, .al-row { grid-template-columns: 36px 1fr 90px; }
+          .al-h-secondary, .al-secondary { display: none; }
         }
       </style>
     `;
